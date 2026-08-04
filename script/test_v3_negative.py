@@ -1,6 +1,6 @@
 """Extra check: wrong address must NACK and slave must stay released/idle."""
 from myhdl import Signal, intbv, delay, instance, block, Simulation, StopSimulation, now
-from script.i2c_slave_async_model import i2c_slave_async
+from i2c_slave_async_model_v3 import i2c_slave_async
 
 SLAVE_ADDR = 0x50
 WRONG_ADDR = 0x11

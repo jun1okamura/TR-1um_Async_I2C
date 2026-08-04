@@ -1,14 +1,24 @@
 // =============================================================================
 // i2c_slave_async_tb.v
 //
-// Testbench for i2c_slave_async.v. Not run in the delivery sandbox (no
-// iverilog/Verilator available there); run it locally, e.g.:
+// Testbench for i2c_slave_async.v (v2, gate-synthesizable architecture).
+// Not run in the delivery sandbox (no iverilog/Verilator available there);
+// run it locally, e.g.:
 //
 //   iverilog -o sim i2c_slave_async.v i2c_slave_async_tb.v && vvp sim
 //   (or) verilator --binary -j 0 i2c_slave_async_tb.v i2c_slave_async.v --top-module i2c_slave_async_tb
 //
-// Exercises the same three scenarios already verified in MyHDL
-// (test_i2c_slave_async.py / test_i2c_slave_async_negative.py):
+// NOTE: this testbench needs behavioral models for DEL1/NOR2/INV_X1 (v2
+// instantiates them structurally) to be visible to the simulator. iverilog
+// will treat them as undefined-module errors unless you either (a) also
+// compile ../TR1um_5_stdcell behavioral/gate models alongside this file, or
+// (b) compile a quick behavioral stub library for iverilog-only simulation
+// (DEL1: Y=A with a small #delay; NOR2: Y=~(A|B); INV_X1: Y=~A). This repo
+// does not yet include such stubs -- add them before running this TB.
+//
+// Exercises the same three scenarios verified throughout this project
+// (script/test_v3_positive.py / test_v3_negative.py against the matching
+// MyHDL model):
 //   1. write transaction  : S, ADDR+W(0x50), ACK, 0xA5, ACK, P
 //   2. read transaction    : S, ADDR+R(0x50), ACK, slave drives 0x3C, NACK, P
 //   3. wrong-address write : S, ADDR+W(0x11), NACK, P
@@ -21,6 +31,9 @@ module i2c_slave_async_tb;
     localparam [6:0] WRONG_ADDR = 7'h11;
     localparam T = 20; // arbitrary bit-time unit; correctness must not
                         // depend on this value for an async design.
+
+    wire VDD = 1'b1;
+    wire GND = 1'b0;
 
     reg  rst_n;
     reg  scl;
@@ -42,6 +55,8 @@ module i2c_slave_async_tb;
     assign sda = m_oe ? 1'b0 : 1'bz;
 
     i2c_slave_async #(.SLAVE_ADDR(SLAVE_ADDR)) dut (
+        .VDD        (VDD),
+        .GND        (GND),
         .rst_n      (rst_n),
         .scl        (scl),
         .sda_in     (sda),
