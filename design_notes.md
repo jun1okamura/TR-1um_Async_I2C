@@ -329,6 +329,11 @@ slower than a plain buffer」）に合わせて修正したもの。
 - `gen_schematic.py` — 上記（ラベル方式）回路図の生成スクリプト
 - `../schematic/i2c_slave_async_net_routed.sch` — 同、実配線版（§10参照）
 - `gen_schematic_routed.py` — 上記（配線版）回路図の生成スクリプト
+- `gen_liberty.py` — `../TR1um_5_stdcell.lib`の生成スクリプト。セルごとの
+  面積・遅延・論理関数を`COMB_CELLS`/`FF_CELLS`のテーブルで管理しており、
+  実SPICE特性化後は該当セルの数値を書き換えて`python3 script/gen_liberty.py
+  > TR1um_5_stdcell.lib`を再実行すれば反映できる（現行の`.lib`と
+  バイト単位で一致することを確認済み）。
 
 ## 9. xschem回路図の自動生成（P&R環境が無いため手作業レイアウト用）
 
