@@ -5,3 +5,5 @@ __pycache__/
 results/*
 !results/.gitkeep
 .DS_Store
+src/sim
+*.vcd

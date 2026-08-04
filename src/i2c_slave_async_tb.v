@@ -121,7 +121,17 @@ module i2c_slave_async_tb;
     reg [7:0] rd_byte;
 
     initial begin
+        // NOTE: in real (4-state) Verilog simulation every reg starts at X.
+        // Unlike the MyHDL reference model (whose Signals are explicitly
+        // initialized in Python and therefore never X), this DUT's
+        // registers only reach a defined value via the `if (!rst_n)`
+        // branch in i2c_slave_async.v. A reset pulse is therefore mandatory
+        // here -- without it, sda_oe/state/scl_q/sda_q stay X forever and
+        // every check fails.
         rst_n = 1; scl = 1; m_oe = 0; tx_data = 8'h00;
+        rst_n = 0;
+        #(4*T);
+        rst_n = 1;
         #(5*T);
 
         // ================= Scenario 1: write 0xA5 to SLAVE_ADDR =========

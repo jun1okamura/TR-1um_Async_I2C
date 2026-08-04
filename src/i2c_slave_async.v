@@ -30,12 +30,14 @@
 // exactly the behavior of a small set of transparent latches / an SR latch
 // gated by the bus itself (UM10204 Fig. 5), described at the RTL level.
 //
-// Functionally verified against a bus-functional master model in
-// test_i2c_slave_async.py (MyHDL) -- see i2c_slave_async_model.py, which
-// implements the identical state machine and was simulated because no
-// Verilog simulator (iverilog/Verilator) was available in the build
-// sandbox. Re-verify this file with i2c_slave_async_tb.v before relying on
-// it in silicon/FPGA.
+// Verified with i2c_slave_async_tb.v under iverilog: all 14 checks pass
+// (write, read, and wrong-address/NACK scenarios). See design_notes.md
+// section 7 for the two real bugs found only by that run (a missing reset
+// pulse in the testbench, and a same-event wire/always-block race on the
+// START/STOP condition signals) -- neither was visible in the companion
+// MyHDL model (i2c_slave_async_model_v2.py), which is 2-state and cannot
+// reproduce X-propagation or event-ordering races. Re-run the testbench
+// after any change to this file.
 //
 // SDA is modeled as an open-drain pad: this module only ever asserts LOW
 // (sda_oe=1) or releases (sda_oe=0); the external pull-up (or the bus master)
@@ -82,11 +84,17 @@ module i2c_slave_async #(
     assign addr_match = addr_ok;
     assign rw          = rw_bit;
 
-    wire start_cond = scl_q & scl & sda_q & ~sda_in; // SDA 1->0 while SCL=1
-    wire stop_cond  = scl_q & scl & ~sda_q & sda_in; // SDA 0->1 while SCL=1
-    wire scl_rise   = ~scl_q & scl;
-    wire scl_fall   = scl_q & ~scl;
-
+    // NOTE: start_cond/stop_cond/scl_rise/scl_fall are deliberately computed
+    // *inline* below, not as separate `wire = ...` continuous assignments.
+    // This always block is triggered directly by changes on scl/sda_in; if
+    // the edge conditions were instead separate wires driven by their own
+    // continuous-assignment process (also triggered by scl/sda_in), there is
+    // no guaranteed ordering between "the wire is re-evaluated" and "this
+    // block reads the wire" for events landing in the same time step -- some
+    // simulators will let this block see the pre-transition (stale) value,
+    // silently breaking START/STOP detection. Reading scl_q/sda_q/scl/sda_in
+    // directly here, inside the very process that owns scl_q/sda_q, has no
+    // such race.
     always @(scl or sda_in or negedge rst_n) begin
         if (!rst_n) begin
             state    <= IDLE;
@@ -99,20 +107,20 @@ module i2c_slave_async #(
         end else begin
             rx_valid <= 1'b0;   // default; overridden below when a byte lands
 
-            if (start_cond) begin
+            if (scl_q && scl && sda_q && !sda_in) begin
                 // ---- START condition (3.1.4) --------------------------
                 state   <= ADDR;
                 bit_cnt <= 4'd0;
                 busy    <= 1'b1;
                 sda_oe  <= 1'b0;
 
-            end else if (stop_cond) begin
+            end else if (scl_q && scl && !sda_q && sda_in) begin
                 // ---- STOP condition (3.1.4) ----------------------------
                 state  <= IDLE;
                 sda_oe <= 1'b0;
                 busy   <= 1'b0;
 
-            end else if (scl_rise) begin
+            end else if (!scl_q && scl) begin
                 // ---- sample bit / decide next state (3.1.3, 3.1.5/6) ---
                 shreg_next = {shreg[6:0], sda_in};
                 case (state)
@@ -171,7 +179,7 @@ module i2c_slave_async #(
                     default: state <= IDLE;
                 endcase
 
-            end else if (scl_fall) begin
+            end else if (scl_q && !scl) begin
                 // ---- drive next output bit (3.1.3, 3.1.6) --------------
                 case (state)
                     ADDR:        sda_oe <= 1'b0;
