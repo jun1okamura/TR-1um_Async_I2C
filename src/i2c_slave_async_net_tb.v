@@ -1,31 +1,24 @@
 // =============================================================================
-// i2c_slave_async_tb.v
+// i2c_slave_async_net_tb.v
 //
-// Testbench for i2c_slave_async.v (v2, gate-synthesizable architecture).
-// Not run in the delivery sandbox (no iverilog/Verilator available there);
-// run it locally, e.g.:
+// Testbench for i2c_slave_async_net.v (the Yosys-synthesized gate-level
+// netlist, now including the scl/sda_in/_126_/_127_ buffer-tree insertion
+// from design_notes.md section 18). Identical to i2c_slave_async_tb.v
+// (same 3 scenarios) except for ONE difference: the DUT instantiation does
+// NOT pass #(.SLAVE_ADDR(...)) -- Yosys resolves parameters at synthesis
+// time and does not emit a `parameter` declaration in the netlist module,
+// so `i2c_slave_async_net #(.SLAVE_ADDR(...))` fails elaboration
+// ("parameter SLAVE_ADDR not found"). i2c_slave_async_net.v's SLAVE_ADDR is
+// hardwired to the same 7'h50 used here (see i2c_slave_async.v's default
+// parameter value and the localparam below), so simply omitting the
+// override is functionally equivalent.
 //
-//   iverilog -o sim i2c_slave_async.v i2c_slave_async_tb.v && vvp sim
-//   (or) verilator --binary -j 0 i2c_slave_async_tb.v i2c_slave_async.v --top-module i2c_slave_async_tb
-//
-// NOTE: this testbench needs behavioral models for DEL1/NOR2/INV_X1 (v2
-// instantiates them structurally) to be visible to the simulator. iverilog
-// will treat them as undefined-module errors unless you either (a) also
-// compile ../TR1um_5_stdcell behavioral/gate models alongside this file, or
-// (b) compile a quick behavioral stub library for iverilog-only simulation
-// (DEL1: Y=A with a small #delay; NOR2: Y=~(A|B); INV_X1: Y=~A). This repo
-// does not yet include such stubs -- add them before running this TB.
-//
-// Exercises the same three scenarios verified throughout this project
-// (script/test_v3_positive.py / test_v3_negative.py against the matching
-// MyHDL model):
-//   1. write transaction  : S, ADDR+W(0x50), ACK, 0xA5, ACK, P
-//   2. read transaction    : S, ADDR+R(0x50), ACK, slave drives 0x3C, NACK, P
-//   3. wrong-address write : S, ADDR+W(0x11), NACK, P
+// Run:
+//   iverilog -o sim_net i2c_slave_async_net.v stdcell_behavioral_stubs.v i2c_slave_async_net_tb.v && vvp sim_net
 // =============================================================================
 `timescale 1ns/1ps
 
-module i2c_slave_async_tb;
+module i2c_slave_async_net_tb;
 
     localparam [6:0] SLAVE_ADDR = 7'h50;
     localparam [6:0] WRONG_ADDR = 7'h11;
@@ -54,7 +47,8 @@ module i2c_slave_async_tb;
     pullup(sda);
     assign sda = m_oe ? 1'b0 : 1'bz;
 
-    i2c_slave_async #(.SLAVE_ADDR(SLAVE_ADDR)) dut (
+    // NOTE: no #(.SLAVE_ADDR(...)) here -- see file header.
+    i2c_slave_async dut (
         .VDD        (VDD),
         .GND        (GND),
         .rst_n      (rst_n),
@@ -83,13 +77,12 @@ module i2c_slave_async_tb;
     task send_bit(input bitval);
         begin
             #T scl = 0;
-            #2 m_oe = ~bitval;  // stagger from scl's edge: keeps parity with
-                                 // i2c_slave_async_net_tb.v, which needs this
-                                 // to avoid a same-instant race in the
-                                 // synthesized start/stop-pulse detector
-                                 // (see design_notes.md section 19). Harmless
-                                 // here (RTL has no such hazard) but keeps
-                                 // both testbenches' stimulus identical.
+            #2 m_oe = ~bitval;  // stagger from scl's edge: avoids a same-
+                                 // instant race between the sda_in (1-gate)
+                                 // and scl (2-gate, via _105_) paths into the
+                                 // synthesized start/stop-pulse detector,
+                                 // which otherwise glitches rst_scl_domain
+                                 // (see design_notes.md section 19).
             #(T-2) scl = 1;
             #(2*T);
         end
@@ -227,8 +220,8 @@ module i2c_slave_async_tb;
     end
 
     initial begin
-        $dumpfile("i2c_slave_async_tb.vcd");
-        $dumpvars(0, i2c_slave_async_tb);
+        $dumpfile("i2c_slave_async_net_tb.vcd");
+        $dumpvars(0, i2c_slave_async_net_tb);
     end
 
 endmodule

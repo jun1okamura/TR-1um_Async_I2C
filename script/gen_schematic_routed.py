@@ -314,7 +314,19 @@ def add_wire(x1, y1, x2, y2, lab=None):
     else:
         lines.append(f"N {x1} {y1} {x2} {y2} {{}}")
 
-# place instances + VDD/GND label stubs only
+# place instances + VDD/GND label pins
+# NOTE: a bare `lab=` property on a plain wire is NOT an xschem net-label
+# mechanism (xschem connectivity is purely geometric -- touching wire/pin
+# endpoints; `lab=` on a wire is not read by the netlister at all). This
+# was confirmed empirically: an earlier version of this script used bare
+# wire `lab=` stubs for power pins and an xschem-exported SPICE netlist
+# showed every pin as its own isolated net. The correct mechanism is a
+# devices/lab_pin.sym instance -- xschem documents that multiple
+# lab_pin.sym instances sharing the same `lab` value are shorted together
+# regardless of physical routing. (Signal nets below are NOT affected by
+# this bug -- they are connected via real, physically-touching routed wire
+# segments, which is xschem's normal/primary connectivity mechanism.)
+_lab_counter = [0]
 for typ, name, conns in instances:
     ix, iy = xy[name]
     sym_ref = f"{STDCELL_ABS_DIR}/{typ}.sym"
@@ -331,7 +343,9 @@ for typ, name, conns in instances:
             bx, by = (ax - 15, ay) if px < 0 else (ax + 15, ay)
         else:
             bx, by = (ax, ay - 15) if py < 0 else (ax, ay + 15)
-        add_wire(ax, ay, bx, by, net)
+        add_wire(ax, ay, bx, by)
+        _lab_counter[0] += 1
+        lines.append(f"C {{devices/lab_pin.sym}} {bx:g} {by:g} 0 0 {{name=l{_lab_counter[0]} lab={net}}}")
 
 # top-level in/out pin symbols
 for pname, key in TOP_IN:

@@ -117,6 +117,28 @@ module BUF_X1 (input A, output Y, input VDD, input GND);
     assign #1 Y = A;
 endmodule
 
+// BUF_X2/X4/X8/X16: added for the SCL/SDA-input and rst_scl_domain (net
+// _126_) staged buffer-chain insertion (design_notes.md section 18). Same
+// placeholder #1 nominal delay as every other stub in this file -- these
+// are functional-only models, not real characterized buffer delays (a real
+// BUF_X16 is faster than a BUF_X2 under the same load, but that distinction
+// isn't modeled here; see the file header).
+module BUF_X2 (input A, output Y, input VDD, input GND);
+    assign #1 Y = A;
+endmodule
+
+module BUF_X4 (input A, output Y, input VDD, input GND);
+    assign #1 Y = A;
+endmodule
+
+module BUF_X8 (input A, output Y, input VDD, input GND);
+    assign #1 Y = A;
+endmodule
+
+module BUF_X16 (input A, output Y, input VDD, input GND);
+    assign #1 Y = A;
+endmodule
+
 module MUX2 (input A, B, S, output Y, input VDD, input GND);
     assign #1 Y = S ? B : A;
 endmodule

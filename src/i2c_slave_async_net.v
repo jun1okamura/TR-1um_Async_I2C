@@ -378,6 +378,14 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   wire start_pulse;
   wire stop_pulse;
   wire [7:0] txreg;
+  wire scl_buf0;
+  wire scl_buf1;
+  wire sda_in_buf0;
+  wire sda_in_buf1;
+  wire _126_buf0;
+  wire _126_buf1;
+  wire _127_buf0;
+  wire _127_buf1;
   INV_X1 _336_ (
     .A(_040_),
     .Y(_110_),
@@ -711,7 +719,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   MUX2 _383_ (
-    .A(_140_),
+    .A(sda_in_buf0),
     .B(_129_),
     .S(_070_),
     .Y(_024_),
@@ -817,7 +825,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   NAND2 _397_ (
-    .A(_140_),
+    .A(sda_in_buf1),
     .B(_051_),
     .Y(_077_),
     .VDD(VDD),
@@ -905,7 +913,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   MUX2 _409_ (
-    .A(_140_),
+    .A(sda_in_buf0),
     .B(_128_),
     .S(_085_),
     .Y(_035_),
@@ -1087,14 +1095,14 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   NAND2 _433_ (
-    .A(_138_),
+    .A(scl_buf0),
     .B(_139_),
     .Y(_105_),
     .VDD(VDD),
     .GND(GND)
   );
   NOR2 _434_ (
-    .A(_140_),
+    .A(sda_in_buf1),
     .B(_105_),
     .Y(_148_),
     .VDD(VDD),
@@ -1123,8 +1131,8 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   NAND3 _438_ (
-    .A(_140_),
-    .B(_138_),
+    .A(sda_in_buf0),
+    .B(scl_buf1),
     .C(_117_),
     .Y(_107_),
     .VDD(VDD),
@@ -1164,38 +1172,38 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .GND(GND)
   );
   DFFR _443_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_246_),
     .Q(phase[0]),
     .QB(_196_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _444_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_245_),
     .Q(phase[1]),
     .QB(_175_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _445_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_247_),
     .Q(phase[2]),
     .QB(_173_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _446_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_248_),
     .Q(rw_bit),
     .QB(_172_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1204,7 +1212,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_244_),
     .Q(txreg[0]),
     .QB(_176_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf0),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1213,7 +1221,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_243_),
     .Q(txreg[1]),
     .QB(_177_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf1),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1222,7 +1230,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_242_),
     .Q(txreg[2]),
     .QB(_178_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf0),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1231,7 +1239,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_241_),
     .Q(txreg[3]),
     .QB(_179_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf1),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1240,7 +1248,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_240_),
     .Q(txreg[4]),
     .QB(_180_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf0),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1249,7 +1257,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_239_),
     .Q(txreg[5]),
     .QB(_181_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf1),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1258,7 +1266,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_238_),
     .Q(txreg[6]),
     .QB(_182_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf0),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1267,124 +1275,124 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_249_),
     .Q(txreg[7]),
     .QB(_198_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _455_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_237_),
     .Q(rx_data_r[0]),
     .QB(_183_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _456_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_236_),
     .Q(rx_data_r[1]),
     .QB(_184_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _457_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_235_),
     .Q(rx_data_r[2]),
     .QB(_185_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _458_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_234_),
     .Q(rx_data_r[3]),
     .QB(_186_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _459_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_233_),
     .Q(rx_data_r[4]),
     .QB(_187_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _460_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_232_),
     .Q(rx_data_r[5]),
     .QB(_188_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _461_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_231_),
     .Q(rx_data_r[6]),
     .QB(_189_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _462_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_250_),
     .Q(rx_data_r[7]),
     .QB(_199_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _463_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_230_),
     .Q(bit_cnt[0]),
     .QB(_190_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _464_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_229_),
     .Q(bit_cnt[1]),
     .QB(_191_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _465_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_228_),
     .Q(bit_cnt[2]),
     .QB(_192_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _466_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(_251_),
     .Q(bit_cnt[3]),
     .QB(_169_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _467_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(_252_),
     .Q(addr_ok),
     .QB(_168_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
@@ -1393,81 +1401,81 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .D(_002_),
     .Q(sda_oe_r),
     .QB(_171_),
-    .RST(rst_sdaoe_domain),
+    .RST(_127_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _469_ (
-    .CK(scl),
-    .D(sda_in),
+    .CK(scl_buf1),
+    .D(sda_in_buf1),
     .Q(shreg[0]),
     .QB(_170_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _470_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(shreg[0]),
     .Q(shreg[1]),
     .QB(_167_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _471_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(shreg[1]),
     .Q(shreg[2]),
     .QB(_174_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _472_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(shreg[2]),
     .Q(shreg[3]),
     .QB(_197_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _473_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(shreg[3]),
     .Q(shreg[4]),
     .QB(_193_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _474_ (
-    .CK(scl),
+    .CK(scl_buf0),
     .D(shreg[4]),
     .Q(shreg[5]),
     .QB(_194_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf0),
     .VDD(VDD),
     .GND(GND)
   );
   DFFR _475_ (
-    .CK(scl),
+    .CK(scl_buf1),
     .D(shreg[5]),
     .Q(shreg[6]),
     .QB(_195_),
-    .RST(rst_scl_domain),
+    .RST(_126_buf1),
     .VDD(VDD),
     .GND(GND)
   );
   DEL1 u_del_sda (
-    .A(sda_in),
+    .A(sda_in_buf0),
     .GND(GND),
     .VDD(VDD),
     .Y(sda_d)
   );
   INV_X1 u_inv_scl (
-    .A(scl),
+    .A(scl_buf0),
     .GND(GND),
     .VDD(VDD),
     .Y(scl_n)
@@ -1601,4 +1609,57 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   assign _138_ = scl;
   assign _139_ = sda_d;
   assign _252_ = _039_;
+
+  BUF_X16 u_scl_buf0 (
+    .A(scl),
+    .Y(scl_buf0),
+    .VDD(VDD),
+    .GND(GND)
+  );
+  BUF_X16 u_scl_buf1 (
+    .A(scl),
+    .Y(scl_buf1),
+    .VDD(VDD),
+    .GND(GND)
+  );
+
+  BUF_X2 u_sda_in_buf0 (
+    .A(sda_in),
+    .Y(sda_in_buf0),
+    .VDD(VDD),
+    .GND(GND)
+  );
+  BUF_X2 u_sda_in_buf1 (
+    .A(sda_in),
+    .Y(sda_in_buf1),
+    .VDD(VDD),
+    .GND(GND)
+  );
+
+  BUF_X4 u__126_buf0 (
+    .A(_126_),
+    .Y(_126_buf0),
+    .VDD(VDD),
+    .GND(GND)
+  );
+  BUF_X4 u__126_buf1 (
+    .A(_126_),
+    .Y(_126_buf1),
+    .VDD(VDD),
+    .GND(GND)
+  );
+
+  BUF_X2 u__127_buf0 (
+    .A(_127_),
+    .Y(_127_buf0),
+    .VDD(VDD),
+    .GND(GND)
+  );
+  BUF_X2 u__127_buf1 (
+    .A(_127_),
+    .Y(_127_buf1),
+    .VDD(VDD),
+    .GND(GND)
+  );
+
 endmodule

@@ -157,13 +157,27 @@ lines.append("V {}")
 lines.append("S {}")
 lines.append("E {}")
 
+_lab_counter = [0]
 def stub(px, py, ipx, ipy, netname):
+    # NOTE: a bare `lab=` property on a plain wire (N ... {lab=X}) is NOT an
+    # xschem net-label mechanism -- xschem connectivity is purely geometric
+    # (touching wire/pin endpoints); a `lab=` attribute on a wire is not
+    # read by the netlister at all. The correct way to give two otherwise
+    # unconnected points the same electrical net is to terminate each one
+    # with a devices/lab_pin.sym instance carrying a `lab=` property --
+    # xschem explicitly documents that multiple lab_pin.sym instances
+    # sharing the same `lab` value are shorted together regardless of
+    # physical routing. (Confirmed empirically: an earlier version of this
+    # script used bare wire `lab=` stubs and every single pin came back as
+    # its own isolated net in an xschem-exported SPICE netlist.)
     ax, ay = ipx + px, ipy + py
     if abs(px) >= abs(py):
         bx, by = (ax - 20, ay) if px < 0 else (ax + 20, ay)
     else:
         bx, by = (ax, ay - 20) if py < 0 else (ax, ay + 20)
-    lines.append(f"N {ax:g} {ay:g} {bx:g} {by:g} {{\nlab={netname}}}")
+    lines.append(f"N {ax:g} {ay:g} {bx:g} {by:g} {{}}")
+    _lab_counter[0] += 1
+    lines.append(f"C {{devices/lab_pin.sym}} {bx:g} {by:g} 0 0 {{name=l{_lab_counter[0]} lab={netname}}}")
 
 placed_nets_for_io = {}
 
