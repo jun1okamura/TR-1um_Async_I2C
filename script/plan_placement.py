@@ -21,6 +21,7 @@ Run standalone for a text report:
 """
 import re
 import os
+import random
 from collections import defaultdict, deque
 
 import klayout.db as db
@@ -168,10 +169,160 @@ def _canon_fn(width_of, instances, assigns):
     return find, parent
 
 
+def _fm_bipartition(node_ids, nets_touching, node_weight, capacity_a, capacity_b,
+                     seed_partition=None, passes=20, rng=None):
+    """Fiduccia-Mattheyses 2-way balanced hypergraph min-cut partition.
+    nets_touching: dict net_id -> list of node_ids (restricted to node_ids).
+    Returns (dict node_id -> 'A'/'B', cut_net_count). See design_notes.md
+    section 24 for why this replaced the old 1D L/R-score chop: minimizing
+    the NUMBER OF NETS CUT across rows (not minimizing physical distance)
+    turned out to matter far more once row0<->row1 and row2<->row3 (the
+    zero-gap, no-channel row-pair boundaries) were found to have a very
+    high routing failure rate (route_cross_row.py, ~50% of pins) compared
+    to an in-channel net."""
+    rng = rng or random.Random(42)
+    nodes = list(node_ids)
+    node_nets = defaultdict(list)
+    for net, members in nets_touching.items():
+        for n in members:
+            node_nets[n].append(net)
+
+    if seed_partition is not None:
+        part = dict(seed_partition)
+    else:
+        order = sorted(nodes, key=lambda n: -node_weight[n])
+        part = {}
+        wa = wb = 0.0
+        for n in order:
+            if wa <= wb and wa + node_weight[n] <= capacity_a:
+                part[n] = 'A'
+                wa += node_weight[n]
+            elif wb + node_weight[n] <= capacity_b:
+                part[n] = 'B'
+                wb += node_weight[n]
+            else:
+                part[n] = 'A'
+                wa += node_weight[n]
+
+    def cut_count(p):
+        c = 0
+        for net, members in nets_touching.items():
+            if len(set(p[m] for m in members)) > 1:
+                c += 1
+        return c
+
+    def weights(p):
+        wa = sum(node_weight[n] for n in nodes if p[n] == 'A')
+        wb = sum(node_weight[n] for n in nodes if p[n] == 'B')
+        return wa, wb
+
+    best_part = dict(part)
+    best_cut = cut_count(part)
+
+    for _pass in range(passes):
+        locked = set()
+        wa, wb = weights(part)
+        trace = []
+        cur = dict(part)
+        cur_cut = cut_count(cur)
+
+        for _step in range(len(nodes)):
+            free = [n for n in nodes if n not in locked]
+            if not free:
+                break
+            best_gain = None
+            best_n = None
+            for n in free:
+                side = cur[n]
+                other = 'B' if side == 'A' else 'A'
+                nw = node_weight[n]
+                if side == 'A':
+                    new_wa, new_wb = wa - nw, wb + nw
+                else:
+                    new_wa, new_wb = wa + nw, wb - nw
+                if new_wa > capacity_a or new_wb > capacity_b:
+                    continue
+                gain = 0
+                for net in node_nets[n]:
+                    members = nets_touching[net]
+                    sides_before = defaultdict(int)
+                    for m in members:
+                        sides_before[cur[m]] += 1
+                    was_cut = len(sides_before) > 1
+                    sides_after = dict(sides_before)
+                    sides_after[side] -= 1
+                    if sides_after[side] == 0:
+                        del sides_after[side]
+                    sides_after[other] = sides_after.get(other, 0) + 1
+                    is_cut = len(sides_after) > 1
+                    if was_cut and not is_cut:
+                        gain += 1
+                    elif not was_cut and is_cut:
+                        gain -= 1
+                if best_gain is None or gain > best_gain or (gain == best_gain and rng.random() < 0.3):
+                    best_gain = gain
+                    best_n = n
+            if best_n is None:
+                break
+            n = best_n
+            side = cur[n]
+            other = 'B' if side == 'A' else 'A'
+            cur[n] = other
+            nw = node_weight[n]
+            if side == 'A':
+                wa, wb = wa - nw, wb + nw
+            else:
+                wa, wb = wa + nw, wb - nw
+            locked.add(n)
+            cur_cut += -best_gain if best_gain is not None else 0
+            trace.append((n, cur_cut))
+
+        running_cut = cut_count(part)
+        best_prefix_cut = running_cut
+        best_prefix_idx = -1
+        p2 = dict(part)
+        for i, (n, _cc) in enumerate(trace):
+            p2[n] = 'B' if p2[n] == 'A' else 'A'
+            c = cut_count(p2)
+            if c < best_prefix_cut:
+                best_prefix_cut = c
+                best_prefix_idx = i
+        if best_prefix_idx == -1:
+            break
+        p3 = dict(part)
+        for i in range(best_prefix_idx + 1):
+            n = trace[i][0]
+            p3[n] = 'B' if p3[n] == 'A' else 'A'
+        part = p3
+        c = cut_count(part)
+        if c < best_cut:
+            best_cut = c
+            best_part = dict(part)
+
+    return best_part, best_cut
+
+
 def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
     """Returns (rows, cell_width, row_height) where rows is a list of nrows
     lists of (instance_name, cell_type, width_um), left-to-right physical
-    reading order within each row (row 0 = bottom, ascending upward)."""
+    reading order within each row (row 0 = bottom, ascending upward).
+
+    Row ASSIGNMENT (which row each instance goes to) is chosen by a
+    hierarchical FM hypergraph min-cut partition (see design_notes.md
+    section 24), minimizing the number of nets that cross a row boundary --
+    NOT a straight 1D L/R-score chop as before. This directly targets the
+    real cost driver discovered while routing: row0<->row1 and row2<->row3
+    are zero-gap (no channel) boundaries with a very high routing failure
+    rate, so nets are steered away from needing to cross them at all where
+    possible, while the row1<->row2 shared-channel boundary is comparatively
+    cheap (a real M1 channel already exists there). The physical row/channel
+    structure itself (4 rows, same pairing) is unchanged.
+
+    Within-row LEFT-TO-RIGHT order still uses the original L/R BFS-distance
+    score (bias toward the SCL/SDA left-edge port group or the
+    tx_data/rx_data/... right-edge port group), since that ordering affects
+    channel-routing/block-I/O wire length quality independent of which row
+    an instance landed in."""
     cell_width, row_height = _load_cell_widths()
     sym_pins, width_of, instances, assigns = _parse_netlist()
     instmap = {name: (typ, conns) for typ, name, conns in instances}
@@ -229,21 +380,84 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
         dr = dist_right.get(name, maxd + 1)
         scores[name] = dl - dr  # negative => close to LEFT seeds, positive => close to RIGHT seeds
 
-    order = sorted(instmap.keys(), key=lambda n: (scores[n], n))
-
-    total_w = sum(cell_width[instmap[n][0]] for n in order)
+    all_inst = list(instmap.keys())
+    weight = {n: cell_width[instmap[n][0]] for n in all_inst}
+    total_w = sum(weight.values())
     target = total_w / nrows
 
+    def nets_restricted_to(node_set):
+        out = {}
+        for net, members in net_members.items():
+            m = [x for x in members if x in node_set]
+            if len(set(m)) >= 2:
+                out[net] = m
+        return out
+
+    if nrows == 4:
+        # Hierarchical FM partition -- see _fm_bipartition()'s docstring and
+        # design_notes.md section 24. Structure fixed to match the physical
+        # row pairing (row0+1 zero-gap pair, row2+3 zero-gap pair, row1/2
+        # shared channel in between): split top-level into
+        # lower={row0,row1} vs upper={row2,row3} first (this cut becomes
+        # the CHEAP row1<->row2 shared-channel boundary), then split each
+        # half into its two rows (these cuts become the EXPENSIVE zero-gap
+        # row0<->row1 / row2<->row3 boundaries, so minimized hardest).
+        rng = random.Random(42)
+        all_set = set(all_inst)
+        nets_all = nets_restricted_to(all_set)
+        cap_half = 2 * row_width_um
+        part_lu, cut_lu = _fm_bipartition(all_set, nets_all, weight, cap_half, cap_half,
+                                           rng=rng, passes=20)
+        lower = {n for n in all_set if part_lu[n] == 'A'}
+        upper = {n for n in all_set if part_lu[n] == 'B'}
+
+        nets_lower = nets_restricted_to(lower)
+        part_01, cut_01 = _fm_bipartition(lower, nets_lower, weight, row_width_um, row_width_um,
+                                           rng=rng, passes=20)
+        row0_set = {n for n in lower if part_01[n] == 'A'}
+        row1_set = {n for n in lower if part_01[n] == 'B'}
+
+        nets_upper = nets_restricted_to(upper)
+        part_23, cut_23 = _fm_bipartition(upper, nets_upper, weight, row_width_um, row_width_um,
+                                           rng=rng, passes=20)
+        row2_set = {n for n in upper if part_23[n] == 'A'}
+        row3_set = {n for n in upper if part_23[n] == 'B'}
+
+        row_sets = [row0_set, row1_set, row2_set, row3_set]
+        if verbose:
+            print(f"FM partition: top cut(lower/upper)={cut_lu}, "
+                  f"row0/1 cut={cut_01}, row2/3 cut={cut_23}")
+            for i, rs in enumerate(row_sets):
+                w = sum(weight[n] for n in rs)
+                print(f"  row{i}: {len(rs)} instances, {w:.1f}um "
+                      f"({'OVER BUDGET' if w > row_width_um else 'ok'})")
+    else:
+        # Fallback for any nrows != 4 (never used in this project -- the
+        # hierarchical structure above is specific to the fixed 4-row/
+        # 3-channel physical layout): plain 1D L/R-score chop.
+        order = sorted(all_inst, key=lambda n: (scores[n], n))
+        row_sets = [set() for _ in range(nrows)]
+        row_w = [0.0] * nrows
+        ri = 0
+        for name in order:
+            w = weight[name]
+            if row_sets[ri] and row_w[ri] + w > target and ri < nrows - 1:
+                ri += 1
+            row_sets[ri].add(name)
+            row_w[ri] += w
+
+    # Within each row, order left-to-right by the same L/R BFS-distance
+    # score as before (independent of which row FM assigned the instance
+    # to) -- biases instances toward whichever block edge they are
+    # electrically closer to.
     rows = [[] for _ in range(nrows)]
     row_w = [0.0] * nrows
-    ri = 0
-    for name in order:
-        typ = instmap[name][0]
-        w = cell_width[typ]
-        if rows[ri] and row_w[ri] + w > target and ri < nrows - 1:
-            ri += 1
-        rows[ri].append((name, typ, w))
-        row_w[ri] += w
+    for i, rs in enumerate(row_sets):
+        for name in sorted(rs, key=lambda n: (scores[n], n)):
+            typ = instmap[name][0]
+            w = weight[name]
+            rows[i].append((name, typ, w))
+            row_w[i] += w
 
     if verbose:
         print(f"row height: {row_height} um")
