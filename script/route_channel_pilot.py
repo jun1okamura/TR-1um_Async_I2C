@@ -602,6 +602,43 @@ def main():
         if key in blocked_by or key in uf_parent:
             groups.setdefault(uf_find(key), []).append((x, n, p))
 
+    # Pins that share their EXACT X with another pin (typically A/B, or C/D,
+    # of one multi-input-gate instance -- this library stacks same-slot
+    # input pins on a single internal M1 column, so their X's are bit-
+    # identical by cell design, not by placement coincidence; see
+    # design_notes.md 22.5/22.6). Two such pins' vertical M2 runs are
+    # GUARANTEED to overlap in X once both go straight, and since they
+    # start life from the same row within ~10um of Y and always end up
+    # somewhere in the same channel above, their Y-spans overlap too --
+    # so an un-split straight-straight pair is a certain merge (an
+    # invisible-to-DRC short, not a spacing violation). This is the exact
+    # mechanism behind the residual _404_.A/_404_.B short: _find_jog_x's
+    # "already clear, no jog needed" fast path fires for whichever of the
+    # two is processed first (its sibling doesn't exist in the layout yet
+    # at that point, so the straight path really does look clear), which
+    # silently discards the group's forced_dir split.
+    #
+    # Fix: force a REAL (non-zero) jog for members of an exact-X pair,
+    # unconditionally -- never let them take the "straight is already
+    # clear" shortcut. Scoped ONLY to exact-X pairs (a handful, not the
+    # whole broader adjacency/same-instance-within-20um group used for
+    # forced_dir above) because forcing the full broader group to always
+    # jog was tried and made things WORSE (design_notes.md 22.5): it added
+    # unnecessary detours for pins that were never actually going to
+    # collide, which then collided with EACH OTHER in the dense corridor
+    # instead. Exact-X pairs have no such ambiguity -- they will collide
+    # with 100% certainty if left unsplit, so forcing them is safe.
+    EXACT_X_EPS = 0.01  # um -- float-safe "same X" bucket
+    _pins_by_x = {}
+    for n, p, x, y in all_pins:
+        _pins_by_x.setdefault(round(x / EXACT_X_EPS), []).append((n, p))
+    must_jog = set()
+    for _bucket, plist in _pins_by_x.items():
+        if len(plist) >= 2:
+            must_jog.update(plist)
+    if must_jog:
+        print(f"exact-X pin pairs forced to always jog: {sorted(must_jog)}")
+
     forced_dir = {}  # (instname, pinname) -> -1 (detour left) / +1 (detour right)
     forced_rank = {}  # (instname, pinname) -> how many EARLIER same-side members in its group (0, 1, 2, ...)
     for root, members in groups.items():
@@ -741,7 +778,7 @@ def main():
             for x, y_center, patch_polys, padded in pts:
                 print(f"ALLPINS net={net} x={x:.3f} y={y_center:.3f} n_patch_polys={len(patch_polys)} padded={padded}")
 
-    def _find_jog_x(vx, y_center, track_y, preferred_dir=None, skip_rank=0):
+    def _find_jog_x(vx, y_center, track_y, preferred_dir=None, skip_rank=0, must_jog=False):
         """Find an X (possibly == vx) at which the M2 escape run from
         y_center up to track_y clears existing M2 (real cell/filler M2
         usage -- see above). Tries vx itself first (the common case, no jog
@@ -761,7 +798,12 @@ def main():
         Returns None if nothing within the search range works (caller
         falls back to vx with a warning)."""
         half = M2_PAD_SIZE / 2.0
-        if _m2_run_clear(vx, y_center - half, track_y + half, half):
+        # must_jog pins (exact-X collision pairs -- see pre-pass above) may
+        # NOT take the "straight path already looks clear" shortcut: that
+        # check only sees what's drawn SO FAR, and their colliding sibling
+        # is often not drawn yet (net processing order), so it would
+        # silently look clear and defeat the mandatory split.
+        if not must_jog and _m2_run_clear(vx, y_center - half, track_y + half, half):
             return vx
         mags = (2, 4, 6, 8, 10, 14, 18, 24, 30, 40, 50, 60, 80, 100)
         if preferred_dir == -1:
@@ -805,7 +847,8 @@ def main():
         for (instname, pinname), (x, y_center, patch_polys, padded) in zip(names, pts):
             pref = forced_dir.get((instname, pinname))
             rank = forced_rank.get((instname, pinname), 0)
-            top_x = _find_jog_x(x, y_center, track_y, preferred_dir=pref, skip_rank=rank)
+            mj = (instname, pinname) in must_jog
+            top_x = _find_jog_x(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if top_x is None:
                 print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
                       f"no clear M2 jog found within search range; DRC may still flag this via")
