@@ -81,7 +81,8 @@ def parse_sym(path):
 
 def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_y,
                        channel_height, escape_dir, out_gds, pin_map_json,
-                       annot_layer=(250, 1), row_annot_layer=(250, 0), allowed_nets=None):
+                       annot_layer=(250, 1), row_annot_layer=(250, 0), allowed_nets=None,
+                       in_gds=None):
     """Route the logical_row_idx-internal nets into the dedicated channel
     described by (channel_bottom_y, channel_height), whose near edge touches
     the row at phys_row_index (physical row index in gen_gds_placement.py's
@@ -94,8 +95,19 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
     allowed_nets, if given, restricts routing to that net-name subset --
     used by route_all_channels.py to split a row's own internal nets
     between its two candidate channels (every row now touches two shared
-    channels, one on each side) so the same net isn't routed twice."""
+    channels, one on each side) so the same net isn't routed twice.
+
+    in_gds, if given, overrides the module-level IN_GDS (the pristine
+    placement-only GDS) as the starting point -- route_all_channels.py
+    chains this to the PREVIOUS channel's out_gds so each channel's
+    obstruction-avoidance scan can see whatever a channel sharing one of
+    its rows already routed (design_notes.md section 26.8: routing every
+    channel independently against the same pristine base left each one
+    blind to a sibling channel touching the same row from the other side,
+    which showed up as real M1/M2 collisions once all 6 outputs were
+    merged into one GDS)."""
     assert escape_dir in ("up", "down")
+    IN_GDS_EFF = in_gds if in_gds is not None else IN_GDS
 
     celltypes = [f[:-4] for f in os.listdir(STDCELL_DIR) if f.endswith(".sym")]
     sym_pins = {ct: parse_sym(os.path.join(STDCELL_DIR, ct + ".sym")) for ct in celltypes}
@@ -240,7 +252,7 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
         return pr_bbox_cache[celltype]
 
     _annot_layout = db.Layout()
-    _annot_layout.read(IN_GDS)
+    _annot_layout.read(IN_GDS_EFF)
     _annot_top = _annot_layout.cell("i2c_slave_async_layout")
     _annot_idx = _annot_layout.layer(*row_annot_layer)
     ROW_CY = phys_row_index * ROW_HEIGHT + ROW_HEIGHT / 2.0
@@ -259,7 +271,7 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
     missing = [n for n, t, w in row if n not in row_cx]
     if missing:
         raise RuntimeError(f"{len(missing)} row{logical_row_idx} instances have no annotation "
-                            f"match in {IN_GDS}: {missing[:5]}...")
+                            f"match in {IN_GDS_EFF}: {missing[:5]}...")
 
     inst_origin = {}
     for name, typ, w in row:
@@ -278,7 +290,7 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
 
     # ---------- existing M2 obstructions within the row + channel ----------
     _rail_scan = db.Layout()
-    _rail_scan.read(IN_GDS)
+    _rail_scan.read(IN_GDS_EFF)
     _rail_dbu = _rail_scan.dbu
     _rail_top = _rail_scan.cell("i2c_slave_async_layout")
     _rail_m1_idx = _rail_scan.layer(*M1_LAYER)
@@ -556,7 +568,7 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
 
     # ---------- emit geometry ----------
     layout = db.Layout()
-    layout.read(IN_GDS)
+    layout.read(IN_GDS_EFF)
     dbu = layout.dbu
     top = layout.cell("i2c_slave_async_layout")
     m1_idx = layout.layer(*M1_LAYER)

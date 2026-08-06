@@ -62,7 +62,8 @@ NET_FILE = rc.NET_FILE
 
 
 def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pin_map_json,
-                          annot_layer=(250, 3), row_annot_layer=(250, 0), allowed_nets=None):
+                          annot_layer=(250, 3), row_annot_layer=(250, 0), allowed_nets=None,
+                          in_gds=None):
     """row_cfgs: list of dicts, one per row feeding this channel, each with
     keys logical_row_idx, phys_row_index, mirrored, escape_dir ('up' if the
     channel is ABOVE this row, 'down' if BELOW).
@@ -80,7 +81,14 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
     allowed_nets, if given, further restricts routing to that net-name set
     -- used by the orchestration script to split a row's own internal nets
     between its two candidate channels (each inner row touches two shared
-    channels) so the same net isn't routed twice."""
+    channels) so the same net isn't routed twice.
+
+    in_gds, if given, overrides the module-level IN_GDS as the starting
+    point -- see route_channel.route_row_channel()'s docstring for why
+    (design_notes.md section 26.8: sequential accumulation across channels
+    sharing a row, to avoid blind-spot collisions between independently-
+    routed sibling channels)."""
+    IN_GDS_EFF = in_gds if in_gds is not None else IN_GDS
     celltypes = [f[:-4] for f in os.listdir(STDCELL_DIR) if f.endswith(".sym")]
     sym_pins = {ct: rc.parse_sym(os.path.join(STDCELL_DIR, ct + ".sym")) for ct in celltypes}
 
@@ -222,12 +230,12 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         return pr_bbox_cache[celltype]
 
     _annot_layout = db.Layout()
-    _annot_layout.read(IN_GDS)
+    _annot_layout.read(IN_GDS_EFF)
     _annot_top = _annot_layout.cell("i2c_slave_async_layout")
     _annot_idx = _annot_layout.layer(*row_annot_layer)
 
     _rail_scan = db.Layout()
-    _rail_scan.read(IN_GDS)
+    _rail_scan.read(IN_GDS_EFF)
     _rail_dbu = _rail_scan.dbu
     _rail_top = _rail_scan.cell("i2c_slave_async_layout")
     _rail_m1_idx = _rail_scan.layer(*M1_LAYER)
@@ -290,7 +298,7 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         missing = [n for n, t, w in row if n not in row_cx]
         if missing:
             raise RuntimeError(f"{len(missing)} row{logical_row_idx} instances have no annotation "
-                                f"match in {IN_GDS}: {missing[:5]}...")
+                                f"match in {IN_GDS_EFF}: {missing[:5]}...")
 
         near_edge_y = (phys_row_index + 1) * ROW_HEIGHT if escape_dir == "up" else phys_row_index * ROW_HEIGHT
 
@@ -564,7 +572,7 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
 
     # ---------- emit geometry ----------
     layout = db.Layout()
-    layout.read(IN_GDS)
+    layout.read(IN_GDS_EFF)
     dbu = layout.dbu
     top = layout.cell("i2c_slave_async_layout")
     m1_idx = layout.layer(*M1_LAYER)

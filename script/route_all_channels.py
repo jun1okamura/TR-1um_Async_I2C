@@ -233,27 +233,36 @@ def main():
                 channel_allowed[id(c)].update(nets)
                 break
 
+    accum_gds = rc.IN_GDS  # pristine placement-only base; chained across channels below
     for c in channels:
         allowed = channel_allowed.get(id(c), set())
         name = channel_name(c)
         print(f"\n=== channel {name}: {len(allowed)} nets assigned ===")
         if not allowed:
-            print("  (nothing to route, skipping)")
+            print("  (nothing to route, skipping -- carrying forward previous accumulated GDS)")
             continue
         out_gds = f"{OUT_DIR}/i2c_slave_async_layout_routed_{name}.gds"
         pin_map_json = f"{PINMAP_DIR}/{name}_pin_map.json"
+        # Sequential accumulation (design_notes.md section 26.8): each
+        # channel reads the PREVIOUS channel's output (not the pristine
+        # base) as its input, so its obstruction-avoidance scan can see
+        # whatever a sibling channel touching the same row already routed.
+        # channels is in bottom-to-top physical order (derive_channels()
+        # scans PHYSICAL_ROWS top-to-bottom... no, bottom-to-top, index 0 =
+        # bottom), matching the chain direction.
+        in_gds = accum_gds
         if c["lower"] is None:
             row_idx = c["upper"]
             rc.route_row_channel(
                 logical_row_idx=row_idx, phys_row_index=phys_of_row[row_idx], mirrored=False,
                 channel_bottom_y=c["bottom_y"], channel_height=c["height"], escape_dir="down",
-                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed)
+                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed, in_gds=in_gds)
         elif c["upper"] is None:
             row_idx = c["lower"]
             rc.route_row_channel(
                 logical_row_idx=row_idx, phys_row_index=phys_of_row[row_idx], mirrored=False,
                 channel_bottom_y=c["bottom_y"], channel_height=c["height"], escape_dir="up",
-                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed)
+                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed, in_gds=in_gds)
         else:
             row_cfgs = [
                 dict(logical_row_idx=c["lower"], phys_row_index=phys_of_row[c["lower"]],
@@ -263,7 +272,14 @@ def main():
             ]
             rcs.route_shared_channel(
                 row_cfgs=row_cfgs, channel_bottom_y=c["bottom_y"], channel_height=c["height"],
-                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed)
+                out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed, in_gds=in_gds)
+        accum_gds = out_gds
+
+    final_gds = f"{OUT_DIR}/i2c_slave_async_layout_routed_all.gds"
+    if accum_gds != final_gds:
+        import shutil
+        shutil.copyfile(accum_gds, final_gds)
+    print(f"\nfinal merged (all 6 channels accumulated in sequence): {final_gds}")
 
     if multi_hop_nets:
         print(f"\n{len(multi_hop_nets)} multi-hop net(s) NOT routed (span non-adjacent or 3+ rows):")
