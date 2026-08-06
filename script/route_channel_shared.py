@@ -267,18 +267,35 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
     _existing_m2 = db.Region(_rail_top.begin_shapes_rec_touching(_rail_m2_idx, _row_scan_box)).merged()
     _existing_m2_original_polys = list(_existing_m2.each())
 
+    # _current_reserved_excl holds "every OTHER pin's reserved anchor slot"
+    # (design_notes.md section 31: two-pass anchor reservation) -- set once
+    # per pin (not per jog candidate) just before that pin's path search, so
+    # a jog path can never be routed on top of a spot another pin (already
+    # drawn OR not yet drawn) needs for its own via/pad.
+    _current_reserved_excl = [db.Region()]
+
     def _box_clear(l_um, b_um, r_um, t_um):
         box = db.Box(int(round(l_um / _rail_dbu)), int(round(b_um / _rail_dbu)),
                       int(round(r_um / _rail_dbu)), int(round(t_um / _rail_dbu)))
         clearance_ldbu = int(round(M2_MIN_SPACE / _rail_dbu))
-        return db.Region(box).sized(clearance_ldbu).interacting(_existing_m2).count() == 0
+        grown = db.Region(box).sized(clearance_ldbu)
+        if grown.interacting(_existing_m2).count() > 0:
+            return False
+        if grown.interacting(_current_reserved_excl[0]).count() > 0:
+            return False
+        return True
 
     def _m2_run_clear(x_um, y0_um, y1_um, half_width_um):
         ylo, yhi = (y0_um, y1_um) if y0_um <= y1_um else (y1_um, y0_um)
         run = db.Box(int(round((x_um - half_width_um) / _rail_dbu)), int(round(ylo / _rail_dbu)),
                       int(round((x_um + half_width_um) / _rail_dbu)), int(round(yhi / _rail_dbu)))
         clearance_ldbu = int(round(M2_MIN_SPACE / _rail_dbu))
-        return db.Region(run).sized(clearance_ldbu).interacting(_existing_m2).count() == 0
+        grown = db.Region(run).sized(clearance_ldbu)
+        if grown.interacting(_existing_m2).count() > 0:
+            return False
+        if grown.interacting(_current_reserved_excl[0]).count() > 0:
+            return False
+        return True
 
     all_pins = []          # (instname, pinname, x, y_center, escape_dir, near_edge_y)
     net_stub_pts = {}      # net -> [(vx, vy, patch_polys, padded), ...]
@@ -411,6 +428,24 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         net_pin_names[net] = names
 
     print(f"combined: {len(net_stub_pts)} nets in scope across {len(row_cfgs)} rows, {len(all_pins)} pins")
+
+    # ---------- two-pass anchor reservation (design_notes.md section 31) ----------
+    # Reserve every pin's own via/pad anchor slot BEFORE any routing starts,
+    # so no net's jog geometry can ever be drawn on top of a spot a LATER
+    # net's pin still needs -- see route_channel.py's identical block for
+    # the full rationale (section 29.4's diagnosis: ~80% of unrouted pins
+    # failed because the pin's own anchor was already covered by an
+    # earlier-processed net's M2, not because no jog path existed).
+    _pin_own_box = {}
+    _reserved_region_all = db.Region()
+    _RESV_HALF = M2_PAD_SIZE / 2.0
+    for net, names in net_pin_names.items():
+        for (instname, pinname), (vx, vy, _patch, _padded) in zip(names, net_stub_pts[net]):
+            b = db.Box(int(round((vx - _RESV_HALF) / _rail_dbu)), int(round((vy - _RESV_HALF) / _rail_dbu)),
+                       int(round((vx + _RESV_HALF) / _rail_dbu)), int(round((vy + _RESV_HALF) / _rail_dbu)))
+            _pin_own_box[(instname, pinname)] = b
+            _reserved_region_all.insert(b)
+    _reserved_region_all = _reserved_region_all.merged()
 
     # ---------- pre-pass: shared-obstacle / same-instance / exact-X grouping ----------
     HALF_PAD = M2_PAD_SIZE / 2.0
@@ -671,6 +706,9 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             pref = forced_dir.get((instname, pinname))
             rank = forced_rank.get((instname, pinname), 0)
             mj = (instname, pinname) in must_jog
+            own_box = _pin_own_box.get((instname, pinname))
+            _current_reserved_excl[0] = (_reserved_region_all - db.Region(own_box)) \
+                if own_box is not None else _reserved_region_all
             path = _find_jog_path(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if path is None:
                 # Leave OPEN rather than drawing an unjogged fallback that's
