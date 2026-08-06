@@ -262,10 +262,23 @@ def main():
         groups = defaultdict(list)
         for net in nets:
             groups[find(net)].append(net)
-        for i, key in enumerate(sorted(groups.keys())):
-            c, _dir = cands[i % len(cands)]
+        # Balance by NET COUNT, not group count: same-instance grouping can
+        # collapse many nets into a few groups via transitive union (e.g. a
+        # 45-net row collapsing into 5 groups with one 37-net group), so a
+        # simple round-robin over group INDEX can dump the vast majority of
+        # a row's nets into just one of its two candidate channels while
+        # the other sits nearly empty (observed: row4 -> ch3_4 got 41 nets,
+        # ch4_tm got only 4, out of 45 total -- design_notes.md section 30).
+        # Greedy balance instead: process groups largest-first, always
+        # assign the whole group to whichever candidate channel currently
+        # has the smaller net count so far.
+        cand_load = [0] * len(cands)
+        for key in sorted(groups.keys(), key=lambda k: -len(groups[k])):
+            ci = min(range(len(cands)), key=lambda i: cand_load[i])
+            c, _dir = cands[ci]
             for net in groups[key]:
                 channel_allowed[id(c)].add(net)
+            cand_load[ci] += len(groups[key])
 
     for (a, b), nets in adjacent_pair_nets.items():
         for c in channels:
