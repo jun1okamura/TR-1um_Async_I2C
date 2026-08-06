@@ -1,0 +1,648 @@
+"""
+route_multihop.py
+
+Final routing pass for "multi-hop" nets (design_notes.md section 33):
+nets whose pins sit in non-adjacent rows, or span 3+ rows, which
+route_all_channels.py explicitly does NOT handle -- its channel routers
+(route_channel.py / route_channel_shared.py) only connect pins within a
+single channel's scope (one row, or one adjacent row pair sharing a
+channel). A net like `scl_buf0` (rows [0,1,2,3]) has no single channel
+that touches all its pins.
+
+Unlike the channel routers, this pass does not use M1 trunks + per-channel
+track slots at all. Instead, each multi-hop net's pins are sorted by
+absolute Y and connected pairwise (bottom to top) with a direct M2
+"elbow" or "Z-shape" path that may cross OVER intervening rows' own M1
+(no via = no electrical connection, so this is safe -- same principle
+already used by the old route_cross_row.py, design_notes.md section 23.5)
+and OVER/THROUGH intervening channels' own M2 routing (which it must
+avoid, exactly like the channel routers' jog search).
+
+This runs as a genuinely FINAL pass, reading
+Layout/i2c_slave_async_layout_routed_all.gds (the fully accumulated
+6-channel output) and writing back to the same file, so its obstruction
+scan sees every channel's already-drawn geometry.
+
+Usage:
+    python3 script/route_multihop.py
+"""
+import os
+import re
+import sys
+import json
+from collections import defaultdict
+
+import klayout.db as db
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from plan_placement import compute_rows, ROW_WIDTH_UM, NROWS, PR_LAYER  # noqa: E402
+from gen_gds_placement import PHYSICAL_ROWS  # noqa: E402
+import route_channel as rc  # noqa: E402
+
+ROW_HEIGHT = rc.ROW_HEIGHT
+M1_MIN_SPACE = rc.M1_MIN_SPACE
+M2_MIN_SPACE = rc.M2_MIN_SPACE
+VIA_SIZE = rc.VIA_SIZE
+VIA_MARGIN_UM = rc.VIA_MARGIN_UM
+M2_CORE_WIDTH = rc.M2_CORE_WIDTH
+M2_PAD_SIZE = rc.M2_PAD_SIZE
+GC_KEEPOUT_UM = rc.GC_KEEPOUT_UM
+CO_KEEPOUT_UM = rc.CO_KEEPOUT_UM
+DRC_GRID = rc.DRC_GRID
+M1_LAYER = rc.M1_LAYER
+V1_LAYER = rc.V1_LAYER
+M2_LAYER = rc.M2_LAYER
+GC_LAYER = rc.GC_LAYER
+CO_LAYER = rc.CO_LAYER
+PIN_TEXT_LAYER = rc.PIN_TEXT_LAYER
+STDCELL_DIR = rc.STDCELL_DIR
+GDS_LIB = rc.GDS_LIB
+NET_FILE = rc.NET_FILE
+
+IN_GDS = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_all.gds"
+OUT_GDS = IN_GDS  # write back in place -- this is the final pass
+ANNOT_LAYER = (250, 0)  # per-instance name annotation, written by gen_gds_placement.py
+MULTIHOP_ANNOT_LAYER = (250, 4)
+
+
+def _parse_nets():
+    celltypes = [f[:-4] for f in os.listdir(STDCELL_DIR) if f.endswith(".sym")]
+    sym_pins = {ct: rc.parse_sym(os.path.join(STDCELL_DIR, ct + ".sym")) for ct in celltypes}
+
+    src = open(NET_FILE).read()
+    port_width = {}
+    for m in re.finditer(r'^\s*(input|output|inout)\s*(\[(\d+):(\d+)\])?\s*(\w+)\s*;', src, re.M):
+        kind, _, msb, lsb, name = m.groups()
+        port_width[name] = (int(msb) - int(lsb) + 1) if msb else 1
+    wire_width = {}
+    for m in re.finditer(r'^\s*wire\s*(\[(\d+):(\d+)\])?\s*(\w+)\s*;', src, re.M):
+        _, msb, lsb, name = m.groups()
+        wire_width[name] = (int(msb) - int(lsb) + 1) if msb else 1
+    width_of = {}
+    width_of.update(wire_width)
+    width_of.update(port_width)
+
+    instances = []
+    for m in re.finditer(r'\n\s*(\w+)\s+(\w+)\s*\(\s*(.*?)\)\s*;', src, re.S):
+        typ, name, body = m.groups()
+        if typ not in sym_pins:
+            continue
+        conns = {}
+        for pm in re.finditer(r'\.(\w+)\s*\(\s*([^()]*?)\s*\)', body):
+            pin, expr = pm.groups()
+            conns[pin] = expr.strip()
+        instances.append((typ, name, conns))
+
+    assigns = []
+    for m in re.finditer(r'assign\s+(.+?)\s*=\s*(.+?);', src):
+        lhs, rhs = m.groups()
+        if '{' in lhs or '{' in rhs or "'" in rhs:
+            continue
+        assigns.append((lhs.strip(), rhs.strip()))
+
+    parent = {}
+
+    def find(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    def expand(expr):
+        m = re.match(r'^(\w+)\[(\d+)\]$', expr)
+        if m:
+            return [f"{m.group(1)}[{m.group(2)}]"]
+        m = re.match(r'^(\w+)$', expr)
+        if m:
+            w = width_of.get(m.group(1), 1)
+            return [f"{m.group(1)}[{i}]" for i in range(w)] if w > 1 else [m.group(1)]
+        return None
+
+    for lhs, rhs in assigns:
+        lb, rb = expand(lhs), expand(rhs)
+        if lb is None or rb is None or len(lb) != len(rb):
+            continue
+        for a, b in zip(lb, rb):
+            union(a, b)
+
+    def canon(expr):
+        return find(expr)
+
+    net_pins = defaultdict(list)
+    for typ, name, conns in instances:
+        for pin, expr in conns.items():
+            d = sym_pins[typ].get(pin)
+            if d == 'inout':
+                continue
+            net_pins[canon(expr)].append((name, typ, pin))
+    return net_pins, sym_pins
+
+
+def main():
+    rows, cell_width, row_height = compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM)
+    phys_of_row = {}
+    for i, e in enumerate(PHYSICAL_ROWS):
+        if e is not None:
+            phys_of_row[e] = i
+
+    row_of = {}
+    inst_typ = {}
+    for i, row in enumerate(rows):
+        for n, t, w in row:
+            row_of[n] = i
+            inst_typ[n] = t
+
+    net_pins, sym_pins = _parse_nets()
+    net_rows = {}
+    for net, pins in net_pins.items():
+        rs = set(row_of[p[0]] for p in pins if p[0] in row_of)
+        net_rows[net] = rs
+
+    multi_hop_nets = []
+    for net, rs in net_rows.items():
+        if len(rs) < 2:
+            continue
+        rs_sorted = sorted(rs)
+        is_adjacent_pair = len(rs) == 2 and rs_sorted[1] == rs_sorted[0] + 1
+        if not is_adjacent_pair:
+            multi_hop_nets.append((net, rs))
+
+    print(f"{len(multi_hop_nets)} multi-hop net(s) to route:")
+    for net, rs in multi_hop_nets:
+        print(f"  net={net} rows={sorted(rs)}")
+
+    # ---------- cell library: pin polygons + GC/CO forbidden regions ----------
+    lib = db.Layout()
+    lib.read(GDS_LIB)
+    ldbu = lib.dbu
+    lib_pin_text_idx = lib.layer(*PIN_TEXT_LAYER)
+    lib_m1_idx = lib.layer(*M1_LAYER)
+    lib_gc_idx = lib.layer(*GC_LAYER)
+    lib_co_idx = lib.layer(*CO_LAYER)
+    pr_layer_idx = lib.layer(*PR_LAYER)
+
+    gc_cache = {}
+    co_cache = {}
+    pr_bbox_cache = {}
+
+    def cell_gc_forbidden(celltype):
+        if celltype not in gc_cache:
+            c = lib.cell(celltype)
+            gc_region = db.Region(c.begin_shapes_rec(lib_gc_idx))
+            keepout_ldbu = int(round(GC_KEEPOUT_UM / ldbu))
+            gc_cache[celltype] = gc_region.sized(keepout_ldbu)
+        return gc_cache[celltype]
+
+    def cell_co_forbidden(celltype):
+        if celltype not in co_cache:
+            c = lib.cell(celltype)
+            co_region = db.Region(c.begin_shapes_rec(lib_co_idx))
+            keepout_ldbu = int(round(CO_KEEPOUT_UM / ldbu))
+            co_cache[celltype] = co_region.sized(keepout_ldbu)
+        return co_cache[celltype]
+
+    def get_pr_bbox(celltype):
+        if celltype not in pr_bbox_cache:
+            c = lib.cell(celltype)
+            pr_bbox_cache[celltype] = db.Region(c.begin_shapes_rec(pr_layer_idx)).bbox()
+        return pr_bbox_cache[celltype]
+
+    def get_cell_pin_data(celltype):
+        c = lib.cell(celltype)
+        if c is None:
+            raise RuntimeError(f"cell {celltype} not in library")
+        net_polys = list(db.Region(c.begin_shapes_rec(lib_m1_idx)).merged().each())
+        pins = {}
+        it = c.begin_shapes_rec(lib_pin_text_idx)
+        while not it.at_end():
+            s = it.shape()
+            if s.is_text():
+                tx, ty = s.text_dtrans.disp.x, s.text_dtrans.disp.y
+                px, py = int(round(tx / ldbu)), int(round(ty / ldbu))
+                cand = [p for p in net_polys
+                        if p.bbox().left <= px <= p.bbox().right and p.bbox().bottom <= py <= p.bbox().top]
+                if cand:
+                    best = min(cand, key=lambda p: p.bbox().area())
+                else:
+                    best = min(net_polys, key=lambda p: (p.bbox().center().x - px) ** 2 + (p.bbox().center().y - py) ** 2)
+                pins[s.text_string.lower()] = best
+            it.next()
+        return pins
+
+    pin_cache = {}
+
+    def cell_pin_poly(celltype, pinname):
+        if celltype not in pin_cache:
+            pin_cache[celltype] = get_cell_pin_data(celltype)
+        d = pin_cache[celltype]
+        key = pinname.lower()
+        if key not in d:
+            raise RuntimeError(f"pin {pinname!r} not found for {celltype} (have {list(d)})")
+        return d[key]
+
+    # ---------- absolute instance origin for EVERY row (not just one channel's) ----------
+    layout = db.Layout()
+    layout.read(IN_GDS)
+    dbu = layout.dbu
+    top = layout.cell("i2c_slave_async_layout")
+    annot_idx = layout.layer(*ANNOT_LAYER)
+    m1_idx = layout.layer(*M1_LAYER)
+    v1_idx = layout.layer(*V1_LAYER)
+    m2_idx = layout.layer(*M2_LAYER)
+    mh_annot_idx = layout.layer(*MULTIHOP_ANNOT_LAYER)
+
+    needed_insts = set()
+    for net, rs in multi_hop_nets:
+        for instname, typ, pinname in net_pins[net]:
+            needed_insts.add(instname)
+
+    row_cx = {}
+    it = top.begin_shapes_rec(annot_idx)
+    while not it.at_end():
+        s = it.shape()
+        if s.is_text() and s.text_string in needed_insts:
+            row_cx[s.text_string] = s.text_dtrans.disp.x
+        it.next()
+    missing = needed_insts - set(row_cx)
+    if missing:
+        raise RuntimeError(f"{len(missing)} instances missing annotation: {sorted(missing)[:5]}...")
+
+    inst_origin = {}  # instname -> (tx, ty, mirrored)
+    for instname in needed_insts:
+        logical_row_idx = row_of[instname]
+        phys_row_index = phys_of_row[logical_row_idx]
+        mirrored = (phys_row_index % 2 == 1)
+        typ = inst_typ[instname]
+        bbox = get_pr_bbox(typ)
+        bleft = bbox.left * ldbu
+        bbottom = bbox.bottom * ldbu
+        btop = bbox.top * ldbu
+        width = bbox.width() * ldbu
+        cx = row_cx[instname]
+        tx = cx - (bleft + width / 2.0)
+        if not mirrored:
+            ty = phys_row_index * ROW_HEIGHT - bbottom
+        else:
+            ty = phys_row_index * ROW_HEIGHT + btop
+        inst_origin[instname] = (tx, ty, mirrored, typ)
+
+    def abs_pin_anchor(instname, pinname):
+        tx, ty, mirrored, typ = inst_origin[instname]
+        poly = cell_pin_poly(typ, pinname)
+        forbid = cell_gc_forbidden(typ) + cell_co_forbidden(typ)
+        margin_ldbu = int(round(VIA_MARGIN_UM / ldbu))
+
+        def safe_region(region):
+            return region.sized(-margin_ldbu) - forbid
+
+        base = db.Region(poly)
+        eroded = safe_region(base)
+        grown_um = 0.0
+        used = base
+        if eroded.is_empty():
+            for grow_um in (0.02, 0.05, 0.08, 0.12, 0.2, 0.3, 0.5, 0.8, 1.2):
+                grow_ldbu = int(round(grow_um / ldbu))
+                cand = base.sized(grow_ldbu)
+                cand_eroded = safe_region(cand)
+                if not cand_eroded.is_empty():
+                    used, eroded, grown_um = cand, cand_eroded, grow_um
+                    break
+            else:
+                raise RuntimeError(f"{instname}.{pinname}: no safe via anchor even after growth")
+
+        pieces = list(eroded.each())
+        best = max(pieces, key=lambda p: p.bbox().area())
+        bb = best.bbox()
+        local_x = bb.center().x * ldbu
+        local_y = bb.center().y * ldbu
+        if not mirrored:
+            vx, vy = local_x + tx, local_y + ty
+        else:
+            vx, vy = local_x + tx, -local_y + ty
+
+        patch_polys_abs = []
+        if grown_um > 0.0:
+            for p in used.each():
+                pts = []
+                for pt in p.each_point_hull():
+                    lx, ly = pt.x * ldbu, pt.y * ldbu
+                    if not mirrored:
+                        pts.append(db.DPoint(lx + tx, ly + ty))
+                    else:
+                        pts.append(db.DPoint(lx + tx, -ly + ty))
+                patch_polys_abs.append(pts)
+        return vx, vy, patch_polys_abs, grown_um > 0.0
+
+    # ---------- existing M2 obstruction: the WHOLE accumulated layout ----------
+    core_h = len(PHYSICAL_ROWS) * ROW_HEIGHT
+    _full_box = db.Box(0, 0, int(round(ROW_WIDTH_UM / dbu)), int(round(core_h / dbu)))
+    _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
+
+    def _box_clear(l_um, b_um, r_um, t_um):
+        box = db.Box(int(round(l_um / dbu)), int(round(b_um / dbu)),
+                      int(round(r_um / dbu)), int(round(t_um / dbu)))
+        clearance_ldbu = int(round(M2_MIN_SPACE / dbu))
+        return db.Region(box).sized(clearance_ldbu).interacting(_existing_m2).count() == 0
+
+    def _vrun_clear(x_um, y0_um, y1_um, half_width_um):
+        ylo, yhi = (y0_um, y1_um) if y0_um <= y1_um else (y1_um, y0_um)
+        return _box_clear(x_um - half_width_um, ylo, x_um + half_width_um, yhi)
+
+    def _hrun_clear(y_um, x0_um, x1_um, half_width_um):
+        xlo, xhi = (x0_um, x1_um) if x0_um <= x1_um else (x1_um, x0_um)
+        return _box_clear(xlo, y_um - half_width_um, xhi, y_um + half_width_um)
+
+    half = M2_PAD_SIZE / 2.0
+
+    # A simple 2-3 segment elbow/Z-shape (fixed-height horizontal runs at
+    # each pin's own Y, single free-X vertical trunk) was tried first and
+    # failed 100% of the time: a full sweep confirmed that a handful of
+    # columns ARE clear for the FULL chip height (~14 out of 900), but
+    # reaching them requires a horizontal run at the pin's OWN Y -- and
+    # that row-edge Y band is exactly the densest, most congested part of
+    # the layout (same finding as section 29.4/32), so a single unbroken
+    # horizontal bridge at fixed Y almost always hits something along the
+    # way, even when the destination column is globally clear. This is the
+    # same "single-bend jog can't dodge a mid-run obstruction" problem
+    # from section 29, just at chip scale instead of channel scale.
+    #
+    # Fix: a real bounded maze search (Lee/BFS on a coarse grid) instead of
+    # a fixed-shape heuristic -- exactly the "true fix" flagged as future
+    # work since section 22.5. Only 15 nets / ~100 segments need this, so
+    # the cost of a proper grid search here is small (unlike retrofitting
+    # it into the channel routers, which each resolve hundreds of pins).
+    GRID_STEP = 6.0  # um
+    core_h_i = core_h
+    nx = int(ROW_WIDTH_UM // GRID_STEP) + 1
+    ny = int(core_h_i // GRID_STEP) + 1
+
+    def _rasterize_blocked(region):
+        """Bbox-per-polygon rasterization of a (clearance-grown) Region
+        onto the coarse grid -- conservative (a polygon's bbox can exceed
+        its own area for non-rectangular merged shapes) but fast, and
+        erring toward "blocked" only costs a slightly less direct path,
+        never a DRC violation."""
+        blocked = bytearray(nx * ny)
+        clearance_ldbu = int(round(M2_MIN_SPACE / dbu))
+        grown = region.sized(clearance_ldbu)
+        for poly in grown.each():
+            bb = poly.bbox()
+            l, b, r, t = bb.left * dbu, bb.bottom * dbu, bb.right * dbu, bb.top * dbu
+            gx0 = max(0, int(l // GRID_STEP))
+            gx1 = min(nx - 1, int(r // GRID_STEP))
+            gy0 = max(0, int(b // GRID_STEP))
+            gy1 = min(ny - 1, int(t // GRID_STEP))
+            for gy in range(gy0, gy1 + 1):
+                base = gy * nx
+                for gx in range(gx0, gx1 + 1):
+                    blocked[base + gx] = 1
+        return blocked
+
+    def _bfs_path(x0, y0, x1, y1, blocked):
+        from collections import deque
+        gx0 = min(nx - 1, max(0, int(round(x0 / GRID_STEP))))
+        gy0 = min(ny - 1, max(0, int(round(y0 / GRID_STEP))))
+        gx1 = min(nx - 1, max(0, int(round(x1 / GRID_STEP))))
+        gy1 = min(ny - 1, max(0, int(round(y1 / GRID_STEP))))
+        start = gy0 * nx + gx0
+        goal = gy1 * nx + gx1
+        if start == goal:
+            return [(x0, y0), (x1, y1)]
+        prev = {start: None}
+        q = deque([start])
+        while q:
+            cur = q.popleft()
+            if cur == goal:
+                break
+            cy, cx = divmod(cur, nx)[0], cur % nx
+            for dgx, dgy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                ngx, ngy = cx + dgx, cy + dgy
+                if ngx < 0 or ngx >= nx or ngy < 0 or ngy >= ny:
+                    continue
+                nxt = ngy * nx + ngx
+                if nxt in prev:
+                    continue
+                if blocked[nxt] and nxt != goal:
+                    continue
+                prev[nxt] = cur
+                q.append(nxt)
+        if goal not in prev:
+            return None
+        # reconstruct
+        cells = []
+        cur = goal
+        while cur is not None:
+            cy, cx = divmod(cur, nx)[0], cur % nx
+            cells.append((cx * GRID_STEP, cy * GRID_STEP))
+            cur = prev[cur]
+        cells.reverse()
+        # collapse collinear runs into a minimal orthogonal polyline
+        pts = [(x0, y0)]
+        for i in range(1, len(cells) - 1):
+            xa, ya = cells[i - 1]
+            xb, yb = cells[i]
+            xc, yc = cells[i + 1]
+            d1 = (xb - xa, yb - ya)
+            d2 = (xc - xb, yc - yb)
+            if d1 != d2:
+                pts.append((xb, yb))
+        pts.append((x1, y1))
+        return pts
+
+    def _find_path(x0, y0, x1, y1, blocked):
+        return _bfs_path(x0, y0, x1, y1, blocked)
+
+    def _simplify_path(path):
+        """Greedy 'string pulling' shortcut pass: replace as much of the
+        raw BFS staircase as possible with long single-bend hops, checked
+        against the EXACT (non-grid-quantized) obstruction region -- the
+        BFS grid is only needed to discover a route exists at all; once
+        found, most of its zigzag detail is usually unnecessary and only
+        risked introducing corner-notch DRC issues (section 33.2)."""
+        if len(path) <= 2:
+            return path
+        result = [path[0]]
+        i = 0
+        n = len(path)
+        while i < n - 1:
+            xa, ya = path[i]
+            advanced = False
+            for j in range(n - 1, i, -1):
+                xb, yb = path[j]
+                if _vrun_clear(xa, ya, yb, half) and _hrun_clear(yb, xa, xb, half):
+                    result.append((xa, yb))
+                    result.append((xb, yb))
+                    i = j
+                    advanced = True
+                    break
+                if _hrun_clear(ya, xa, xb, half) and _vrun_clear(xb, ya, yb, half):
+                    result.append((xb, ya))
+                    result.append((xb, yb))
+                    i = j
+                    advanced = True
+                    break
+            if not advanced:
+                result.append(path[i + 1])
+                i += 1
+        return result
+
+    def um(v):
+        return int(round(round(v / DRC_GRID) * DRC_GRID / dbu))
+
+    def pad(cx, cy, size):
+        h = size / 2.0
+        return db.Box(um(cx - h), um(cy - h), um(cx + h), um(cy + h))
+
+    shapes_drawn = 0
+    unresolved_segments = []
+    fully_routed_nets = []
+    partially_routed_nets = []
+
+    for net, rs in sorted(multi_hop_nets, key=lambda t: t[0]):
+        pins = net_pins[net]
+        anchors = []
+        for instname, typ, pinname in pins:
+            vx, vy, patch_polys, padded = abs_pin_anchor(instname, pinname)
+            anchors.append((vy, vx, instname, pinname, patch_polys, padded))
+        anchors.sort()  # bottom to top
+
+        # Plan+draw segments ONE AT A TIME, refreshing the blocked grid
+        # after each -- two segments of the SAME net (e.g. a 4-pin net has
+        # 3 chained segments) planned against a single stale snapshot could
+        # otherwise cross each other undetected (same class of bug as
+        # section 28.2's same-net sibling-pin collision in the channel
+        # routers). Pin pads/vias are still deferred to the very end of
+        # the net: drawing a pin's own pad before ITS OWN path is planned
+        # would make the pin block its own outgoing search (the path
+        # necessarily starts exactly at the pad's location) -- since a
+        # pin can be the shared endpoint of two consecutive segments, this
+        # would misfire even with per-segment interleaving. BFS separately
+        # exempts the exact start/goal grid cell from the blocked check,
+        # so a later segment CAN still start from a point an earlier
+        # segment's path passed through/ended at.
+        seg_paths = []
+        for i in range(len(anchors) - 1):
+            y0, x0, inst0, pin0, _p0, _pad0 = anchors[i]
+            y1, x1, inst1, pin1, _p1, _pad1 = anchors[i + 1]
+            blocked = _rasterize_blocked(_existing_m2)
+            path = _find_path(x0, y0, x1, y1, blocked)
+            seg_paths.append(path)
+            if path is None:
+                print(f"WARNING: net {net}: segment {inst0}.{pin0} -> {inst1}.{pin1} "
+                      f"({x0:.2f},{y0:.2f})->({x1:.2f},{y1:.2f}): no clear M2 path found; "
+                      f"leaving this segment UNROUTED (open)")
+                unresolved_segments.append((net, inst0, pin0, inst1, pin1))
+                continue
+            # Simplify the raw BFS grid path (which can bend at every grid
+            # step) into the minimal number of orthogonal segments before
+            # drawing: greedily try to shortcut each waypoint by testing
+            # whether the two segments around it can be replaced by a
+            # single L-bend between its neighbors, using the EXACT (non-
+            # grid-quantized) clearance check. This both produces cleaner
+            # geometry (fewer corners = fewer chances for a sub-clearance
+            # notch, the cause of section 33.2's negative first attempt)
+            # and mirrors the channel routers' own proven box-drawing
+            # style, which is already known DRC-clean for low-bend-count
+            # paths.
+            # NOTE: no separate bend pads are drawn at interior waypoints --
+            # each segment already extends by `half` beyond its nominal
+            # endpoint in its own run direction (checked: at a shared
+            # corner, this gives a full M2_CORE_WIDTH x M2_CORE_WIDTH
+            # overlap between the two meeting segments' boxes on its own).
+            # Adding a M2_PAD_SIZE square pad on top of that was tried and
+            # found to be the actual source of the one residual spacing
+            # violation in section 33.2's second attempt: the pad's own
+            # half-width (1.7um) is slightly WIDER than M2_CORE_WIDTH/2
+            # (1.55um), so it silently protruded 0.15um past the region
+            # the exact clearance check had actually verified, occasionally
+            # clipping an unrelated nearby shape that the segment checks
+            # alone would have avoided.
+            path = _simplify_path(path)
+            # Final exact-clearance verification: _simplify_path's fallback
+            # (when no shortcut exists for a waypoint) passes the raw BFS
+            # step through unverified, trusting the grid-based blocked
+            # mask -- which is only a bbox-per-cell APPROXIMATION and can
+            # occasionally be too optimistic right at a cell boundary
+            # (found empirically: one segment slipped through 0.25um from
+            # a real obstacle, well under the 2.0um clearance rule). Re-
+            # check every segment with the exact (non-grid) test before
+            # drawing anything; if any segment fails, drop the whole hop
+            # as unrouted rather than draw geometry known to violate DRC
+            # (same "leave open, don't draw a colliding fallback"
+            # convention as every other router in this project).
+            path_clear = all(
+                (_vrun_clear(path[k][0], path[k][1], path[k + 1][1], half)
+                 if path[k][0] == path[k + 1][0] else
+                 _hrun_clear(path[k][1], path[k][0], path[k + 1][0], half))
+                for k in range(len(path) - 1)
+            )
+            if not path_clear:
+                print(f"WARNING: net {net}: segment {inst0}.{pin0} -> {inst1}.{pin1}: "
+                      f"grid path found but failed exact re-verification; "
+                      f"leaving this segment UNROUTED (open)")
+                seg_paths[-1] = None
+                unresolved_segments.append((net, inst0, pin0, inst1, pin1))
+                continue
+            for j in range(len(path) - 1):
+                (xa, ya), (xb, yb) = path[j], path[j + 1]
+                if xa == xb:
+                    ylo, yhi = (ya, yb) if ya <= yb else (yb, ya)
+                    top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(ylo - half),
+                                                      um(xa + M2_CORE_WIDTH / 2), um(yhi + half)))
+                else:
+                    xlo, xhi = (xa, xb) if xa <= xb else (xb, xa)
+                    top.shapes(m2_idx).insert(db.Box(um(xlo - half), um(ya - M2_CORE_WIDTH / 2),
+                                                      um(xhi + half), um(ya + M2_CORE_WIDTH / 2)))
+                shapes_drawn += 1
+            label = db.Text(net, db.Trans(um((x0 + x1) / 2), um((y0 + y1) / 2)))
+            label.size = um(1.5)
+            top.shapes(mh_annot_idx).insert(label)
+            _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
+
+        touched = set()
+        for i, path in enumerate(seg_paths):
+            if path is not None:
+                touched.add(i)
+                touched.add(i + 1)
+
+        for idx in touched:
+            vy, vx, instname, pinname, patch_polys, padded = anchors[idx]
+            if padded:
+                for pts_um in patch_polys:
+                    poly = db.Polygon([db.Point(um(p.x), um(p.y)) for p in pts_um])
+                    top.shapes(m1_idx).insert(poly)
+                    shapes_drawn += 1
+            top.shapes(v1_idx).insert(pad(vx, vy, VIA_SIZE))
+            top.shapes(m2_idx).insert(pad(vx, vy, M2_PAD_SIZE))
+            shapes_drawn += 2
+
+        seg_ok = sum(1 for p in seg_paths if p is not None)
+        _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
+
+        if seg_ok == len(anchors) - 1:
+            fully_routed_nets.append(net)
+        elif seg_ok > 0:
+            partially_routed_nets.append(net)
+        else:
+            print(f"WARNING: net {net}: ALL segments failed to route")
+
+    print(f"\ndrew {shapes_drawn} shapes for {len(multi_hop_nets)} multi-hop nets")
+    print(f"fully routed: {len(fully_routed_nets)}  partially routed: {len(partially_routed_nets)}  "
+          f"fully failed: {len(multi_hop_nets) - len(fully_routed_nets) - len(partially_routed_nets)}")
+    if unresolved_segments:
+        print(f"{len(unresolved_segments)} segment(s) left UNROUTED (open):")
+        for net, i0, p0, i1, p1 in unresolved_segments:
+            print(f"  - net={net} {i0}.{p0} -> {i1}.{p1}")
+
+    layout.write(OUT_GDS)
+    print("wrote", OUT_GDS)
+
+
+if __name__ == "__main__":
+    main()
