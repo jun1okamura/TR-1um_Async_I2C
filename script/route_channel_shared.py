@@ -580,6 +580,7 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         return None
 
     shapes_drawn = 0
+    unrouted_pins = []
     net_order = sorted(net_stub_pts.keys(), key=lambda n: (net_priority[n], n))
     for net in net_order:
         pts = net_stub_pts[net]
@@ -594,10 +595,19 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             mj = (instname, pinname) in must_jog
             top_x = _find_jog_x(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if top_x is None:
+                # Leave OPEN rather than drawing an unjogged fallback that's
+                # already known to collide -- avoids cascading obstruction
+                # pollution into _existing_m2 for subsequent nets (same fix
+                # as route_channel.py / route_cross_row.py).
                 print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
-                      f"no clear M2 jog found within search range; DRC may still flag this via")
-                top_x = x
+                      f"no clear M2 jog found within search range; leaving UNROUTED (open)")
+                unrouted_pins.append((net, instname, pinname, x, y_center))
+                continue
             resolved.append((x, y_center, patch_polys, padded, top_x))
+
+        if not resolved:
+            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
+            continue
 
         top_xs = [r[4] for r in resolved]
         x_lo, x_hi = min(top_xs), max(top_xs)
@@ -640,6 +650,10 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
 
     print(f"drew {shapes_drawn} shapes (M1 trunks+pads, V1 vias, M2 stubs) for {len(net_stub_pts)} nets")
+    if unrouted_pins:
+        print(f"{len(unrouted_pins)} pin(s) left UNROUTED (open) to avoid drawing colliding fallback geometry:")
+        for net, instname, pinname, x, y_center in unrouted_pins:
+            print(f"  - net={net} {instname}.{pinname} at ({x:.2f},{y_center:.2f})")
 
     os.makedirs(os.path.dirname(out_gds), exist_ok=True)
     layout.write(out_gds)
@@ -659,10 +673,10 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
 ROW12_SHARED = dict(
     row_cfgs=[
         dict(logical_row_idx=1, phys_row_index=3, mirrored=True, escape_dir="up"),
-        dict(logical_row_idx=2, phys_row_index=7, mirrored=True, escape_dir="down"),
+        dict(logical_row_idx=2, phys_row_index=11, mirrored=True, escape_dir="down"),
     ],
     channel_bottom_y=4 * ROW_HEIGHT,   # 220.0
-    channel_height=3 * ROW_HEIGHT,     # 165.0
+    channel_height=7 * ROW_HEIGHT,     # 385.0
     out_gds="/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_row12.gds",
     pin_map_json="/sessions/dreamy-ecstatic-heisenberg/mnt/outputs/row12_pin_map.json",
 )

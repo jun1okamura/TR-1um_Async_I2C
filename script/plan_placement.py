@@ -181,7 +181,18 @@ def _fm_bipartition(node_ids, nets_touching, node_weight, capacity_a, capacity_b
     high routing failure rate (route_cross_row.py, ~50% of pins) compared
     to an in-channel net."""
     rng = rng or random.Random(42)
-    nodes = list(node_ids)
+    # sorted(), NOT list(): plain Python sets iterate in an order that
+    # depends on string hash randomization (a different, random seed every
+    # process by default), so two separate invocations of compute_rows()
+    # (e.g. gen_gds_placement.py's call vs. a later script re-importing and
+    # calling compute_rows() again to look up which instances are in which
+    # row) could silently produce DIFFERENT partitions even with the same
+    # rng seed -- found when route_channel.py's fresh compute_rows() call
+    # no longer agreed with what gen_gds_placement.py had actually written
+    # to the placement GDS. Sorting makes the node visit order (and hence
+    # every FM tie-break, which consumes from the shared rng in that order)
+    # fully deterministic across processes.
+    nodes = sorted(node_ids)
     node_nets = defaultdict(list)
     for net, members in nets_touching.items():
         for n in members:

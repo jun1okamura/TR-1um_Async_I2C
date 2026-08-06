@@ -588,6 +588,7 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
         return None
 
     shapes_drawn = 0
+    unrouted_pins = []
     net_order = sorted(net_stub_pts.keys(), key=lambda n: (net_priority[n], n))
     for net in net_order:
         pts = net_stub_pts[net]
@@ -602,10 +603,22 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
             mj = (instname, pinname) in must_jog
             top_x = _find_jog_x(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if top_x is None:
+                # Do NOT fall back to an unjogged (top_x=x) stub here: the
+                # jog search already proved the direct run isn't clear, so
+                # drawing it anyway guarantees a collision -- and that bad
+                # geometry then gets folded into _existing_m2 for later nets,
+                # cascading failures (see design_notes.md route_cross_row.py
+                # discussion). Leave the pin OPEN (unrouted) instead; a known
+                # open is far cheaper to fix than a cascading short.
                 print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
-                      f"no clear M2 jog found within search range; DRC may still flag this via")
-                top_x = x
+                      f"no clear M2 jog found within search range; leaving UNROUTED (open)")
+                unrouted_pins.append((net, instname, pinname, x, y_center))
+                continue
             resolved.append((x, y_center, patch_polys, padded, top_x))
+
+        if not resolved:
+            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
+            continue
 
         top_xs = [r[4] for r in resolved]
         x_lo, x_hi = min(top_xs), max(top_xs)
@@ -648,6 +661,10 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
         _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
 
     print(f"drew {shapes_drawn} shapes (M1 trunks+pads, V1 vias, M2 stubs) for {len(net_stub_pts)} nets")
+    if unrouted_pins:
+        print(f"{len(unrouted_pins)} pin(s) left UNROUTED (open) to avoid drawing colliding fallback geometry:")
+        for net, instname, pinname, x, y_center in unrouted_pins:
+            print(f"  - net={net} {instname}.{pinname} at ({x:.2f},{y_center:.2f})")
 
     os.makedirs(os.path.dirname(out_gds), exist_ok=True)
     layout.write(out_gds)
@@ -668,8 +685,8 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
 # generalization): logical row 3 = physical row 8, unmirrored, channel above
 # (escape_dir='up'), 110um (2 filler rows).
 ROW3_PILOT = dict(
-    logical_row_idx=3, phys_row_index=8, mirrored=False,
-    channel_bottom_y=9 * ROW_HEIGHT, channel_height=110.0, escape_dir="up",
+    logical_row_idx=3, phys_row_index=12, mirrored=False,
+    channel_bottom_y=13 * ROW_HEIGHT, channel_height=220.0, escape_dir="up",
     out_gds="/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_pilot.gds",
     pin_map_json="/sessions/dreamy-ecstatic-heisenberg/mnt/outputs/pilot_pin_map.json",
 )

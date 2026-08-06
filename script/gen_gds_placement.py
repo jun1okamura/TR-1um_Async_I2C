@@ -94,9 +94,16 @@ FILLER_CELL = "FILL1"
 PHYSICAL_ROWS = (
     [None, None]        # bottom M1 routing margin (below logical row 0)
     + [0, 1]             # logical rows 0, 1 (zero-gap, rail-shared pair)
-    + [None, None, None]  # shared M1 routing channel (between row1/row2)
+    + [None] * 7           # shared M1 routing channel (between row1/row2) --
+                            # widened 3->7 filler rows (165->385um, ~24->56
+                            # track slots) to fit the 46 tracks row1/2's
+                            # FM-optimized intra-row nets need. Must stay ODD
+                            # to preserve row2/row3 mirror parity.
     + [2, 3]             # logical rows 2, 3 (zero-gap, rail-shared pair)
-    + [None, None]        # top M1 routing margin (above logical row 3)
+    + [None] * 4           # top M1 routing margin (above logical row 3) --
+                            # widened 2->4 filler rows (110->220um, ~16->32
+                            # track slots) to fit the 22 tracks row3's
+                            # intra-row nets need. No parity constraint here.
 )
 # Zero-gap, rail-shared row pairs -- their in-row filler corridors are
 # aligned in absolute X (see distribute_paired_row_fillers()) so a straight
