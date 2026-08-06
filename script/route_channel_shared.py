@@ -599,11 +599,17 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         h = size / 2.0
         return db.Box(um(cx - h), um(cy - h), um(cx + h), um(cy + h))
 
-    def _find_jog_x(vx, y_center, track_y, preferred_dir=None, skip_rank=0, must_jog=False):
+    ALL_MAGS = (2, 4, 6, 8, 10, 14, 18, 24, 30, 40, 50, 60, 80, 100,
+                130, 160, 200, 250, 300, 400, 500, 650, 800)
+    LOCAL_MAGS = ALL_MAGS[:14]  # up to 24um -- "just clear the immediate obstruction" scale
+
+    def _find_jog_x_range(vx, y0, y1, preferred_dir=None, skip_rank=0, must_jog=False, mags=ALL_MAGS):
+        """Single-bend (L-shape) search: find an x where the vertical run
+        [y0,y1] at that x is clear, AND the horizontal traverse from vx to
+        that x (at y0) is clear."""
         half = M2_PAD_SIZE / 2.0
-        if not must_jog and _m2_run_clear(vx, y_center - half, track_y + half, half):
+        if not must_jog and _m2_run_clear(vx, y0 - half, y1 + half, half):
             return vx
-        mags = (2, 4, 6, 8, 10, 14, 18, 24, 30, 40, 50, 60, 80, 100)
         if preferred_dir == -1:
             offsets = [-d for d in mags[skip_rank:]] + [d for d in mags]
         elif preferred_dir == 1:
@@ -616,12 +622,38 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             jx = vx + off
             if jx < 2.0 or jx > ROW_WIDTH_UM - 2.0:
                 continue
-            if not _m2_run_clear(jx, y_center - half, track_y + half, half):
+            if not _m2_run_clear(jx, y0 - half, y1 + half, half):
                 continue
             lo, hi = (vx, jx) if vx <= jx else (jx, vx)
-            if not _box_clear(lo, y_center - half, hi, y_center + half):
+            if not _box_clear(lo, y0 - half, hi, y0 + half):
                 continue
             return jx
+        return None
+
+    def _find_jog_path(vx, y_center, track_y, preferred_dir=None, skip_rank=0, must_jog=False):
+        """Returns a waypoint list [(x0,y0), (x1,y1), ...] from the pin to
+        the track, or None if unroutable. First tries a plain single-bend
+        (L-shape) path; if that fails (every x-candidate collides
+        SOMEWHERE along the full vertical run -- see design_notes.md
+        section 29), falls back to a bounded 2-bend (Z-shape) path via one
+        of 5 candidate intermediate Y-fractions, first taking a short LOCAL
+        escape jog from the pin, then a full-range jog from there to the
+        track."""
+        top_x = _find_jog_x_range(vx, y_center, track_y, preferred_dir, skip_rank, must_jog)
+        if top_x is not None:
+            return [(vx, y_center), (top_x, y_center), (top_x, track_y)]
+
+        span = track_y - y_center
+        for frac in (0.25, 0.4, 0.5, 0.6, 0.75):
+            y_mid = y_center + span * frac
+            jx1 = _find_jog_x_range(vx, y_center, y_mid, preferred_dir, skip_rank,
+                                     must_jog=True, mags=LOCAL_MAGS)
+            if jx1 is None:
+                continue
+            jx2 = _find_jog_x_range(jx1, y_mid, track_y, preferred_dir, 0, must_jog=True)
+            if jx2 is None:
+                continue
+            return [(vx, y_center), (jx1, y_center), (jx1, y_mid), (jx2, y_mid), (jx2, track_y)]
         return None
 
     shapes_drawn = 0
@@ -634,20 +666,25 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         track_y = track_slots[ti]
 
         resolved = []
+        zshape_count = 0
         for (instname, pinname), (x, y_center, patch_polys, padded) in zip(names, pts):
             pref = forced_dir.get((instname, pinname))
             rank = forced_rank.get((instname, pinname), 0)
             mj = (instname, pinname) in must_jog
-            top_x = _find_jog_x(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
-            if top_x is None:
+            path = _find_jog_path(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
+            if path is None:
                 # Leave OPEN rather than drawing an unjogged fallback that's
                 # already known to collide -- avoids cascading obstruction
                 # pollution into _existing_m2 for subsequent nets (same fix
                 # as route_channel.py / route_cross_row.py).
                 print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
-                      f"no clear M2 jog found within search range; leaving UNROUTED (open)")
+                      f"no clear M2 jog found within search range (incl. 2-bend fallback); "
+                      f"leaving UNROUTED (open)")
                 unrouted_pins.append((net, instname, pinname, x, y_center))
                 continue
+            top_x = path[-1][0]
+            if len(path) > 3:
+                zshape_count += 1
             resolved.append((x, y_center, patch_polys, padded, top_x))
 
             # Draw + refresh _existing_m2 immediately per-pin (not just per
@@ -660,30 +697,39 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
                     top.shapes(m1_idx).insert(poly)
                     shapes_drawn += 1
             top.shapes(v1_idx).insert(pad(x, y_center, VIA_SIZE))
-
-            if top_x != x:
-                lo, hi = (x, top_x) if x <= top_x else (top_x, x)
-                if x <= top_x:
-                    hi += M2_CORE_WIDTH / 2
-                else:
-                    lo -= M2_CORE_WIDTH / 2
-                top.shapes(m2_idx).insert(db.Box(um(lo), um(y_center - M2_PAD_SIZE / 2),
-                                                  um(hi), um(y_center + M2_PAD_SIZE / 2)))
-                shapes_drawn += 1
-
-            y0, y1 = (y_center, track_y) if y_center <= track_y else (track_y, y_center)
-            top.shapes(m2_idx).insert(db.Box(um(top_x - M2_CORE_WIDTH / 2), um(y0 - 0.3),
-                                              um(top_x + M2_CORE_WIDTH / 2), um(y1 + 0.3)))
             top.shapes(m2_idx).insert(pad(x, y_center, M2_PAD_SIZE))
+
+            # Walk the path (2 waypoints for a plain L-shape, 4 for a
+            # 2-bend Z-shape fallback), drawing each segment and a pad at
+            # every intermediate bend (no via needed -- same M2 layer).
+            for i in range(len(path) - 1):
+                (xa, ya), (xb, yb) = path[i], path[i + 1]
+                if xa == xb:
+                    y0, y1 = (ya, yb) if ya <= yb else (yb, ya)
+                    top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(y0 - 0.3),
+                                                      um(xa + M2_CORE_WIDTH / 2), um(y1 + 0.3)))
+                else:
+                    lo, hi = (xa, xb) if xa <= xb else (xb, xa)
+                    lo -= M2_CORE_WIDTH / 2
+                    hi += M2_CORE_WIDTH / 2
+                    top.shapes(m2_idx).insert(db.Box(um(lo), um(ya - M2_PAD_SIZE / 2),
+                                                      um(hi), um(ya + M2_PAD_SIZE / 2)))
+                shapes_drawn += 1
+                if 0 < i < len(path) - 1:
+                    top.shapes(m2_idx).insert(pad(xa, ya, M2_PAD_SIZE))
+                    shapes_drawn += 1
+
             top.shapes(m2_idx).insert(pad(top_x, track_y, M2_PAD_SIZE))
             top.shapes(v1_idx).insert(pad(top_x, track_y, VIA_SIZE))
-            shapes_drawn += 4
+            shapes_drawn += 2
 
             _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
 
         if not resolved:
             print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
             continue
+        if zshape_count:
+            print(f"  net {net}: {zshape_count} pin(s) used the 2-bend Z-shape fallback path")
 
         top_xs = [r[4] for r in resolved]
         x_lo, x_hi = min(top_xs), max(top_xs)
