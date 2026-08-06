@@ -75,18 +75,23 @@ FILLER_CELL = "FILL1"
 ROW_HEIGHT_FILLER_ROWS = 55.0  # nominal, overwritten from the real prBoundary below
 
 # Channel sizes in FILL1-row units. Every row boundary is now a real M1
-# channel (design_notes.md section 26) -- no more zero-gap pairs, no more
-# odd/even mirror-parity constraint (nothing is mirrored anymore, so any
-# row's channel(s) can be resized independently without side effects on
-# other rows). Sized empirically; see design_notes.md section 26.x for the
-# measured-vs-fitted iteration log.
-# Iteration 3 (all 6 channels fit under iteration 2; ch4_tm came out very
-# oversized -- 10/32 tracks used, 31% -- shrunk it down; everything else
-# already lands in the same ~60-85% utilization band as design_notes.md
-# section 25's successful channels, so left alone):
-#   chbm_0 1/8, ch0_1 7/16, ch1_2 14/24, ch2_3 22/32, ch3_4 32/40, ch4_tm 10/32->10/16
+# channel (design_notes.md section 26) -- no more zero-gap pairs. Mirroring
+# is back (section 27, applied to every physical row incl. filler/channel
+# rows, for VDD/GND rail + N-well/P-well continuity) but that doesn't
+# constrain channel sizing -- any row's channel(s) can still be resized
+# independently without side effects on other rows. Sized empirically.
+# Iteration 4 (section 28.2's same-instance channel grouping fix rebalanced
+# net counts across channels -- ch0_1 went from 7/16 to 16/16, zero margin
+# -- bumped up for safety headroom):
+#   chbm_0 2/8, ch0_1 16/16(no margin)->16/24, ch1_2 10/24, ch2_3 29/32,
+#   ch3_4 33/40, ch4_tm 2/16
 N_BM = 1   # bottom margin (below row 0)
-N_01 = 2   # channel between row 0 / row 1
+N_01 = 4   # channel between row 0 / row 1 (kept as an EVEN increment from
+           # the prior working value of 2, to preserve every downstream
+           # row's mirror parity -- an odd increment flipped row1-4's
+           # mirror orientation and, by chance, landed on a worse M2
+           # collision pattern; not a hard requirement, just what tested
+           # well)
 N_12 = 3   # channel between row 1 / row 2
 N_23 = 4   # channel between row 2 / row 3
 N_34 = 5   # channel between row 3 / row 4

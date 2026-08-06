@@ -223,9 +223,49 @@ def main():
     channel_allowed = defaultdict(set)  # id(channel) -> set of net names
     for row_idx, nets in row_only_nets.items():
         cands = touches[row_idx]
-        for i, net in enumerate(sorted(nets)):
+        if len(cands) == 1:
+            for net in nets:
+                channel_allowed[id(cands[0][0])].add(net)
+            continue
+        # Group row-only nets that share an INSTANCE before alternating
+        # between this row's two candidate channels -- splitting plain
+        # net-by-net (round robin) can send two different pins of the SAME
+        # cell to two DIFFERENT channels (one routed via the channel below,
+        # the other via the channel above); since the two channels are
+        # routed independently, neither one's obstruction scan ever
+        # considers the other pin even though they sit only a few um apart
+        # on the same cell, and a residual M2 spacing violation results
+        # (design_notes.md section 28.2). Keeping every net that touches a
+        # given instance together in one channel eliminates this class.
+        uf = {}
+
+        def find(k):
+            uf.setdefault(k, k)
+            while uf[k] != k:
+                uf[k] = uf[uf[k]]
+                k = uf[k]
+            return k
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                uf[ra] = rb
+
+        inst_to_nets = defaultdict(list)
+        for net in nets:
+            for inst in set(p[0] for p in net_pins[net]):
+                inst_to_nets[inst].append(net)
+        for inst, ns in inst_to_nets.items():
+            for i in range(1, len(ns)):
+                union(ns[0], ns[i])
+
+        groups = defaultdict(list)
+        for net in nets:
+            groups[find(net)].append(net)
+        for i, key in enumerate(sorted(groups.keys())):
             c, _dir = cands[i % len(cands)]
-            channel_allowed[id(c)].add(net)
+            for net in groups[key]:
+                channel_allowed[id(c)].add(net)
 
     for (a, b), nets in adjacent_pair_nets.items():
         for c in channels:

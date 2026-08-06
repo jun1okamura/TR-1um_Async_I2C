@@ -48,11 +48,19 @@ M1_LAYER = (13, 0)
 V1_LAYER = (19, 0)
 M2_LAYER = (20, 0)
 GC_LAYER = (8, 1)
+CO_LAYER = (11, 0)  # Contact (poly/diffusion-to-M1) -- real DRC deck rule
+                     # 'V1.CO:V1 overlap CO' / 'V1.CO:V1-CO Smin < 1.0'
+                     # (tech/drc/run.drc line 234-235), not checked by this
+                     # project's own simplified drc_check_full.py -- found
+                     # via the user's actual KLayout DRC run (8 violations,
+                     # design_notes.md section 28).
 PIN_TEXT_LAYER = (48, 0)
 
 V1_GC_MIN_SPACE = 1.2
+V1_CO_MIN_SPACE = 1.0
 VIA_SIZE = 1.4
 GC_KEEPOUT_UM = V1_GC_MIN_SPACE + VIA_SIZE / 2.0
+CO_KEEPOUT_UM = V1_CO_MIN_SPACE + VIA_SIZE / 2.0
 VIA_PAD = 4.0
 M2_CORE_WIDTH = 3.1
 M2_PAD_SIZE = VIA_SIZE + 2.0
@@ -88,9 +96,11 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
     the row at phys_row_index (physical row index in gen_gds_placement.py's
     PHYSICAL_ROWS). escape_dir is 'up' (channel above the row) or 'down'
     (channel below). mirrored must match gen_gds_placement.py's own
-    orientation for this row (design_notes.md section 26: nothing is
-    mirrored any more, so this is always False in the current 5-row
-    architecture; the parameter is kept for generality/regression).
+    orientation for this row (design_notes.md section 27: alternating
+    Y-mirror by physical row index, phys_row_index % 2 == 1, is back for
+    every physical row -- real and filler alike -- to keep VDD/GND rail
+    polarity and N-well/P-well banding continuous; route_all_channels.py
+    computes this per row, not hardcoded).
 
     allowed_nets, if given, restricts routing to that net-name subset --
     used by route_all_channels.py to split a row's own internal nets
@@ -119,8 +129,10 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
     lib_pin_text_idx = lib.layer(*PIN_TEXT_LAYER)
     lib_m1_idx = lib.layer(*M1_LAYER)
     lib_gc_idx = lib.layer(*GC_LAYER)
+    lib_co_idx = lib.layer(*CO_LAYER)
 
     gc_cache = {}
+    co_cache = {}
 
     def cell_gc_forbidden(celltype):
         if celltype not in gc_cache:
@@ -129,6 +141,14 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
             keepout_ldbu = int(round(GC_KEEPOUT_UM / ldbu))
             gc_cache[celltype] = gc_region.sized(keepout_ldbu)
         return gc_cache[celltype]
+
+    def cell_co_forbidden(celltype):
+        if celltype not in co_cache:
+            c = lib.cell(celltype)
+            co_region = db.Region(c.begin_shapes_rec(lib_co_idx))
+            keepout_ldbu = int(round(CO_KEEPOUT_UM / ldbu))
+            co_cache[celltype] = co_region.sized(keepout_ldbu)
+        return co_cache[celltype]
 
     def get_cell_pin_data(celltype):
         c = lib.cell(celltype)
@@ -327,12 +347,12 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
         typ = dict((n, t) for n, t, w in row)[instname]
         poly = cell_pin_poly(typ, pinname)
         ox, oy = inst_origin[instname]
-        gc_forbid = cell_gc_forbidden(typ)
+        forbid = cell_gc_forbidden(typ) + cell_co_forbidden(typ)
 
         margin_ldbu = int(round(VIA_MARGIN_UM / ldbu))
 
         def safe_region(region):
-            return region.sized(-margin_ldbu) - gc_forbid
+            return region.sized(-margin_ldbu) - forbid
 
         base = db.Region(poly)
         eroded = safe_region(base)
@@ -637,19 +657,15 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
                 continue
             resolved.append((x, y_center, patch_polys, padded, top_x))
 
-        if not resolved:
-            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
-            continue
-
-        top_xs = [r[4] for r in resolved]
-        x_lo, x_hi = min(top_xs), max(top_xs)
-
-        trunk = db.Box(um(x_lo - TRACK_WIDTH / 2), um(track_y - TRACK_WIDTH / 2),
-                        um(x_hi + TRACK_WIDTH / 2), um(track_y + TRACK_WIDTH / 2))
-        top.shapes(m1_idx).insert(trunk)
-        shapes_drawn += 1
-
-        for x, y_center, patch_polys, padded, top_x in resolved:
+            # Draw this pin's own M2/V1 shapes immediately (not after the
+            # whole net) and refresh _existing_m2 right away -- this lets
+            # the NEXT pin's jog search see it even within the SAME net.
+            # Two pins of one net (e.g. a shared-obstacle/forced-direction
+            # sibling pair) previously could both be resolved against the
+            # same pre-net _existing_m2 snapshot and land close enough to
+            # violate M2 spacing against EACH OTHER without either check
+            # catching it (design_notes.md section 28.2) -- this was the
+            # root cause of a handful of persistent residual M2 violations.
             if padded:
                 for pts_um in patch_polys:
                     poly = db.Polygon([db.Point(um(p.x), um(p.y)) for p in pts_um])
@@ -675,11 +691,23 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
             top.shapes(v1_idx).insert(pad(top_x, track_y, VIA_SIZE))
             shapes_drawn += 4
 
+            _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
+
+        if not resolved:
+            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
+            continue
+
+        top_xs = [r[4] for r in resolved]
+        x_lo, x_hi = min(top_xs), max(top_xs)
+
+        trunk = db.Box(um(x_lo - TRACK_WIDTH / 2), um(track_y - TRACK_WIDTH / 2),
+                        um(x_hi + TRACK_WIDTH / 2), um(track_y + TRACK_WIDTH / 2))
+        top.shapes(m1_idx).insert(trunk)
+        shapes_drawn += 1
+
         label = db.Text(net, db.Trans(um((x_lo + x_hi) / 2), um(track_y)))
         label.size = um(1.5)
         top.shapes(annot_idx).insert(label)
-
-        _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
 
     print(f"drew {shapes_drawn} shapes (M1 trunks+pads, V1 vias, M2 stubs) for {len(net_stub_pts)} nets")
     if unrouted_pins:

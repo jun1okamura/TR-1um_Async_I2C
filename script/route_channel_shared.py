@@ -49,11 +49,13 @@ VIA_MARGIN_UM = rc.VIA_MARGIN_UM
 M2_CORE_WIDTH = rc.M2_CORE_WIDTH
 M2_PAD_SIZE = rc.M2_PAD_SIZE
 GC_KEEPOUT_UM = rc.GC_KEEPOUT_UM
+CO_KEEPOUT_UM = rc.CO_KEEPOUT_UM
 DRC_GRID = rc.DRC_GRID
 M1_LAYER = rc.M1_LAYER
 V1_LAYER = rc.V1_LAYER
 M2_LAYER = rc.M2_LAYER
 GC_LAYER = rc.GC_LAYER
+CO_LAYER = rc.CO_LAYER
 PIN_TEXT_LAYER = rc.PIN_TEXT_LAYER
 STDCELL_DIR = rc.STDCELL_DIR
 GDS_LIB = rc.GDS_LIB
@@ -98,8 +100,10 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
     lib_pin_text_idx = lib.layer(*PIN_TEXT_LAYER)
     lib_m1_idx = lib.layer(*M1_LAYER)
     lib_gc_idx = lib.layer(*GC_LAYER)
+    lib_co_idx = lib.layer(*CO_LAYER)
 
     gc_cache = {}
+    co_cache = {}
 
     def cell_gc_forbidden(celltype):
         if celltype not in gc_cache:
@@ -108,6 +112,14 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             keepout_ldbu = int(round(GC_KEEPOUT_UM / ldbu))
             gc_cache[celltype] = gc_region.sized(keepout_ldbu)
         return gc_cache[celltype]
+
+    def cell_co_forbidden(celltype):
+        if celltype not in co_cache:
+            c = lib.cell(celltype)
+            co_region = db.Region(c.begin_shapes_rec(lib_co_idx))
+            keepout_ldbu = int(round(CO_KEEPOUT_UM / ldbu))
+            co_cache[celltype] = co_region.sized(keepout_ldbu)
+        return co_cache[celltype]
 
     def get_cell_pin_data(celltype):
         c = lib.cell(celltype)
@@ -326,11 +338,11 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
         mirrored = meta["mirrored"]
         ox, oy = meta["origin"]
         poly = cell_pin_poly(typ, pinname)
-        gc_forbid = cell_gc_forbidden(typ)
+        forbid = cell_gc_forbidden(typ) + cell_co_forbidden(typ)
         margin_ldbu = int(round(VIA_MARGIN_UM / ldbu))
 
         def safe_region(region):
-            return region.sized(-margin_ldbu) - gc_forbid
+            return region.sized(-margin_ldbu) - forbid
 
         base = db.Region(poly)
         eroded = safe_region(base)
@@ -638,19 +650,10 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
                 continue
             resolved.append((x, y_center, patch_polys, padded, top_x))
 
-        if not resolved:
-            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
-            continue
-
-        top_xs = [r[4] for r in resolved]
-        x_lo, x_hi = min(top_xs), max(top_xs)
-
-        trunk = db.Box(um(x_lo - TRACK_WIDTH / 2), um(track_y - TRACK_WIDTH / 2),
-                        um(x_hi + TRACK_WIDTH / 2), um(track_y + TRACK_WIDTH / 2))
-        top.shapes(m1_idx).insert(trunk)
-        shapes_drawn += 1
-
-        for x, y_center, patch_polys, padded, top_x in resolved:
+            # Draw + refresh _existing_m2 immediately per-pin (not just per
+            # net) so a later pin of the SAME net can see an earlier one's
+            # geometry -- fixes same-net sibling M2 collisions (design_notes
+            # .md section 28.2).
             if padded:
                 for pts_um in patch_polys:
                     poly = db.Polygon([db.Point(um(p.x), um(p.y)) for p in pts_um])
@@ -676,11 +679,23 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             top.shapes(v1_idx).insert(pad(top_x, track_y, VIA_SIZE))
             shapes_drawn += 4
 
+            _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
+
+        if not resolved:
+            print(f"WARNING: net {net}: ALL pins failed to route; net left fully unrouted")
+            continue
+
+        top_xs = [r[4] for r in resolved]
+        x_lo, x_hi = min(top_xs), max(top_xs)
+
+        trunk = db.Box(um(x_lo - TRACK_WIDTH / 2), um(track_y - TRACK_WIDTH / 2),
+                        um(x_hi + TRACK_WIDTH / 2), um(track_y + TRACK_WIDTH / 2))
+        top.shapes(m1_idx).insert(trunk)
+        shapes_drawn += 1
+
         label = db.Text(net, db.Trans(um((x_lo + x_hi) / 2), um(track_y)))
         label.size = um(1.5)
         top.shapes(annot_idx).insert(label)
-
-        _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _row_scan_box)).merged()
 
     print(f"drew {shapes_drawn} shapes (M1 trunks+pads, V1 vias, M2 stubs) for {len(net_stub_pts)} nets")
     if unrouted_pins:
