@@ -199,6 +199,18 @@ def main():
     n_phys = len(PHYSICAL_ROWS)
     for phys_idx, entry in enumerate(PHYSICAL_ROWS):
         row_bottom_abs = phys_idx * row_height
+        # Alternating Y-mirror by PHYSICAL row index, applied to EVERY
+        # physical row -- real stdcell rows AND filler-only channel rows
+        # alike (design_notes.md section 27): every cell's VDD/GND pins sit
+        # on the prBoundary top/bottom edge (y=55/y=0 local), so mirroring
+        # every other physical row keeps the power rail polarity (and
+        # N-well/P-well banding) continuous across every row boundary in
+        # the stack, exactly as conventional standard-cell flows require.
+        # The earlier 5-row rearchitecture (section 26) dropped mirroring
+        # under the mistaken assumption it was ONLY needed for zero-gap
+        # rail sharing; real DRC (well/tap rules our own simplified M1/M2/
+        # V1-only checker never covered) showed this was wrong.
+        mirrored = (phys_idx % 2 == 1)
 
         if entry is None:
             seq = [(f"fill_{phys_idx}_{i}", FILLER_CELL, filler_w) for i in range(n_filler)]
@@ -213,11 +225,16 @@ def main():
             bbox = get_pr_bbox(typ)  # in dbu, on the prBoundary layer
             bleft = bbox.left * dbu
             bbottom = bbox.bottom * dbu
+            btop = bbox.top * dbu
             width = bbox.width() * dbu
 
             tx = cursor_x - bleft
-            ty = row_bottom_abs - bbottom
-            trans = db.Trans(db.Trans.R0, um(tx), um(ty))
+            if not mirrored:
+                ty = row_bottom_abs - bbottom
+                trans = db.Trans(db.Trans.R0, um(tx), um(ty))
+            else:
+                ty = row_bottom_abs + btop
+                trans = db.Trans(db.Trans.M0, um(tx), um(ty))
 
             top.insert(db.CellInstArray(cell.cell_index(), trans))
 
@@ -230,7 +247,7 @@ def main():
             cursor_x += width
             placed += 1
         print(f"physical row {phys_idx}/{n_phys - 1} ({kind}): placed {len(seq)} cells, "
-              f"used width {cursor_x:.1f} um")
+              f"used width {cursor_x:.1f} um, mirrored={mirrored}")
 
     print("total placed:", placed)
 

@@ -251,24 +251,31 @@ def main():
         # scans PHYSICAL_ROWS top-to-bottom... no, bottom-to-top, index 0 =
         # bottom), matching the chain direction.
         in_gds = accum_gds
+        # mirrored must match gen_gds_placement.py's own (phys_idx % 2 ==
+        # 1) alternating mirror, now applied to every physical row
+        # (design_notes.md section 27) -- no longer hardcoded False.
         if c["lower"] is None:
             row_idx = c["upper"]
+            pri = phys_of_row[row_idx]
             rc.route_row_channel(
-                logical_row_idx=row_idx, phys_row_index=phys_of_row[row_idx], mirrored=False,
+                logical_row_idx=row_idx, phys_row_index=pri, mirrored=(pri % 2 == 1),
                 channel_bottom_y=c["bottom_y"], channel_height=c["height"], escape_dir="down",
                 out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed, in_gds=in_gds)
         elif c["upper"] is None:
             row_idx = c["lower"]
+            pri = phys_of_row[row_idx]
             rc.route_row_channel(
-                logical_row_idx=row_idx, phys_row_index=phys_of_row[row_idx], mirrored=False,
+                logical_row_idx=row_idx, phys_row_index=pri, mirrored=(pri % 2 == 1),
                 channel_bottom_y=c["bottom_y"], channel_height=c["height"], escape_dir="up",
                 out_gds=out_gds, pin_map_json=pin_map_json, allowed_nets=allowed, in_gds=in_gds)
         else:
+            pri_lo = phys_of_row[c["lower"]]
+            pri_hi = phys_of_row[c["upper"]]
             row_cfgs = [
-                dict(logical_row_idx=c["lower"], phys_row_index=phys_of_row[c["lower"]],
-                     mirrored=False, escape_dir="up"),
-                dict(logical_row_idx=c["upper"], phys_row_index=phys_of_row[c["upper"]],
-                     mirrored=False, escape_dir="down"),
+                dict(logical_row_idx=c["lower"], phys_row_index=pri_lo,
+                     mirrored=(pri_lo % 2 == 1), escape_dir="up"),
+                dict(logical_row_idx=c["upper"], phys_row_index=pri_hi,
+                     mirrored=(pri_hi % 2 == 1), escape_dir="down"),
             ]
             rcs.route_shared_channel(
                 row_cfgs=row_cfgs, channel_bottom_y=c["bottom_y"], channel_height=c["height"],
