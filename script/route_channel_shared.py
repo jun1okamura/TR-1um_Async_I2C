@@ -62,10 +62,25 @@ NET_FILE = rc.NET_FILE
 
 
 def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pin_map_json,
-                          annot_layer=(250, 3), row_annot_layer=(250, 0)):
+                          annot_layer=(250, 3), row_annot_layer=(250, 0), allowed_nets=None):
     """row_cfgs: list of dicts, one per row feeding this channel, each with
     keys logical_row_idx, phys_row_index, mirrored, escape_dir ('up' if the
-    channel is ABOVE this row, 'down' if BELOW)."""
+    channel is ABOVE this row, 'down' if BELOW).
+
+    Routes every net that is entirely contained within the UNION of the
+    rows in row_cfgs -- this covers BOTH each row's own row-internal nets
+    (as before) AND, now that every row boundary is a real M1 channel
+    (design_notes.md section 26), actual nets that cross between the two
+    rows sharing this channel (previously an unsolved problem -- see
+    design_notes.md sections 22.5/23.5's negative results with the old
+    zero-gap-boundary approach). Each pin is anchored using ITS OWN row's
+    mirror/origin/escape_dir (via inst_meta), so mixed-row nets resolve
+    correctly.
+
+    allowed_nets, if given, further restricts routing to that net-name set
+    -- used by the orchestration script to split a row's own internal nets
+    between its two candidate channels (each inner row touches two shared
+    channels) so the same net isn't routed twice."""
     celltypes = [f[:-4] for f in os.listdir(STDCELL_DIR) if f.endswith(".sym")]
     sym_pins = {ct: rc.parse_sym(os.path.join(STDCELL_DIR, ct + ".sym")) for ct in celltypes}
 
@@ -249,6 +264,7 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
     net_stub_pts = {}      # net -> [(vx, vy, patch_polys, padded), ...]
     net_pin_names = {}     # net -> [(instname, pinname), ...]
     row_names_all = set()
+    inst_meta = {}  # instname -> dict(mirrored, origin, typ, escape_dir, near_edge_y)
 
     for cfg in row_cfgs:
         logical_row_idx = cfg["logical_row_idx"]
@@ -276,7 +292,8 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             raise RuntimeError(f"{len(missing)} row{logical_row_idx} instances have no annotation "
                                 f"match in {IN_GDS}: {missing[:5]}...")
 
-        inst_origin = {}
+        near_edge_y = (phys_row_index + 1) * ROW_HEIGHT if escape_dir == "up" else phys_row_index * ROW_HEIGHT
+
         for name, typ, w in row:
             bbox = get_pr_bbox(typ)
             bleft = bbox.left * ldbu
@@ -289,83 +306,91 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
                 ty = phys_row_index * ROW_HEIGHT - bbottom
             else:
                 ty = phys_row_index * ROW_HEIGHT + btop
-            inst_origin[name] = (tx, ty)
-
-        inst_type = dict((n, t) for n, t, w in row)
-
-        def abs_pin_anchor(instname, pinname, mirrored=mirrored, inst_origin=inst_origin, inst_type=inst_type):
-            typ = inst_type[instname]
-            poly = cell_pin_poly(typ, pinname)
-            ox, oy = inst_origin[instname]
-            gc_forbid = cell_gc_forbidden(typ)
-            margin_ldbu = int(round(VIA_MARGIN_UM / ldbu))
-
-            def safe_region(region):
-                return region.sized(-margin_ldbu) - gc_forbid
-
-            base = db.Region(poly)
-            eroded = safe_region(base)
-            grown_um = 0.0
-            used = base
-            if eroded.is_empty():
-                for grow_um in (0.02, 0.05, 0.08, 0.12, 0.2, 0.3, 0.5, 0.8, 1.2):
-                    grow_ldbu = int(round(grow_um / ldbu))
-                    cand = base.sized(grow_ldbu)
-                    cand_eroded = safe_region(cand)
-                    if not cand_eroded.is_empty():
-                        used, eroded, grown_um = cand, cand_eroded, grow_um
-                        break
-                else:
-                    raise RuntimeError(f"{instname}.{pinname}: no safe via anchor even after growth")
-
-            pieces = list(eroded.each())
-            best = max(pieces, key=lambda p: p.bbox().area())
-            bb = best.bbox()
-            local_x = bb.center().x * ldbu
-            local_y = bb.center().y * ldbu
-            if not mirrored:
-                vx, vy = local_x + ox, local_y + oy
-            else:
-                vx, vy = local_x + ox, -local_y + oy
-
-            patch_polys_abs = []
-            if grown_um > 0.0:
-                for p in used.each():
-                    pts = []
-                    for pt in p.each_point_hull():
-                        lx, ly = pt.x * ldbu, pt.y * ldbu
-                        if not mirrored:
-                            pts.append(db.DPoint(lx + ox, ly + oy))
-                        else:
-                            pts.append(db.DPoint(lx + ox, -ly + oy))
-                    patch_polys_abs.append(pts)
-            return vx, vy, patch_polys_abs, grown_um > 0.0
-
-        internal_nets = []
-        for net, pins in net_pins.items():
-            inst_names = set(p[0] for p in pins)
-            if not inst_names:
-                continue
-            if inst_names & row_names and inst_names <= row_names:
-                internal_nets.append((net, pins))
+            inst_meta[name] = dict(mirrored=mirrored, origin=(tx, ty), typ=typ,
+                                    escape_dir=escape_dir, near_edge_y=near_edge_y)
 
         print(f"row{logical_row_idx} (phys {phys_row_index}, mirrored={mirrored}, escape={escape_dir}): "
-              f"{len(row_names)} instances, {len(internal_nets)} fully-internal nets")
+              f"{len(row_names)} instances")
 
-        near_edge_y = (phys_row_index + 1) * ROW_HEIGHT if escape_dir == "up" else phys_row_index * ROW_HEIGHT
+    def abs_pin_anchor(instname, pinname):
+        meta = inst_meta[instname]
+        typ = meta["typ"]
+        mirrored = meta["mirrored"]
+        ox, oy = meta["origin"]
+        poly = cell_pin_poly(typ, pinname)
+        gc_forbid = cell_gc_forbidden(typ)
+        margin_ldbu = int(round(VIA_MARGIN_UM / ldbu))
 
-        for net, pins in internal_nets:
-            pts = []
-            names = []
-            for instname, typ, pinname in pins:
-                vx, vy, patch_polys, padded = abs_pin_anchor(instname, pinname)
-                pts.append((vx, vy, patch_polys, padded))
-                names.append((instname, pinname))
-                all_pins.append((instname, pinname, vx, vy, escape_dir, near_edge_y))
-            net_stub_pts[net] = pts
-            net_pin_names[net] = names
+        def safe_region(region):
+            return region.sized(-margin_ldbu) - gc_forbid
 
-    print(f"combined: {len(net_stub_pts)} fully-internal nets across {len(row_cfgs)} rows, {len(all_pins)} pins")
+        base = db.Region(poly)
+        eroded = safe_region(base)
+        grown_um = 0.0
+        used = base
+        if eroded.is_empty():
+            for grow_um in (0.02, 0.05, 0.08, 0.12, 0.2, 0.3, 0.5, 0.8, 1.2):
+                grow_ldbu = int(round(grow_um / ldbu))
+                cand = base.sized(grow_ldbu)
+                cand_eroded = safe_region(cand)
+                if not cand_eroded.is_empty():
+                    used, eroded, grown_um = cand, cand_eroded, grow_um
+                    break
+            else:
+                raise RuntimeError(f"{instname}.{pinname}: no safe via anchor even after growth")
+
+        pieces = list(eroded.each())
+        best = max(pieces, key=lambda p: p.bbox().area())
+        bb = best.bbox()
+        local_x = bb.center().x * ldbu
+        local_y = bb.center().y * ldbu
+        if not mirrored:
+            vx, vy = local_x + ox, local_y + oy
+        else:
+            vx, vy = local_x + ox, -local_y + oy
+
+        patch_polys_abs = []
+        if grown_um > 0.0:
+            for p in used.each():
+                pts = []
+                for pt in p.each_point_hull():
+                    lx, ly = pt.x * ldbu, pt.y * ldbu
+                    if not mirrored:
+                        pts.append(db.DPoint(lx + ox, ly + oy))
+                    else:
+                        pts.append(db.DPoint(lx + ox, -ly + oy))
+                patch_polys_abs.append(pts)
+        return vx, vy, patch_polys_abs, grown_um > 0.0
+
+    # A net qualifies for THIS channel if it's entirely contained within the
+    # union of the rows feeding it -- this now covers both row-own-internal
+    # nets AND actual cross-row nets between the two rows (see docstring).
+    internal_nets = []
+    for net, pins in net_pins.items():
+        inst_names = set(p[0] for p in pins)
+        if not inst_names:
+            continue
+        if inst_names & row_names_all and inst_names <= row_names_all:
+            if allowed_nets is not None and net not in allowed_nets:
+                continue
+            internal_nets.append((net, pins))
+
+    print(f"combined scope (rows {[c['logical_row_idx'] for c in row_cfgs]}): "
+          f"{len(row_names_all)} instances, {len(internal_nets)} nets in scope")
+
+    for net, pins in internal_nets:
+        pts = []
+        names = []
+        for instname, typ, pinname in pins:
+            vx, vy, patch_polys, padded = abs_pin_anchor(instname, pinname)
+            meta = inst_meta[instname]
+            pts.append((vx, vy, patch_polys, padded))
+            names.append((instname, pinname))
+            all_pins.append((instname, pinname, vx, vy, meta["escape_dir"], meta["near_edge_y"]))
+        net_stub_pts[net] = pts
+        net_pin_names[net] = names
+
+    print(f"combined: {len(net_stub_pts)} nets in scope across {len(row_cfgs)} rows, {len(all_pins)} pins")
 
     # ---------- pre-pass: shared-obstacle / same-instance / exact-X grouping ----------
     HALF_PAD = M2_PAD_SIZE / 2.0
@@ -670,17 +695,9 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
     print("wrote", out_gds)
 
 
-ROW12_SHARED = dict(
-    row_cfgs=[
-        dict(logical_row_idx=1, phys_row_index=3, mirrored=True, escape_dir="up"),
-        dict(logical_row_idx=2, phys_row_index=11, mirrored=True, escape_dir="down"),
-    ],
-    channel_bottom_y=4 * ROW_HEIGHT,   # 220.0
-    channel_height=7 * ROW_HEIGHT,     # 385.0
-    out_gds="/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_row12.gds",
-    pin_map_json="/sessions/dreamy-ecstatic-heisenberg/mnt/outputs/row12_pin_map.json",
-)
-
-
-if __name__ == "__main__":
-    route_shared_channel(**ROW12_SHARED)
+# NOTE: the old fixed ROW12_SHARED config (4-row/mirrored-pair era) was
+# removed in design_notes.md section 26's rearchitecture -- there are now 4
+# shared channels (row0|1, row1|2, row2|3, row3|4), all unmirrored, whose
+# row_cfgs/channel_bottom_y/channel_height are built dynamically by
+# route_all_channels.py from gen_gds_placement.py's PHYSICAL_ROWS. Run this
+# module via route_all_channels.py, not standalone.

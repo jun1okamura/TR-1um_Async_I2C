@@ -81,13 +81,20 @@ def parse_sym(path):
 
 def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_y,
                        channel_height, escape_dir, out_gds, pin_map_json,
-                       annot_layer=(250, 1), row_annot_layer=(250, 0)):
+                       annot_layer=(250, 1), row_annot_layer=(250, 0), allowed_nets=None):
     """Route the logical_row_idx-internal nets into the dedicated channel
     described by (channel_bottom_y, channel_height), whose near edge touches
     the row at phys_row_index (physical row index in gen_gds_placement.py's
-    PHYSICAL_ROWS). escape_dir is 'up' (channel above the row -- row 3's
-    case) or 'down' (channel below -- row 0's case). mirrored must match
-    gen_gds_placement.py's own (phys_row_index % 2 == 1) for this row."""
+    PHYSICAL_ROWS). escape_dir is 'up' (channel above the row) or 'down'
+    (channel below). mirrored must match gen_gds_placement.py's own
+    orientation for this row (design_notes.md section 26: nothing is
+    mirrored any more, so this is always False in the current 5-row
+    architecture; the parameter is kept for generality/regression).
+
+    allowed_nets, if given, restricts routing to that net-name subset --
+    used by route_all_channels.py to split a row's own internal nets
+    between its two candidate channels (every row now touches two shared
+    channels, one on each side) so the same net isn't routed twice."""
     assert escape_dir in ("up", "down")
 
     celltypes = [f[:-4] for f in os.listdir(STDCELL_DIR) if f.endswith(".sym")]
@@ -360,9 +367,11 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
         if not inst_names:
             continue
         if inst_names & row_names and inst_names <= row_names:
+            if allowed_nets is not None and net not in allowed_nets:
+                continue
             internal_nets.append((net, pins))
 
-    print(f"row{logical_row_idx} instances: {len(row_names)}, fully-internal nets: {len(internal_nets)}")
+    print(f"row{logical_row_idx} instances: {len(row_names)}, nets in scope: {len(internal_nets)}")
 
     net_stub_pts = {}
     net_pin_names = {}
@@ -681,31 +690,9 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
     print("wrote", out_gds)
 
 
-# Reproduces route_channel_pilot.py exactly (regression check for the
-# generalization): logical row 3 = physical row 8, unmirrored, channel above
-# (escape_dir='up'), 110um (2 filler rows).
-ROW3_PILOT = dict(
-    logical_row_idx=3, phys_row_index=12, mirrored=False,
-    channel_bottom_y=13 * ROW_HEIGHT, channel_height=220.0, escape_dir="up",
-    out_gds="/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_pilot.gds",
-    pin_map_json="/sessions/dreamy-ecstatic-heisenberg/mnt/outputs/pilot_pin_map.json",
-)
-
-# Row 0 = physical row 2, unmirrored, channel BELOW (the bottom margin, y in
-# [0, 110]) -- escape_dir='down'.
-ROW0_CHANNEL = dict(
-    logical_row_idx=0, phys_row_index=2, mirrored=False,
-    channel_bottom_y=0.0, channel_height=110.0, escape_dir="down",
-    out_gds="/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_layout_routed_row0.gds",
-    pin_map_json="/sessions/dreamy-ecstatic-heisenberg/mnt/outputs/row0_pin_map.json",
-)
-
-
-if __name__ == "__main__":
-    which = sys.argv[1] if len(sys.argv) > 1 else "row3"
-    if which == "row3":
-        route_row_channel(**ROW3_PILOT)
-    elif which == "row0":
-        route_row_channel(**ROW0_CHANNEL)
-    else:
-        raise SystemExit(f"unknown channel {which!r} (expected row3 or row0)")
+# NOTE: the old fixed ROW3_PILOT/ROW0_CHANNEL configs (4-row/mirrored-pair
+# era) were removed in design_notes.md section 26's rearchitecture -- the
+# two dedicated end-margin channels (below row0, above row4) now have their
+# phys_row_index/channel_bottom_y/channel_height built dynamically by
+# route_all_channels.py from gen_gds_placement.py's PHYSICAL_ROWS. Run this
+# module via route_all_channels.py, not standalone.

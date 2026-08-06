@@ -33,9 +33,15 @@ GDS_LIB = "/sessions/dreamy-ecstatic-heisenberg/mnt/klayout/libraries/TR-1um_STD
 ROW_WIDTH_UM = 1800.0
 # Total cell width, measured on the real prBoundary (235/0) abutment box
 # (not the padded full cell.bbox()), is ~5621um -> minimum row count at
-# 1800um width is ceil(5621/1800) = 4 (was mistakenly computed as 5 rows
-# when using the padded full bbox width).
-NROWS = 4
+# 1800um width is ceil(5621/1800) = 4. Since design_notes.md section 26,
+# NROWS=5 is used instead: the physical structure was changed from
+# "2-row zero-gap mirrored stacks sharing a rail" (4 rows, 2 hard
+# no-channel boundaries) to "channel + 1 unmirrored row + channel"
+# repeated 5x (every row boundary is now a real M1 channel, no more
+# zero-gap boundaries at all) -- this trades a bit of extra row-count
+# margin (5621/5=1124um/row vs 5621/4=1405um/row, more filler slack) for
+# eliminating the hard-to-route zero-gap case entirely.
+NROWS = 5
 
 # Block-boundary pin sides (see design_notes.md section 12/13).
 LEFT_PORTS = {"scl", "sda_in", "rst_n", "sda_oe"}
@@ -320,14 +326,18 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
 
     Row ASSIGNMENT (which row each instance goes to) is chosen by a
     hierarchical FM hypergraph min-cut partition (see design_notes.md
-    section 24), minimizing the number of nets that cross a row boundary --
-    NOT a straight 1D L/R-score chop as before. This directly targets the
-    real cost driver discovered while routing: row0<->row1 and row2<->row3
-    are zero-gap (no channel) boundaries with a very high routing failure
-    rate, so nets are steered away from needing to cross them at all where
-    possible, while the row1<->row2 shared-channel boundary is comparatively
-    cheap (a real M1 channel already exists there). The physical row/channel
-    structure itself (4 rows, same pairing) is unchanged.
+    section 24 for the original 4-row/zero-gap-pair version, section 26 for
+    the current 5-row/all-real-channels version), minimizing the number of
+    nets that cross a row boundary -- NOT a straight 1D L/R-score chop.
+    With the physical structure now "channel + 1 unmirrored row + channel"
+    repeated 5x (every boundary is a real M1 channel, no more zero-gap
+    pairs), the partition tree is built to mirror the physical row CHAIN
+    exactly: each FM cut corresponds to exactly one physical boundary
+    (row0|row1, row1|row2, row2|row3, row3|row4), so minimizing each cut
+    approximates minimizing the total number of channel-crossings a net
+    needs (nets that skip more than one row still only get counted once,
+    at the topmost level where they're cut -- an accepted approximation,
+    same spirit as the rest of this heuristic).
 
     Within-row LEFT-TO-RIGHT order still uses the original L/R BFS-distance
     score (bias toward the SCL/SDA left-edge port group or the
@@ -442,6 +452,85 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
                 w = sum(weight[n] for n in rs)
                 print(f"  row{i}: {len(rs)} instances, {w:.1f}um "
                       f"({'OVER BUDGET' if w > row_width_um else 'ok'})")
+    elif nrows == 5:
+        # Chain-respecting recursive bisection (design_notes.md section 26):
+        # every row boundary is now a real M1 channel, so there's no more
+        # "cheap vs expensive boundary" distinction to bias toward -- the
+        # tree is instead shaped to match physical adjacency exactly, so
+        # each of the 4 FM cuts corresponds to exactly one of the 4 real
+        # boundaries (row0|1, row1|2, row2|3, row3|4):
+        #   top:    {row0,row1} vs {row2,row3,row4}   -> boundary row1|row2
+        #   L-split: {row0} vs {row1}                  -> boundary row0|row1
+        #   R-split: {row2} vs {row3,row4}              -> boundary row2|row3
+        #   R2-split:{row3} vs {row4}                    -> boundary row3|row4
+        rng = random.Random(42)
+        all_set = set(all_inst)
+        nets_all = nets_restricted_to(all_set)
+        # Capacities are sized around the EVEN-SPLIT target (total_w/nrows),
+        # not the physical row_width_um budget -- using row_width_um*n here
+        # gives FM so much slack (1800/1192 = 1.5x the actual per-row
+        # target) that it happily dumps an entire row's worth of cells onto
+        # one side to shave a few cut nets, leaving other rows *empty*
+        # (observed: row1 got 0 instances). A tighter slack (1.28x, matching
+        # the ratio that worked well for the old 4-row split) still gives
+        # FM room to trade off cut count against balance, but can't leave a
+        # whole row empty.
+        SLACK = 1.28
+        cap1, cap2, cap3 = target * SLACK, 2 * target * SLACK, 3 * target * SLACK
+
+        part_top, cut_top = _fm_bipartition(all_set, nets_all, weight, cap2, cap3,
+                                             rng=rng, passes=20)
+        lower2 = {n for n in all_set if part_top[n] == 'A'}   # rows 0,1
+        upper3 = {n for n in all_set if part_top[n] == 'B'}   # rows 2,3,4
+
+        nets_lower2 = nets_restricted_to(lower2)
+        part_01, cut_01 = _fm_bipartition(lower2, nets_lower2, weight, cap1, cap1,
+                                           rng=rng, passes=20)
+        row0_set = {n for n in lower2 if part_01[n] == 'A'}
+        row1_set = {n for n in lower2 if part_01[n] == 'B'}
+
+        nets_upper3 = nets_restricted_to(upper3)
+        part_2_34, cut_2_34 = _fm_bipartition(upper3, nets_upper3, weight, cap1, cap2,
+                                               rng=rng, passes=20)
+        row2_set = {n for n in upper3 if part_2_34[n] == 'A'}
+        upper2 = {n for n in upper3 if part_2_34[n] == 'B'}   # rows 3,4
+
+        nets_upper2 = nets_restricted_to(upper2)
+        part_34, cut_34 = _fm_bipartition(upper2, nets_upper2, weight, cap1, cap1,
+                                           rng=rng, passes=20)
+        row3_set = {n for n in upper2 if part_34[n] == 'A'}
+        row4_set = {n for n in upper2 if part_34[n] == 'B'}
+
+        row_sets = [row0_set, row1_set, row2_set, row3_set, row4_set]
+        if verbose:
+            print(f"FM partition (5-row chain): top(0,1|2,3,4)={cut_top}, "
+                  f"row0|1={cut_01}, row2|3,4={cut_2_34}, row3|4={cut_34}")
+            for i, rs in enumerate(row_sets):
+                w = sum(weight[n] for n in rs)
+                print(f"  row{i}: {len(rs)} instances, {w:.1f}um "
+                      f"({'OVER BUDGET' if w > row_width_um else 'ok'})")
+
+        # Report the TRUE final total boundary-crossing cost (not just the
+        # hierarchical cut-count proxy above): for each of the 4 real
+        # boundaries, count nets with >=1 member on each side, based on
+        # actual final row indices -- this is the number a multi-row-span
+        # net gets counted at EVERY boundary it truly crosses, unlike the
+        # hierarchical proxy which only counts it once (see docstring).
+        if verbose:
+            row_of = {}
+            for i, rs in enumerate(row_sets):
+                for n in rs:
+                    row_of[n] = i
+            total_crossings = 0
+            for b in range(4):
+                c = 0
+                for net, members in net_members.items():
+                    rows_touched = set(row_of.get(m) for m in members if m in row_of)
+                    if any(r <= b for r in rows_touched) and any(r > b for r in rows_touched):
+                        c += 1
+                total_crossings += c
+                print(f"  true boundary{b}|{b+1} crossings: {c}")
+            print(f"  true total channel-crossings (sum over 4 boundaries): {total_crossings}")
     else:
         # Fallback for any nrows != 4 (never used in this project -- the
         # hierarchical structure above is specific to the fixed 4-row/
@@ -475,7 +564,7 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
         print(f"total cell width: {total_w:.1f} um, target/row: {target:.1f} um")
         print(f"rows: {nrows}, core: {row_width_um} x {nrows * row_height:.1f} um\n")
         for i in range(nrows):
-            direction = "L->R" if i % 2 == 0 else "R->L (mirrored)"
+            direction = "L->R"
             print(f"--- row {i} ({direction}), used {row_w[i]:.1f}/{row_width_um} um "
                   f"({100 * row_w[i] / row_width_um:.1f}%), {len(rows[i])} cells ---")
             print("  " + " ".join(t for _n, t, _w in rows[i]))
