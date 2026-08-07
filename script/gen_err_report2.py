@@ -443,6 +443,30 @@ def main():
     print(f"layers: {ERR_OPEN_PIN_LAYER}=open pins, {ERR_UNCONNECTED_NET_LAYER}=unconnected-net pins, "
           f"{ERR_DEST_LAYER}=destination markers/links (non-fab, reference only)")
 
+    # ---------- text detail report, for manual-fix triage without opening KLayout ----------
+    import os as _os
+    txt_path = _os.path.join(_os.path.dirname(OUT_GDS), "err_report2_details.txt")
+    with open(txt_path, "w") as f:
+        f.write(f"open pins (net partially connected): {len(open_pins)}\n")
+        f.write(f"unconnected-net pins (net fully disconnected): {len(unconn_pins)} across {len(unconn_nets)} nets\n\n")
+        f.write("=== open pins (net has a main connected group; these pins are isolated from it) ===\n")
+        by_net_open = defaultdict(list)
+        for net, instname, pinname, x, y, dx, dy in open_pins:
+            by_net_open[net].append((instname, pinname, x, y))
+        for net in sorted(by_net_open):
+            f.write(f"net {net}:\n")
+            for instname, pinname, x, y in sorted(by_net_open[net]):
+                f.write(f"  {instname}.{pinname}  ({x:.2f},{y:.2f})\n")
+        f.write("\n=== fully-disconnected nets (no pin pair connected at all) ===\n")
+        by_net_unconn = defaultdict(list)
+        for net, instname, pinname, x, y, dx, dy in unconn_pins:
+            by_net_unconn[net].append((instname, pinname, x, y))
+        for net in sorted(by_net_unconn):
+            f.write(f"net {net}:\n")
+            for instname, pinname, x, y in sorted(by_net_unconn[net]):
+                f.write(f"  {instname}.{pinname}  ({x:.2f},{y:.2f})\n")
+    print("wrote", txt_path)
+
 
 if __name__ == "__main__":
     main()

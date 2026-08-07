@@ -182,44 +182,49 @@ def main():
     filler_w = get_pr_bbox(FILLER_CELL).width() * dbu
     n_filler = int(ROW_WIDTH_UM // filler_w)
 
-    def distribute_row_fillers(idx, row, target_spacing_um=200.0):
-        """Insert FILL1 corridors into a single row's cell sequence, spread
-        out roughly every target_spacing_um of placed cell width, instead of
-        leaving all unused width as one big block at the row's right end --
-        gives every real cell a nearby M1/M2-clear corridor to route a
-        vertical trunk through. No cross-row alignment needed any more
-        (unlike the old zero-gap-pair scheme): every row now has its own
-        independent channel(s) on both sides, so there's no requirement for
-        this row's corridors to line up in X with any other row's."""
+    def distribute_row_fillers(idx, row):
+        """TRIAL policy (design_notes.md section 34.9, replaces the old
+        every-~200um corridor spread): guarantee AT LEAST ONE FILL1 in
+        EVERY gap between adjacent real cells (n-1 gaps for n cells) --
+        not just periodically. Any leftover width beyond that baseline is
+        spread as extra fillers round-robin across the same gaps, so
+        higher-traffic-looking areas aren't singled out, it's just evenly
+        topped up. Requires enough slack (gap >= (n-1)*filler_w); raises if
+        not -- this is why ROW_WIDTH_UM was widened for this trial (see
+        plan_placement.py)."""
         used = sum(w for _n, _t, w in row)
         gap = max(0.0, ROW_WIDTH_UM - used)
-        if not row or gap < filler_w:
-            return list(row)
-        n_corridors = max(1, round(used / target_spacing_um))
-        n_corridors = max(1, min(n_corridors, int(gap // filler_w) or 1))
-        fillers_per_corridor = int((gap / n_corridors) // filler_w)
-        thresholds = [(k + 1) * ROW_WIDTH_UM / (n_corridors + 1) for k in range(n_corridors)]
+        n = len(row)
+        if n <= 1:
+            seq = list(row)
+            n_extra = int(gap // filler_w)
+            for j in range(n_extra):
+                seq.append((f"extra_{idx}_{j}", FILLER_CELL, filler_w))
+            return seq
+
+        n_gaps = n - 1
+        min_total = n_gaps * filler_w
+        assert gap + 1e-6 >= min_total, (
+            f"row {idx}: only {gap:.1f}um slack for {n_gaps} gaps (need >= {min_total:.1f}um "
+            f"for >=1 FILL1 per gap) -- widen ROW_WIDTH_UM")
+        remaining = gap - min_total
+        n_extra_total = int(remaining // filler_w)
+        extra_per_gap = [0] * n_gaps
+        for k in range(n_extra_total):
+            extra_per_gap[k % n_gaps] += 1
 
         seq = []
-        i = 0
-        cum = 0.0
-        for k, thr in enumerate(thresholds):
-            while i < len(row) and cum < thr:
-                seq.append(row[i]); cum += row[i][2]; i += 1
-            for j in range(fillers_per_corridor):
-                seq.append((f"corr{idx}_{k}_{j}", FILLER_CELL, filler_w)); cum += filler_w
-        seq.extend(row[i:])
-
-        final_used = sum(w for _n, _t, w in seq)
-        extra_gap = max(0.0, ROW_WIDTH_UM - final_used)
-        n_extra = int(extra_gap // filler_w)
-        for j in range(n_extra):
-            seq.append((f"extra_{idx}_{j}", FILLER_CELL, filler_w))
+        for i, (name, typ, w) in enumerate(row):
+            seq.append((name, typ, w))
+            if i < n_gaps:
+                count = 1 + extra_per_gap[i]
+                for j in range(count):
+                    seq.append((f"fill_{idx}_{i}_{j}", FILLER_CELL, filler_w))
 
         final = sum(w for _n, _t, w in seq)
         assert final <= ROW_WIDTH_UM + 1e-6, f"row {idx} overflowed: {final:.1f}um > {ROW_WIDTH_UM}um"
-        print(f"  row {idx}: {n_corridors} corridors x {fillers_per_corridor} FILL1 each, "
-              f"final used+filler: {final:.1f}um")
+        print(f"  row {idx}: {n} cells, {n_gaps} gaps, {n_extra_total} extra fillers spread "
+              f"round-robin, final used+filler: {final:.1f}um")
         return seq
 
     logical_row_seq = {}
