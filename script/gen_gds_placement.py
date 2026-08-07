@@ -90,11 +90,17 @@ ROW_HEIGHT_FILLER_ROWS = 55.0  # nominal, overwritten from the real prBoundary b
 # at the production 1800um -- only row COUNT changes (~994um/row target vs
 # ~1192um/row for 5 rows). Channel heights started at a uniform guess and
 # not yet iterated per-channel the way the 5-row values below were.
+# design_notes.md section 34.14: route_all_channels.py's own track-usage
+# reporting (with the section 34.13 FILL-gap-limited M2 router) showed
+# ch0_1/ch2_3/ch3_4 using only 7/5/7 of their 32 available track slots --
+# well within a halved 16-slot budget -- while ch1_2 (20/32) and ch4_5
+# (16/32) are used closer to capacity and were left at the original 4
+# filler rows. Halved per user request.
 N_BM6 = 2
-N_016 = 4
+N_016 = 2
 N_126 = 4
-N_236 = 4
-N_346 = 4
+N_236 = 2
+N_346 = 2
 N_456 = 4
 N_TM6 = 2
 PHYSICAL_ROWS_6 = (
