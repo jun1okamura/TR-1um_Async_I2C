@@ -655,19 +655,47 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
                 print(f"  true boundary{b}|{b+1} crossings: {c}")
             print(f"  true total channel-crossings (sum over 4 boundaries): {total_crossings}")
     else:
-        # Fallback for any nrows != 4 (never used in this project -- the
-        # hierarchical structure above is specific to the fixed 4-row/
-        # 3-channel physical layout): plain 1D L/R-score chop.
-        order = sorted(all_inst, key=lambda n: (scores[n], n))
-        row_sets = [set() for _ in range(nrows)]
-        row_w = [0.0] * nrows
-        ri = 0
-        for name in order:
-            w = weight[name]
-            if row_sets[ri] and row_w[ri] + w > target and ri < nrows - 1:
-                ri += 1
-            row_sets[ri].add(name)
-            row_w[ri] += w
+        # General chain-respecting recursive bisection (design_notes.md
+        # section 34.6) for any nrows not in (4, 5): generalizes the nrows==5
+        # hand-unrolled structure above -- recursively split the row-index
+        # chain [0..nrows-1] at its midpoint via cluster-granularity FM
+        # bipartition, so every cut again corresponds to exactly one real
+        # physical row boundary. Used for the nrows==1 single-row experiment
+        # (section 34.3, where it trivially returns everything in row 0 --
+        # no split needed) and the nrows==6 trial (section 34.6).
+        rng = random.Random(42)
+        SLACK = 1.05
+
+        def split_chain(node_set, row_labels):
+            if len(row_labels) == 1:
+                return {row_labels[0]: node_set}
+            mid = len(row_labels) // 2
+            left_labels, right_labels = row_labels[:mid], row_labels[mid:]
+            cap_l = len(left_labels) * target * SLACK
+            cap_r = len(right_labels) * target * SLACK
+            nets_here = nets_restricted_to_c(node_set)
+            part, cut = _fm_bipartition(node_set, nets_here, cluster_weight, cap_l, cap_r,
+                                         rng=rng, passes=20)
+            left_set = {n for n in node_set if part[n] == 'A'}
+            right_set = {n for n in node_set if part[n] == 'B'}
+            result = {}
+            result.update(split_chain(left_set, left_labels))
+            result.update(split_chain(right_set, right_labels))
+            return result
+
+        row_by_label_c = split_chain(set(clusters.keys()), list(range(nrows)))
+        row_sets = []
+        for i in range(nrows):
+            s = set()
+            for c in row_by_label_c.get(i, set()):
+                s |= clusters[c]
+            row_sets.append(s)
+        if verbose:
+            print(f"chain-split FM partition ({len(clusters)} cluster nodes, nrows={nrows}):")
+            for i, rs in enumerate(row_sets):
+                w = sum(weight[n] for n in rs)
+                print(f"  row{i}: {len(rs)} instances, {w:.1f}um "
+                      f"({'OVER BUDGET' if w > row_width_um else 'ok'})")
 
     # Within each row, order left-to-right by the same L/R BFS-distance
     # score as before (independent of which row FM assigned the instance

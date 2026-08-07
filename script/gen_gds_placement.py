@@ -85,6 +85,24 @@ ROW_HEIGHT_FILLER_ROWS = 55.0  # nominal, overwritten from the real prBoundary b
 # -- bumped up for safety headroom):
 #   chbm_0 2/8, ch0_1 16/16(no margin)->16/24, ch1_2 10/24, ch2_3 29/32,
 #   ch3_4 33/40, ch4_tm 2/16
+# --- TRIAL (design_notes.md section 34.6): 6-row chain, one more row
+# boundary/channel than production (7 channels total). ROW_WIDTH_UM stays
+# at the production 1800um -- only row COUNT changes (~994um/row target vs
+# ~1192um/row for 5 rows). Channel heights started at a uniform guess and
+# not yet iterated per-channel the way the 5-row values below were.
+N_BM6 = 2
+N_016 = 4
+N_126 = 4
+N_236 = 4
+N_346 = 4
+N_456 = 4
+N_TM6 = 2
+PHYSICAL_ROWS_6 = (
+    [None] * N_BM6 + [0] + [None] * N_016 + [1] + [None] * N_126 + [2]
+    + [None] * N_236 + [3] + [None] * N_346 + [4] + [None] * N_456 + [5]
+    + [None] * N_TM6
+)
+
 N_BM = 1   # bottom margin (below row 0)
 N_01 = 4   # channel between row 0 / row 1 (kept as an EVEN increment from
            # the prior working value of 2, to preserve every downstream
@@ -114,6 +132,10 @@ PHYSICAL_ROWS = (
     + [4]
     + [None] * N_TM
 )
+
+import os as _os  # noqa: E402
+if _os.environ.get("USE_6ROW") == "1":
+    PHYSICAL_ROWS = PHYSICAL_ROWS_6
 
 LEFT_PINS = ["scl", "sda_in", "sda_oe", "rst_n"]
 RIGHT_PINS = (["VDD", "GND"] + [f"tx_data[{i}]" for i in range(7, -1, -1)]
