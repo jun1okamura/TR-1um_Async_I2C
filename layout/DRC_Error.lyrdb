@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <report-database>
  <description>TR-1um DRC(Drawing)</description>
- <original-file>i2c_slave_async_layout_routed_pilot.gds</original-file>
+ <original-file>i2c_slave_async_layout_routed_all.gds</original-file>
  <generator>drc: script='/Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/klayout/tech/drc/drc.lydrc'</generator>
  <top-cell>i2c_slave_async_layout</top-cell>
  <tags>
@@ -1364,74 +1364,38 @@
  <items>
   <item>
    <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
+   <category>'M2.S1:M2 Smin &lt;  2.0'</category>
    <cell>i2c_slave_async_layout</cell>
    <visited>false</visited>
    <multiplicity>1</multiplicity>
    <comment/>
    <image/>
    <values>
-    <value>edge-pair: (1735.5,455.8;1735.5,457.083)/(1735.3,455.9;1735.3,454.617)</value>
+    <value>edge-pair: (334.35,856.3;334.35,859.7)|(333.55,861.533;333.55,854.467)</value>
    </values>
   </item>
   <item>
    <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
+   <category>'M2.S1:M2 Smin &lt;  2.0'</category>
    <cell>i2c_slave_async_layout</cell>
    <visited>false</visited>
    <multiplicity>1</multiplicity>
    <comment/>
    <image/>
    <values>
-    <value>edge-pair: (568.45,468.2;568.45,466.8)/(569.5,466.219;569.5,468.781)</value>
+    <value>edge-pair: (178.45,1178.946;178.45,1186.054)|(177.7,1184.2;177.7,1180.8)</value>
    </values>
   </item>
   <item>
    <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
+   <category>'M2.S1:M2 Smin &lt;  2.0'</category>
    <cell>i2c_slave_async_layout</cell>
    <visited>false</visited>
    <multiplicity>1</multiplicity>
    <comment/>
    <image/>
    <values>
-    <value>edge-pair: (1508.95,462.7;1508.95,461.3)/(1510,460.719;1510,463.281)</value>
-   </values>
-  </item>
-  <item>
-   <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
-   <cell>i2c_slave_async_layout</cell>
-   <visited>false</visited>
-   <multiplicity>1</multiplicity>
-   <comment/>
-   <image/>
-   <values>
-    <value>edge-pair: (1767.45,468.2;1767.45,466.8)/(1768.5,466.219;1768.5,468.781)</value>
-   </values>
-  </item>
-  <item>
-   <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
-   <cell>i2c_slave_async_layout</cell>
-   <visited>false</visited>
-   <multiplicity>1</multiplicity>
-   <comment/>
-   <image/>
-   <values>
-    <value>edge-pair: (601.45,468.2;601.45,466.8)/(602.5,466.219;602.5,468.781)</value>
-   </values>
-  </item>
-  <item>
-   <tags/>
-   <category>'V1.GC:V1-GC Smin &lt;  1.2'</category>
-   <cell>i2c_slave_async_layout</cell>
-   <visited>false</visited>
-   <multiplicity>1</multiplicity>
-   <comment/>
-   <image/>
-   <values>
-    <value>edge-pair: (1420.95,462.7;1420.95,461.3)/(1422,460.719;1422,463.281)</value>
+    <value>edge-pair: (1637.3,1180.8;1637.3,1184.2)|(1636.55,1186.054;1636.55,1178.946)</value>
    </values>
   </item>
  </items>

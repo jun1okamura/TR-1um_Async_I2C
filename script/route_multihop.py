@@ -505,6 +505,18 @@ def main():
     partially_routed_nets = []
 
     for net, rs in sorted(multi_hop_nets, key=lambda t: t[0]):
+        # Snapshot of M2 from OTHER nets only, taken BEFORE this net draws
+        # anything -- used (not the continuously-refreshed _existing_m2)
+        # when clearance-checking this net's OWN touched-pin pads below.
+        # A pin's pad is SUPPOSED to touch/overlap the end of its own
+        # net's just-drawn trunk (that's how they electrically connect);
+        # checking the pad against the live _existing_m2 (which by then
+        # includes that trunk) made _box_clear reject the pad as
+        # "colliding" purely because of this intentional self-overlap --
+        # a false positive that, in the first version of the fix below,
+        # caused far more pads to be skipped than were actually violating
+        # anything (design_notes.md section 34.10).
+        _other_nets_m2 = _existing_m2
         pins = net_pins[net]
         anchors = []
         for instname, typ, pinname in pins:
@@ -611,16 +623,75 @@ def main():
                 touched.add(i)
                 touched.add(i + 1)
 
+        # Each touched pin's own via/pad is drawn HERE, unconditionally, in
+        # every prior version of this loop -- with no _box_clear check
+        # against _existing_m2 first. That was safe by chance in the 5-row
+        # configurations tried so far (residual violations there traced to
+        # other causes), but the 6-row + always-at-least-1-FILL trial
+        # (design_notes.md section 34.9/34.10) exposed it directly: two
+        # DIFFERENT multi-hop nets' touched-pin pads ended up within
+        # M2_MIN_SPACE of each other and were both drawn anyway, producing
+        # 6 of 7 new M2 violations. Add the same clear-before-draw
+        # discipline every other shape in this project already follows,
+        # with a small local-offset retry (the pin's OWN via placement has
+        # a few um of slack via VIA_MARGIN_UM already, so nudging the pad
+        # slightly is safe) before giving up and leaving the pin's pad
+        # undrawn (which also means its adjoining segment(s) are not truly
+        # connected -- logged so it's visible, not silently accepted).
+        def _pad_clear(cx, cy, half_um):
+            box = db.Box(int(round((cx - half_um) / dbu)), int(round((cy - half_um) / dbu)),
+                         int(round((cx + half_um) / dbu)), int(round((cy + half_um) / dbu)))
+            clearance_ldbu = int(round(M2_MIN_SPACE / dbu))
+            return db.Region(box).sized(clearance_ldbu).interacting(_other_nets_m2).count() == 0
+
         for idx in touched:
             vy, vx, instname, pinname, patch_polys, padded = anchors[idx]
+            pad_half = M2_PAD_SIZE / 2.0
+            placed_vx, placed_vy = None, None
+            if _pad_clear(vx, vy, pad_half):
+                placed_vx, placed_vy = vx, vy
+            else:
+                for off in (0.5, 1.0, 1.5, 2.0, 3.0, 4.0):
+                    for dx, dy in ((off, 0), (-off, 0), (0, off), (0, -off)):
+                        cx, cy = vx + dx, vy + dy
+                        if _pad_clear(cx, cy, pad_half):
+                            placed_vx, placed_vy = cx, cy
+                            break
+                    if placed_vx is not None:
+                        break
+            if placed_vx is None:
+                print(f"WARNING: net {net}: pin {instname}.{pinname}'s own via/pad at "
+                      f"({vx:.2f},{vy:.2f}) collides with existing M2 even after local offset "
+                      f"retry; leaving this pin's pad UNDRAWN (open)")
+                continue
+            offset_applied = (placed_vx, placed_vy) != (vx, vy)
+            if offset_applied:
+                print(f"DEBUG OFFSET net={net} pin={instname}.{pinname}: "
+                      f"({vx:.2f},{vy:.2f}) -> ({placed_vx:.2f},{placed_vy:.2f})", file=sys.stderr)
             if padded:
                 for pts_um in patch_polys:
                     poly = db.Polygon([db.Point(um(p.x), um(p.y)) for p in pts_um])
                     top.shapes(m1_idx).insert(poly)
                     shapes_drawn += 1
-            top.shapes(v1_idx).insert(pad(vx, vy, VIA_SIZE))
-            top.shapes(m2_idx).insert(pad(vx, vy, M2_PAD_SIZE))
+            if offset_applied:
+                # abs_pin_anchor() only guarantees V1-M1 enclosure (>=1.0um,
+                # via VIA_MARGIN_UM erosion) at the ORIGINAL (vx,vy) anchor
+                # -- patch_polys, when present, also only cover that
+                # original spot. Moving the via to (placed_vx,placed_vy) to
+                # dodge an M2 collision leaves it outside that guaranteed
+                # region, which is exactly what produced 48 "V1 enclosed by
+                # M1<1.0" violations the first time this offset retry was
+                # tried (design_notes.md section 34.11). Fix: draw an
+                # explicit M1 guarantee-pad at the new location, same size
+                # as the M2 pad (M2_PAD_SIZE = VIA_SIZE+2.0), which is
+                # exactly the bare V1-M1 enclosure minimum -- mirrors what
+                # the M2 pad already does for V1-M2 enclosure.
+                top.shapes(m1_idx).insert(pad(placed_vx, placed_vy, M2_PAD_SIZE))
+                shapes_drawn += 1
+            top.shapes(v1_idx).insert(pad(placed_vx, placed_vy, VIA_SIZE))
+            top.shapes(m2_idx).insert(pad(placed_vx, placed_vy, M2_PAD_SIZE))
             shapes_drawn += 2
+            _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
 
         seg_ok = sum(1 for p in seg_paths if p is not None)
         _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
