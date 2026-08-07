@@ -709,6 +709,22 @@ def route_shared_channel(row_cfgs, channel_bottom_y, channel_height, out_gds, pi
             own_box = _pin_own_box.get((instname, pinname))
             _current_reserved_excl[0] = (_reserved_region_all - db.Region(own_box)) \
                 if own_box is not None else _reserved_region_all
+            # design_notes.md section 34.16: the pin's own M2 pad is drawn
+            # at a FIXED position (x, y_center) below, completely
+            # unconditionally -- unlike the jog PATH (clearance-checked via
+            # _find_jog_path) the pad itself was never verified clear of
+            # other, unrelated pins' M2 that happen to land nearby (e.g. a
+            # neighboring pin's own straight-through vertical run that
+            # needed no jog at all, so its own pad+trunk never showed up in
+            # any OTHER pin's path search). Check it here, before spending
+            # any effort on a jog search -- if the contact point itself is
+            # compromised, no jog helps.
+            _pad_half = M2_PAD_SIZE / 2.0
+            if not _box_clear(x - _pad_half, y_center - _pad_half, x + _pad_half, y_center + _pad_half):
+                print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
+                      f"own M2 pad collides with existing M2; leaving UNROUTED (open)")
+                unrouted_pins.append((net, instname, pinname, x, y_center))
+                continue
             path = _find_jog_path(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if path is None:
                 # Leave OPEN rather than drawing an unjogged fallback that's

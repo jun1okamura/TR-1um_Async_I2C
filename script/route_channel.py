@@ -725,6 +725,18 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
             own_box = _pin_own_box.get((instname, pinname))
             _current_reserved_excl[0] = (_reserved_region_all - db.Region(own_box)) \
                 if own_box is not None else _reserved_region_all
+            # design_notes.md section 34.16: same fix as route_channel_
+            # shared.py -- the pin's own M2 pad is drawn at a FIXED
+            # position below, completely unconditionally, and was never
+            # verified clear of another, unrelated pin's already-drawn M2
+            # (e.g. a neighbor whose own straight-through run needed no
+            # jog, so it never showed up in any OTHER pin's path search).
+            _pad_half = M2_PAD_SIZE / 2.0
+            if not _box_clear(x - _pad_half, y_center - _pad_half, x + _pad_half, y_center + _pad_half):
+                print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
+                      f"own M2 pad collides with existing M2; leaving UNROUTED (open)")
+                unrouted_pins.append((net, instname, pinname, x, y_center))
+                continue
             path = _find_jog_path(x, y_center, track_y, preferred_dir=pref, skip_rank=rank, must_jog=mj)
             if path is None:
                 # Do NOT fall back to an unjogged (top_x=x) stub here: the
