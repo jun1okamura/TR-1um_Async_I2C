@@ -734,6 +734,31 @@ def route_row_channel(logical_row_idx, phys_row_index, mirrored, channel_bottom_
                 # cascading failures (see design_notes.md route_cross_row.py
                 # discussion). Leave the pin OPEN (unrouted) instead; a known
                 # open is far cheaper to fix than a cascading short.
+                if os.environ.get("ROUTE_DEBUG_CAUSE") == "1" and own_box is not None:
+                    clearance_ldbu = int(round(M2_MIN_SPACE / _rail_dbu))
+                    grown_own = db.Region(own_box).sized(clearance_ldbu)
+                    hit_m2 = grown_own.interacting(_existing_m2).count() > 0
+                    hit_resv = grown_own.interacting(_current_reserved_excl[0]).count() > 0
+                    print(f"CAUSE net={net} pin={instname}.{pinname}: own_anchor_blocked_by_M2={hit_m2} "
+                          f"own_anchor_blocked_by_reservation={hit_resv}", file=sys.stderr)
+                    if not hit_m2 and not hit_resv:
+                        half = M2_PAD_SIZE / 2.0
+                        straight_clear = _m2_run_clear(x, y_center - half, track_y + half, half)
+                        print(f"  y_center={y_center:.2f} track_y={track_y:.2f} "
+                              f"straight_run_clear={straight_clear}", file=sys.stderr)
+                        if not straight_clear:
+                            ylo, yhi = (y_center, track_y) if y_center <= track_y else (track_y, y_center)
+                            step = 2.0
+                            yy = ylo
+                            while yy <= yhi:
+                                seg_clear = _m2_run_clear(x, yy, min(yy + step, yhi), half)
+                                if not seg_clear:
+                                    print(f"    blocked segment near y=[{yy:.1f},{min(yy+step, yhi):.1f}]",
+                                          file=sys.stderr)
+                                yy += step
+                        # how many offset candidates (both directions) were tried in total
+                        print(f"  offsets tried: {len(ALL_MAGS) * 2}, none succeeded "
+                              f"(range +/-{ALL_MAGS[-1]}um)", file=sys.stderr)
                 print(f"WARNING: net {net} pin {instname}.{pinname} at ({x:.2f},{y_center:.2f}): "
                       f"no clear M2 jog found within search range (incl. 2-bend fallback); "
                       f"leaving UNROUTED (open)")
