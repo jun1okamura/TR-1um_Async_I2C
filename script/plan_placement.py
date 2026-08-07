@@ -41,7 +41,27 @@ ROW_WIDTH_UM = 1800.0
 # zero-gap boundaries at all) -- this trades a bit of extra row-count
 # margin (5621/5=1124um/row vs 5621/4=1405um/row, more filler slack) for
 # eliminating the hard-to-route zero-gap case entirely.
+#
+# A single-row (NROWS=1, ROW_WIDTH_UM=6600) variant was tried as a
+# diagnostic experiment (design_notes.md section 34.2) to isolate the FO=1
+# clustering effect from multi-row/multi-hop routing entirely -- see git
+# history for that configuration. Not adopted for production: a
+# 6600x1375um single-row die is an impractical aspect ratio. NROWS=5 /
+# ROW_WIDTH_UM=1800 remains the production configuration.
 NROWS = 5
+
+# FO=1 driver/receiver clustering (design_notes.md section 34): a net with
+# exactly one output-direction instance pin and exactly one input-direction
+# instance pin is a simple point-to-point connection. Such pairs are fused
+# into a single FM-partition node so the two cells are FORCED onto the same
+# row and placed contiguously (left-right adjacent) within it, instead of
+# merely being biased toward proximity by the existing L/R BFS-distance
+# score. Chains (a cell that is simultaneously the receiver of one FO=1 net
+# and the driver of another) grow the cluster transitively; capped at
+# FO1_CLUSTER_CAP members to avoid the same "one giant group swallows
+# everything" failure mode seen with the unbounded Union-Find net-grouping
+# in section 30.
+FO1_CLUSTER_CAP = 4
 
 # Block-boundary pin sides (see design_notes.md section 12/13).
 LEFT_PORTS = {"scl", "sda_in", "rst_n", "sda_oe"}
@@ -319,6 +339,58 @@ def _fm_bipartition(node_ids, nets_touching, node_weight, capacity_a, capacity_b
     return best_part, best_cut
 
 
+def _build_fo1_pairs(net_dir_members):
+    """net_dir_members: canon net -> list of (instance_name, direction).
+    Returns a list of (driver_name, receiver_name) for every net that has
+    exactly one 'out' member and exactly one 'in' member (a true simple
+    point-to-point connection -- nets with 0 or >1 driver instances, e.g.
+    those driven directly by a top-level input port with no internal driver
+    cell, or fanout>1 nets, are left alone)."""
+    pairs = []
+    for net, dm in net_dir_members.items():
+        outs = [n for n, d in dm if d == 'out']
+        ins = [n for n, d in dm if d == 'in']
+        if len(outs) == 1 and len(ins) == 1 and outs[0] != ins[0]:
+            pairs.append((outs[0], ins[0]))
+    return pairs
+
+
+def _cluster_fo1_pairs(all_inst, pairs, cap=FO1_CLUSTER_CAP):
+    """Union-find over the FO=1 driver/receiver pair graph, size-capped at
+    `cap` members per cluster. Deterministic: pairs and node visitation are
+    processed in sorted order so re-running gives an identical result.
+    Returns (cluster_id: name -> representative name, clusters: rep -> set
+    of member names). Every instance is in exactly one cluster; instances
+    untouched by any FO=1 pair form singleton clusters of themselves."""
+    parent = {n: n for n in all_inst}
+    members = {n: {n} for n in all_inst}
+
+    def find(n):
+        while parent[n] != n:
+            n = parent[n]
+        return n
+
+    for a, b in sorted(pairs):
+        if a not in parent or b not in parent:
+            continue
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            continue
+        if len(members[ra]) + len(members[rb]) > cap:
+            continue
+        if ra > rb:
+            ra, rb = rb, ra
+        parent[rb] = ra
+        members[ra] |= members[rb]
+        del members[rb]
+
+    cluster_id = {n: find(n) for n in all_inst}
+    clusters = defaultdict(set)
+    for n in all_inst:
+        clusters[find(n)].add(n)
+    return cluster_id, dict(clusters)
+
+
 def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
     """Returns (rows, cell_width, row_height) where rows is a list of nrows
     lists of (instance_name, cell_type, width_um), left-to-right physical
@@ -353,12 +425,14 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
         return find(expr)
 
     net_members = defaultdict(list)
+    net_dir_members = defaultdict(list)  # canon net -> [(instance_name, direction), ...]
     for typ, name, conns in instances:
         for pin, expr in conns.items():
             d = sym_pins[typ].get(pin)
             if d == 'inout':  # VDD/GND: not useful for L/R graph distance
                 continue
             net_members[canon(expr)].append(name)
+            net_dir_members[canon(expr)].append((name, d))
 
     adj = defaultdict(set)
     for net, members in net_members.items():
@@ -406,9 +480,39 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
     total_w = sum(weight.values())
     target = total_w / nrows
 
+    # FO=1 driver/receiver clustering (section 34): fuse simple
+    # point-to-point pairs (and their up-to-FO1_CLUSTER_CAP-length chains)
+    # into single FM-partition nodes so they are forced onto the same row
+    # and placed contiguously within it.
+    fo1_pairs = _build_fo1_pairs(net_dir_members)
+    cluster_id, clusters = _cluster_fo1_pairs(all_inst, fo1_pairs, cap=FO1_CLUSTER_CAP)
+    cluster_weight = {c: sum(weight[n] for n in members) for c, members in clusters.items()}
+    net_members_c = {}
+    for net, members in net_members.items():
+        cm = sorted(set(cluster_id[m] for m in members))
+        if len(cm) >= 1:
+            net_members_c[net] = cm
+    if verbose:
+        multi = [c for c, m in clusters.items() if len(m) > 1]
+        sizes = defaultdict(int)
+        for c in multi:
+            sizes[len(clusters[c])] += 1
+        print(f"FO=1 clustering: {len(fo1_pairs)} simple pairs found, "
+              f"{len(multi)} clusters with >1 member "
+              f"(size distribution: {dict(sorted(sizes.items()))}), "
+              f"{len(all_inst)} instances -> {len(clusters)} placement nodes")
+
     def nets_restricted_to(node_set):
         out = {}
         for net, members in net_members.items():
+            m = [x for x in members if x in node_set]
+            if len(set(m)) >= 2:
+                out[net] = m
+        return out
+
+    def nets_restricted_to_c(node_set):
+        out = {}
+        for net, members in net_members_c.items():
             m = [x for x in members if x in node_set]
             if len(set(m)) >= 2:
                 out[net] = m
@@ -463,9 +567,13 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
         #   L-split: {row0} vs {row1}                  -> boundary row0|row1
         #   R-split: {row2} vs {row3,row4}              -> boundary row2|row3
         #   R2-split:{row3} vs {row4}                    -> boundary row3|row4
+        # Partitioning runs at CLUSTER granularity (each FO=1 pair/chain is
+        # one node, weight = sum of its members' cell widths) so a cluster
+        # can never be split across a row boundary -- this is what forces
+        # the FO=1 driver+receiver onto the same row (section 34).
         rng = random.Random(42)
-        all_set = set(all_inst)
-        nets_all = nets_restricted_to(all_set)
+        all_set_c = set(clusters.keys())
+        nets_all = nets_restricted_to_c(all_set_c)
         # Capacities are sized around the EVEN-SPLIT target (total_w/nrows),
         # not the physical row_width_um budget -- using row_width_um*n here
         # gives FM so much slack (1800/1192 = 1.5x the actual per-row
@@ -474,36 +582,51 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
         # (observed: row1 got 0 instances). A tighter slack (1.28x, matching
         # the ratio that worked well for the old 4-row split) still gives
         # FM room to trade off cut count against balance, but can't leave a
-        # whole row empty.
-        SLACK = 1.28
+        # whole row empty -- AT INSTANCE granularity. Once FO=1 clustering
+        # (section 34) coarsens the FM nodes to 85 (some weighing up to 4
+        # cells), 1.28 slack reproduced the exact same failure (row0 got 0
+        # instances) because each node is now a much bigger "bin" relative
+        # to the row budget. Re-swept SLACK empirically at cluster
+        # granularity: 1.05 gives both the tightest row balance (1067-1248um
+        # vs the 1192um target) AND the lowest true total channel-crossings
+        # (117, vs 128-193 for 1.0/1.02/1.08) of the values tried.
+        SLACK = 1.05
         cap1, cap2, cap3 = target * SLACK, 2 * target * SLACK, 3 * target * SLACK
 
-        part_top, cut_top = _fm_bipartition(all_set, nets_all, weight, cap2, cap3,
+        part_top, cut_top = _fm_bipartition(all_set_c, nets_all, cluster_weight, cap2, cap3,
                                              rng=rng, passes=20)
-        lower2 = {n for n in all_set if part_top[n] == 'A'}   # rows 0,1
-        upper3 = {n for n in all_set if part_top[n] == 'B'}   # rows 2,3,4
+        lower2 = {c for c in all_set_c if part_top[c] == 'A'}   # rows 0,1
+        upper3 = {c for c in all_set_c if part_top[c] == 'B'}   # rows 2,3,4
 
-        nets_lower2 = nets_restricted_to(lower2)
-        part_01, cut_01 = _fm_bipartition(lower2, nets_lower2, weight, cap1, cap1,
+        nets_lower2 = nets_restricted_to_c(lower2)
+        part_01, cut_01 = _fm_bipartition(lower2, nets_lower2, cluster_weight, cap1, cap1,
                                            rng=rng, passes=20)
-        row0_set = {n for n in lower2 if part_01[n] == 'A'}
-        row1_set = {n for n in lower2 if part_01[n] == 'B'}
+        row0_c = {c for c in lower2 if part_01[c] == 'A'}
+        row1_c = {c for c in lower2 if part_01[c] == 'B'}
 
-        nets_upper3 = nets_restricted_to(upper3)
-        part_2_34, cut_2_34 = _fm_bipartition(upper3, nets_upper3, weight, cap1, cap2,
+        nets_upper3 = nets_restricted_to_c(upper3)
+        part_2_34, cut_2_34 = _fm_bipartition(upper3, nets_upper3, cluster_weight, cap1, cap2,
                                                rng=rng, passes=20)
-        row2_set = {n for n in upper3 if part_2_34[n] == 'A'}
-        upper2 = {n for n in upper3 if part_2_34[n] == 'B'}   # rows 3,4
+        row2_c = {c for c in upper3 if part_2_34[c] == 'A'}
+        upper2 = {c for c in upper3 if part_2_34[c] == 'B'}   # rows 3,4
 
-        nets_upper2 = nets_restricted_to(upper2)
-        part_34, cut_34 = _fm_bipartition(upper2, nets_upper2, weight, cap1, cap1,
+        nets_upper2 = nets_restricted_to_c(upper2)
+        part_34, cut_34 = _fm_bipartition(upper2, nets_upper2, cluster_weight, cap1, cap1,
                                            rng=rng, passes=20)
-        row3_set = {n for n in upper2 if part_34[n] == 'A'}
-        row4_set = {n for n in upper2 if part_34[n] == 'B'}
+        row3_c = {c for c in upper2 if part_34[c] == 'A'}
+        row4_c = {c for c in upper2 if part_34[c] == 'B'}
 
-        row_sets = [row0_set, row1_set, row2_set, row3_set, row4_set]
+        # Expand cluster-level row assignment back to instance-level sets.
+        row_sets = []
+        for rc in (row0_c, row1_c, row2_c, row3_c, row4_c):
+            s = set()
+            for c in rc:
+                s |= clusters[c]
+            row_sets.append(s)
+        row0_set, row1_set, row2_set, row3_set, row4_set = row_sets
         if verbose:
-            print(f"FM partition (5-row chain): top(0,1|2,3,4)={cut_top}, "
+            print(f"FM partition (5-row chain, {len(all_set_c)} cluster nodes): "
+                  f"top(0,1|2,3,4)={cut_top}, "
                   f"row0|1={cut_01}, row2|3,4={cut_2_34}, row3|4={cut_34}")
             for i, rs in enumerate(row_sets):
                 w = sum(weight[n] for n in rs)
@@ -549,15 +672,28 @@ def compute_rows(nrows=NROWS, row_width_um=ROW_WIDTH_UM, verbose=False):
     # Within each row, order left-to-right by the same L/R BFS-distance
     # score as before (independent of which row FM assigned the instance
     # to) -- biases instances toward whichever block edge they are
-    # electrically closer to.
+    # electrically closer to. Instances are grouped by FO=1 cluster first
+    # (section 34) so a driver/receiver pair (or chain, up to
+    # FO1_CLUSTER_CAP members) always lands CONTIGUOUS in the row -- true
+    # physical adjacency, not just a proximity bias -- ordered by the
+    # cluster's mean score, with members inside the cluster ordered by
+    # their own individual score.
     rows = [[] for _ in range(nrows)]
     row_w = [0.0] * nrows
     for i, rs in enumerate(row_sets):
-        for name in sorted(rs, key=lambda n: (scores[n], n)):
-            typ = instmap[name][0]
-            w = weight[name]
-            rows[i].append((name, typ, w))
-            row_w[i] += w
+        row_clusters = defaultdict(list)
+        for name in rs:
+            row_clusters[cluster_id[name]].append(name)
+
+        def _cluster_score(members):
+            return sum(scores[m] for m in members) / len(members)
+
+        for c in sorted(row_clusters.keys(), key=lambda c: (_cluster_score(row_clusters[c]), c)):
+            for name in sorted(row_clusters[c], key=lambda n: (scores[n], n)):
+                typ = instmap[name][0]
+                w = weight[name]
+                rows[i].append((name, typ, w))
+                row_w[i] += w
 
     if verbose:
         print(f"row height: {row_height} um")

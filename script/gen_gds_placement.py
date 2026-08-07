@@ -97,6 +97,10 @@ N_23 = 4   # channel between row 2 / row 3
 N_34 = 5   # channel between row 3 / row 4
 N_TM = 2   # top margin (above row 4)
 
+# A single logical row variant (N_BM=N_TM=12, no N_01..N_34, ROW_WIDTH_UM=
+# 6600 in plan_placement.py) was tried as a diagnostic experiment
+# (design_notes.md section 34.2) -- see git history. Not adopted for
+# production (impractical aspect ratio); the 5-row chain below is current.
 PHYSICAL_ROWS = (
     [None] * N_BM
     + [0]

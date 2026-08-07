@@ -237,7 +237,30 @@ def main():
         # on the same cell, and a residual M2 spacing violation results
         # (design_notes.md section 28.2). Keeping every net that touches a
         # given instance together in one channel eliminates this class.
+        # SAME_INST_GROUP_CAP (design_notes.md section 34.2): the plain
+        # transitive Union-Find below collapses nets into a giant group
+        # whenever nets are chained together through a sequence of shared
+        # instances (net A + net B share inst X, net B + net C share inst Y
+        # != X -- A and C end up forced together even though they share no
+        # instance directly). In the normal 5-row layout this stayed small
+        # (worst observed: 37/45 nets in one row -- section 30), but in the
+        # single-row experiment (all 196 nets in one row) it collapses into
+        # ONE group of all 196, defeating the greedy balancer entirely (all
+        # 196 nets landed in chbm_0, 0 in ch0_tm). Capping group size trades
+        # a few same-instance channel splits (acceptable: channels are
+        # chained sequentially with accumulated M2 as a shared obstacle set,
+        # so the later channel already sees the earlier one's shapes, plus
+        # two-pass anchor reservation section 31 covers the anchor-collision
+        # risk that originally motivated the uncapped grouping) for load
+        # balance. Left effectively UNCAPPED (large number) for the
+        # production 5-row configuration -- the largest observed group there
+        # (37/45 nets, section 30) never approached a pathological single-
+        # sided dump the way the single-row experiment's 196/196 case did,
+        # so the existing net-count greedy balancer already does fine; a
+        # tight cap (16) was specifically needed for that single-row case.
+        SAME_INST_GROUP_CAP = 9999
         uf = {}
+        group_size = defaultdict(lambda: 1)
 
         def find(k):
             uf.setdefault(k, k)
@@ -248,8 +271,12 @@ def main():
 
         def union(a, b):
             ra, rb = find(a), find(b)
-            if ra != rb:
-                uf[ra] = rb
+            if ra == rb:
+                return
+            if group_size[ra] + group_size[rb] > SAME_INST_GROUP_CAP:
+                return
+            uf[ra] = rb
+            group_size[rb] += group_size[ra]
 
         inst_to_nets = defaultdict(list)
         for net in nets:

@@ -35,7 +35,9 @@ def main():
     v1_idx = layout.layer(*V1_LAYER)
     m2_idx = layout.layer(*M2_LAYER)
 
-    scan = db.Box(0, int(round(scan_y_lo / dbu)), int(round(1800.0 / dbu)), int(round(scan_y_hi / dbu)))
+    import os as _os
+    _scan_w = float(_os.environ.get("SCAN_ROW_WIDTH_UM", "1800.0"))
+    scan = db.Box(0, int(round(scan_y_lo / dbu)), int(round(_scan_w / dbu)), int(round(scan_y_hi / dbu)))
 
     m1_region = db.Region(top.begin_shapes_rec_touching(m1_idx, scan)).merged()
     m2_region = db.Region(top.begin_shapes_rec_touching(m2_idx, scan)).merged()
