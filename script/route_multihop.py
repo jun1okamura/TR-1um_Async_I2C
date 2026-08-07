@@ -9,14 +9,19 @@ single channel's scope (one row, or one adjacent row pair sharing a
 channel). A net like `scl_buf0` (rows [0,1,2,3]) has no single channel
 that touches all its pins.
 
-Unlike the channel routers, this pass does not use M1 trunks + per-channel
-track slots at all. Instead, each multi-hop net's pins are sorted by
-absolute Y and connected pairwise (bottom to top) with a direct M2
-"elbow" or "Z-shape" path that may cross OVER intervening rows' own M1
-(no via = no electrical connection, so this is safe -- same principle
-already used by the old route_cross_row.py, design_notes.md section 23.5)
-and OVER/THROUGH intervening channels' own M2 routing (which it must
-avoid, exactly like the channel routers' jog search).
+Each multi-hop net's pins are sorted by absolute Y and connected pairwise
+(bottom to top) with a Lee/BFS maze-searched path on a coarse grid.
+
+design_notes.md section 34.12: the grid is layer-aware. A vertical move
+is always on M2 (crossing through a cell row -- no via needed against
+that row's own M1, since there's no electrical overlap, same principle
+already used by the old route_cross_row.py, section 23.5). A horizontal
+move is only legal, and only ever drawn, on M1, and only while inside a
+channel band (a filler-only physical row between/around the real cell
+rows) -- mirroring the channel routers' own M1-trunk-at-track-height
+convention, just generalized across multiple channels instead of one.
+Every interior bend in the simplified path is therefore a genuine
+M1<->M2 transition and gets a real via.
 
 This runs as a genuinely FINAL pass, reading
 Layout/i2c_slave_async_layout_routed_all.gds (the fully accumulated
@@ -339,26 +344,61 @@ def main():
                 patch_polys_abs.append(pts)
         return vx, vy, patch_polys_abs, grown_um > 0.0
 
-    # ---------- existing M2 obstruction: the WHOLE accumulated layout ----------
+    # ---------- existing M1/M2 obstruction: the WHOLE accumulated layout ----------
     core_h = len(PHYSICAL_ROWS) * ROW_HEIGHT
     _full_box = db.Box(0, 0, int(round(ROW_WIDTH_UM / dbu)), int(round(core_h / dbu)))
     _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
+    _existing_m1 = db.Region(top.begin_shapes_rec_touching(m1_idx, _full_box)).merged()
 
-    def _box_clear(l_um, b_um, r_um, t_um):
+    # ---------- channel Y-bands: where a horizontal run is allowed to switch
+    # to M1 (design_notes.md section 34.12). PHYSICAL_ROWS[i] is None for a
+    # filler-only physical row (an empty routing channel between/around the
+    # real cell rows) and an int (logical row index) for a row that's full
+    # of standard cells -- same convention gen_gds_placement.py/
+    # route_channel_shared.py already use. A pin always sits inside a
+    # non-None (cell) row, so this never classifies a pin's own anchor Y as
+    # "channel".
+    _channel_bands = []
+    _i = 0
+    while _i < len(PHYSICAL_ROWS):
+        if PHYSICAL_ROWS[_i] is None:
+            _j = _i
+            while _j < len(PHYSICAL_ROWS) and PHYSICAL_ROWS[_j] is None:
+                _j += 1
+            _channel_bands.append((_i * ROW_HEIGHT, _j * ROW_HEIGHT))
+            _i = _j
+        else:
+            _i += 1
+
+    def _is_channel_y(y_um, tol=1e-6):
+        return any(lo - tol <= y_um <= hi + tol for lo, hi in _channel_bands)
+
+    M1_CORE_WIDTH = 2.0  # comfortably above M1_MIN_WIDTH=1.8
+
+    def _box_clear_region(l_um, b_um, r_um, t_um, region, min_space_um):
         box = db.Box(int(round(l_um / dbu)), int(round(b_um / dbu)),
                       int(round(r_um / dbu)), int(round(t_um / dbu)))
-        clearance_ldbu = int(round(M2_MIN_SPACE / dbu))
-        return db.Region(box).sized(clearance_ldbu).interacting(_existing_m2).count() == 0
+        clearance_ldbu = int(round(min_space_um / dbu))
+        return db.Region(box).sized(clearance_ldbu).interacting(region).count() == 0
 
     def _vrun_clear(x_um, y0_um, y1_um, half_width_um):
+        # Vertical run -- always M2 (crosses through cell rows, no
+        # horizontal drift while doing so).
         ylo, yhi = (y0_um, y1_um) if y0_um <= y1_um else (y1_um, y0_um)
-        return _box_clear(x_um - half_width_um, ylo, x_um + half_width_um, yhi)
+        return _box_clear_region(x_um - half_width_um, ylo, x_um + half_width_um, yhi,
+                                  _existing_m2, M2_MIN_SPACE)
 
     def _hrun_clear(y_um, x0_um, x1_um, half_width_um):
+        # Horizontal run -- always M1, and only ever attempted at a Y inside
+        # a channel band (design_notes.md section 34.12: "inter-cell
+        # connections must switch to M1 in the channel region" -- M2 is
+        # reserved for the vertical hops that cross through cell rows).
         xlo, xhi = (x0_um, x1_um) if x0_um <= x1_um else (x1_um, x0_um)
-        return _box_clear(xlo, y_um - half_width_um, xhi, y_um + half_width_um)
+        return _box_clear_region(xlo, y_um - half_width_um, xhi, y_um + half_width_um,
+                                  _existing_m1, M1_MIN_SPACE)
 
-    half = M2_PAD_SIZE / 2.0
+    half_m2 = M2_PAD_SIZE / 2.0
+    half_m1 = M1_CORE_WIDTH / 2.0 + 0.15  # same +0.15 check-vs-draw margin as M2 (PAD_SIZE/2=1.7 vs CORE_WIDTH/2=1.55)
 
     # A simple 2-3 segment elbow/Z-shape (fixed-height horizontal runs at
     # each pin's own Y, single free-X vertical trunk) was tried first and
@@ -377,19 +417,31 @@ def main():
     # work since section 22.5. Only 15 nets / ~100 segments need this, so
     # the cost of a proper grid search here is small (unlike retrofitting
     # it into the channel routers, which each resolve hundreds of pins).
-    GRID_STEP = 6.0  # um
+    #
+    # design_notes.md section 34.12: the grid is now LAYER-AWARE -- a
+    # horizontal move is only legal from a grid row whose Y falls inside a
+    # channel band (and is checked/drawn on M1); a vertical move is always
+    # legal (checked/drawn on M2). This forces every net to switch to M1
+    # before making any lateral progress, instead of running M2 straight
+    # across cell rows the way the single-layer version did.
+    GRID_STEP = 3.0  # um (down from 6.0 -- section 34.12's layer-restricted
+    # search has much less freedom per step than the old single-layer one
+    # (no horizontal escape outside a channel band), so a coarser grid's
+    # conservative bbox-rasterization dead-ends far more easily right next
+    # to a pin, where nearby M2 is densest)
     core_h_i = core_h
     nx = int(ROW_WIDTH_UM // GRID_STEP) + 1
     ny = int(core_h_i // GRID_STEP) + 1
+    _channel_grid_row = [_is_channel_y(gy * GRID_STEP) for gy in range(ny)]
 
-    def _rasterize_blocked(region):
+    def _rasterize_blocked(region, min_space_um):
         """Bbox-per-polygon rasterization of a (clearance-grown) Region
         onto the coarse grid -- conservative (a polygon's bbox can exceed
         its own area for non-rectangular merged shapes) but fast, and
         erring toward "blocked" only costs a slightly less direct path,
         never a DRC violation."""
         blocked = bytearray(nx * ny)
-        clearance_ldbu = int(round(M2_MIN_SPACE / dbu))
+        clearance_ldbu = int(round(min_space_um / dbu))
         grown = region.sized(clearance_ldbu)
         for poly in grown.each():
             bb = poly.bbox()
@@ -404,7 +456,7 @@ def main():
                     blocked[base + gx] = 1
         return blocked
 
-    def _bfs_path(x0, y0, x1, y1, blocked):
+    def _bfs_path(x0, y0, x1, y1, blocked_m1, blocked_m2):
         from collections import deque
         gx0 = min(nx - 1, max(0, int(round(x0 / GRID_STEP))))
         gy0 = min(ny - 1, max(0, int(round(y0 / GRID_STEP))))
@@ -428,8 +480,32 @@ def main():
                 nxt = ngy * nx + ngx
                 if nxt in prev:
                     continue
-                if blocked[nxt] and nxt != goal:
-                    continue
+                if dgy == 0:
+                    # Horizontal move -- only legal while inside a channel
+                    # band (design_notes.md section 34.12: horizontal
+                    # progress must be on M1, only available there). Checked
+                    # against the M1 obstruction map.
+                    if not _channel_grid_row[cy]:
+                        continue
+                    if blocked_m1[nxt] and nxt != goal and cur != start:
+                        continue
+                else:
+                    # Vertical move -- always legal (crosses cell rows on
+                    # M2, no via needed against cell M1 since no electrical
+                    # overlap). Checked against the M2 obstruction map.
+                    # `cur != start` grants the pin's own anchor cell the
+                    # same one-hop exemption `goal` already gets: at
+                    # GRID_STEP=6.0um the coarse blocked-rasterization
+                    # routinely marks a pin's immediate neighbor cell as
+                    # blocked (nearby M2 within clearance of the pin's own
+                    # via, not a real corridor obstruction), and -- unlike
+                    # the pre-34.12 single-layer search -- there's no
+                    # sideways escape available outside a channel band, so
+                    # without this the search dead-ends at the very first
+                    # step almost every time (found empirically: reached=1
+                    # for ~100% of segments before this fix).
+                    if blocked_m2[nxt] and nxt != goal and cur != start:
+                        continue
                 prev[nxt] = cur
                 q.append(nxt)
         if goal not in prev:
@@ -455,8 +531,8 @@ def main():
         pts.append((x1, y1))
         return pts
 
-    def _find_path(x0, y0, x1, y1, blocked):
-        return _bfs_path(x0, y0, x1, y1, blocked)
+    def _find_path(x0, y0, x1, y1, blocked_m1, blocked_m2):
+        return _bfs_path(x0, y0, x1, y1, blocked_m1, blocked_m2)
 
     def _simplify_path(path):
         """Greedy 'string pulling' shortcut pass: replace as much of the
@@ -475,13 +551,26 @@ def main():
             advanced = False
             for j in range(n - 1, i, -1):
                 xb, yb = path[j]
-                if _vrun_clear(xa, ya, yb, half) and _hrun_clear(yb, xa, xb, half):
+                # Option A: vertical (xa,ya)->(xa,yb) then horizontal
+                # (xa,yb)->(xb,yb). The horizontal leg only exists (and only
+                # needs a channel-Y + M1 clearance check) if xb != xa.
+                if xb == xa:
+                    if _vrun_clear(xa, ya, yb, half_m2):
+                        result.append((xa, yb))
+                        i = j
+                        advanced = True
+                        break
+                elif _is_channel_y(yb) and _vrun_clear(xa, ya, yb, half_m2) and _hrun_clear(yb, xa, xb, half_m1):
                     result.append((xa, yb))
                     result.append((xb, yb))
                     i = j
                     advanced = True
                     break
-                if _hrun_clear(ya, xa, xb, half) and _vrun_clear(xb, ya, yb, half):
+                # Option B: horizontal (xa,ya)->(xb,ya) then vertical
+                # (xb,ya)->(xb,yb). Only meaningful (and only legal) if ya
+                # is itself inside a channel band.
+                if not advanced and xb != xa and _is_channel_y(ya) \
+                        and _hrun_clear(ya, xa, xb, half_m1) and _vrun_clear(xb, ya, yb, half_m2):
                     result.append((xb, ya))
                     result.append((xb, yb))
                     i = j
@@ -542,12 +631,13 @@ def main():
         for i in range(len(anchors) - 1):
             y0, x0, inst0, pin0, _p0, _pad0 = anchors[i]
             y1, x1, inst1, pin1, _p1, _pad1 = anchors[i + 1]
-            blocked = _rasterize_blocked(_existing_m2)
-            path = _find_path(x0, y0, x1, y1, blocked)
+            blocked_m2 = _rasterize_blocked(_existing_m2, M2_MIN_SPACE)
+            blocked_m1 = _rasterize_blocked(_existing_m1, M1_MIN_SPACE)
+            path = _find_path(x0, y0, x1, y1, blocked_m1, blocked_m2)
             seg_paths.append(path)
             if path is None:
                 print(f"WARNING: net {net}: segment {inst0}.{pin0} -> {inst1}.{pin1} "
-                      f"({x0:.2f},{y0:.2f})->({x1:.2f},{y1:.2f}): no clear M2 path found; "
+                      f"({x0:.2f},{y0:.2f})->({x1:.2f},{y1:.2f}): no clear M1/M2 path found; "
                       f"leaving this segment UNROUTED (open)")
                 unresolved_segments.append((net, inst0, pin0, inst1, pin1))
                 continue
@@ -589,9 +679,9 @@ def main():
             # (same "leave open, don't draw a colliding fallback"
             # convention as every other router in this project).
             path_clear = all(
-                (_vrun_clear(path[k][0], path[k][1], path[k + 1][1], half)
+                (_vrun_clear(path[k][0], path[k][1], path[k + 1][1], half_m2)
                  if path[k][0] == path[k + 1][0] else
-                 _hrun_clear(path[k][1], path[k][0], path[k + 1][0], half))
+                 (_is_channel_y(path[k][1]) and _hrun_clear(path[k][1], path[k][0], path[k + 1][0], half_m1)))
                 for k in range(len(path) - 1)
             )
             if not path_clear:
@@ -604,18 +694,34 @@ def main():
             for j in range(len(path) - 1):
                 (xa, ya), (xb, yb) = path[j], path[j + 1]
                 if xa == xb:
+                    # Vertical run -- always M2 (crosses cell rows).
                     ylo, yhi = (ya, yb) if ya <= yb else (yb, ya)
-                    top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(ylo - half),
-                                                      um(xa + M2_CORE_WIDTH / 2), um(yhi + half)))
+                    top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(ylo - half_m2),
+                                                      um(xa + M2_CORE_WIDTH / 2), um(yhi + half_m2)))
                 else:
+                    # Horizontal run -- always M1, only ever placed inside a
+                    # channel band (design_notes.md section 34.12).
                     xlo, xhi = (xa, xb) if xa <= xb else (xb, xa)
-                    top.shapes(m2_idx).insert(db.Box(um(xlo - half), um(ya - M2_CORE_WIDTH / 2),
-                                                      um(xhi + half), um(ya + M2_CORE_WIDTH / 2)))
+                    top.shapes(m1_idx).insert(db.Box(um(xlo - half_m1), um(ya - M1_CORE_WIDTH / 2),
+                                                      um(xhi + half_m1), um(ya + M1_CORE_WIDTH / 2)))
                 shapes_drawn += 1
+            # Every interior waypoint is now a genuine M1<->M2 layer
+            # transition (the path strictly alternates: vertical legs are
+            # M2, horizontal legs are M1) -- unlike the old single-layer
+            # version, a real via is needed here to make the electrical
+            # connection, with matching M1/M2 guarantee pads sized to the
+            # bare V1 enclosure minimum (M2_PAD_SIZE = VIA_SIZE+2.0, same
+            # pattern as the touched-pin offset fix in section 34.10).
+            for bx, by in path[1:-1]:
+                top.shapes(m1_idx).insert(pad(bx, by, M2_PAD_SIZE))
+                top.shapes(m2_idx).insert(pad(bx, by, M2_PAD_SIZE))
+                top.shapes(v1_idx).insert(pad(bx, by, VIA_SIZE))
+                shapes_drawn += 3
             label = db.Text(net, db.Trans(um((x0 + x1) / 2), um((y0 + y1) / 2)))
             label.size = um(1.5)
             top.shapes(mh_annot_idx).insert(label)
             _existing_m2 = db.Region(top.begin_shapes_rec_touching(m2_idx, _full_box)).merged()
+            _existing_m1 = db.Region(top.begin_shapes_rec_touching(m1_idx, _full_box)).merged()
 
         touched = set()
         for i, path in enumerate(seg_paths):
