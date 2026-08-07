@@ -30,7 +30,7 @@ STDCELL_DIR = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_5_stdcell"
 NET_FILE = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net.v"
 GDS_LIB = "/sessions/dreamy-ecstatic-heisenberg/mnt/klayout/libraries/TR-1um_STDCELL.gds"
 
-ROW_WIDTH_UM = 2075.0
+ROW_WIDTH_UM = 1700.0
 # Total cell width, measured on the real prBoundary (235/0) abutment box
 # (not the padded full cell.bbox()), is ~5621um -> minimum row count at
 # 1800um width is ceil(5621/1800) = 4. Since design_notes.md section 26,

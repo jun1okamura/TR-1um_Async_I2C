@@ -271,7 +271,13 @@ def main():
     it = top.begin_shapes_rec(annot_idx)
     while not it.at_end():
         s = it.shape()
-        if s.is_text() and s.text_string in needed_insts:
+        # Unlike before section 34.13, this scan is NOT restricted to
+        # needed_insts -- every placed instance (real cells AND filler
+        # cells alike) is annotated by gen_gds_placement.py, and the new
+        # inter-cell-FILL-gap computation below needs every REAL cell's
+        # absolute X across every row, not just the ones that happen to
+        # own a multi-hop net's pin.
+        if s.is_text():
             row_cx[s.text_string] = s.text_dtrans.disp.x
         it.next()
     missing = needed_insts - set(row_cx)
@@ -296,6 +302,59 @@ def main():
         else:
             ty = phys_row_index * ROW_HEIGHT + btop
         inst_origin[instname] = (tx, ty, mirrored, typ)
+
+    # ---------- per-row real-cell X extents + inter-cell FILL gaps ----------
+    # design_notes.md section 34.13: outside a channel band, M2 may run
+    # horizontally only as far as the FILL slot immediately next to a
+    # cell -- never directly over another real (non-filler) cell. Build
+    # every real cell's absolute [left,right] extent (X placement doesn't
+    # depend on the mirrored flag, only Y does -- same tx formula as
+    # inst_origin above) so the gaps between consecutive real cells in a
+    # row -- which the "always >=1 FILL between cells" placement policy
+    # guarantees are filler-only -- can be precomputed once, up front,
+    # for every row (not just rows touched by a multi-hop net's pins).
+    _row_of_phys = {v: k for k, v in phys_of_row.items()}
+
+    def _cell_x_extent(instname):
+        typ = inst_typ[instname]
+        bbox = get_pr_bbox(typ)
+        bleft = bbox.left * ldbu
+        width = bbox.width() * ldbu
+        cx = row_cx[instname]
+        tx = cx - (bleft + width / 2.0)
+        left = tx + bleft
+        return left, left + width
+
+    _gap_ranges_by_row = {}
+    for _ridx, _row in enumerate(rows):
+        _names = [n for n, t, w in _row if n in row_cx]
+        _extents = sorted((_cell_x_extent(n) for n in _names), key=lambda e: e[0])
+        _gaps = []
+        for (l0, r0), (l1, r1) in zip(_extents, _extents[1:]):
+            if r0 < l1 - 1e-6:
+                _gaps.append((r0, l1))
+        _gap_ranges_by_row[_ridx] = _gaps
+
+    def _row_at_y(y_um):
+        pidx = int(y_um // ROW_HEIGHT)
+        return _row_of_phys.get(pidx)
+
+    def _h_leg_layer(y_um, x0_um, x1_um):
+        """Which layer (if any) a horizontal run at y_um from x0_um to
+        x1_um is allowed to use. 'M1' inside a channel band (any X).
+        'M2' inside a single cell row's inter-cell FILL gap -- the WHOLE
+        span must stay within one gap, never crossing onto a real cell.
+        None if neither applies (not legal at all)."""
+        if _is_channel_y(y_um):
+            return 'M1'
+        ridx = _row_at_y(y_um)
+        if ridx is None:
+            return None
+        xlo, xhi = (x0_um, x1_um) if x0_um <= x1_um else (x1_um, x0_um)
+        for l, r in _gap_ranges_by_row.get(ridx, ()):
+            if l - 1e-6 <= xlo and xhi <= r + 1e-6:
+                return 'M2'
+        return None
 
     def abs_pin_anchor(instname, pinname):
         tx, ty, mirrored, typ = inst_origin[instname]
@@ -388,17 +447,25 @@ def main():
         return _box_clear_region(x_um - half_width_um, ylo, x_um + half_width_um, yhi,
                                   _existing_m2, M2_MIN_SPACE)
 
-    def _hrun_clear(y_um, x0_um, x1_um, half_width_um):
-        # Horizontal run -- always M1, and only ever attempted at a Y inside
-        # a channel band (design_notes.md section 34.12: "inter-cell
-        # connections must switch to M1 in the channel region" -- M2 is
-        # reserved for the vertical hops that cross through cell rows).
-        xlo, xhi = (x0_um, x1_um) if x0_um <= x1_um else (x1_um, x0_um)
-        return _box_clear_region(xlo, y_um - half_width_um, xhi, y_um + half_width_um,
-                                  _existing_m1, M1_MIN_SPACE)
-
     half_m2 = M2_PAD_SIZE / 2.0
     half_m1 = M1_CORE_WIDTH / 2.0 + 0.15  # same +0.15 check-vs-draw margin as M2 (PAD_SIZE/2=1.7 vs CORE_WIDTH/2=1.55)
+
+    def _hrun_clear(y_um, x0_um, x1_um):
+        # Horizontal run -- design_notes.md section 34.13: 'M1' if y is
+        # inside a channel band (any X -- inter-cell connections switch to
+        # M1 there, section 34.12), 'M2' if y is inside a cell row AND the
+        # WHOLE [x0,x1] span stays within a single inter-cell FILL gap
+        # (never crossing onto a real cell). Neither -> not legal at all.
+        layer = _h_leg_layer(y_um, x0_um, x1_um)
+        if layer is None:
+            return False
+        xlo, xhi = (x0_um, x1_um) if x0_um <= x1_um else (x1_um, x0_um)
+        if layer == 'M1':
+            return _box_clear_region(xlo, y_um - half_m1, xhi, y_um + half_m1,
+                                      _existing_m1, M1_MIN_SPACE)
+        else:
+            return _box_clear_region(xlo, y_um - half_m2, xhi, y_um + half_m2,
+                                      _existing_m2, M2_MIN_SPACE)
 
     # A simple 2-3 segment elbow/Z-shape (fixed-height horizontal runs at
     # each pin's own Y, single free-X vertical trunk) was tried first and
@@ -432,7 +499,28 @@ def main():
     core_h_i = core_h
     nx = int(ROW_WIDTH_UM // GRID_STEP) + 1
     ny = int(core_h_i // GRID_STEP) + 1
-    _channel_grid_row = [_is_channel_y(gy * GRID_STEP) for gy in range(ny)]
+
+    # design_notes.md section 34.13: per-grid-cell horizontal-move
+    # eligibility, precomputed once. 0 = forbidden (over a real cell,
+    # outside any channel/gap). 1 = M1 (inside a channel band -- any X).
+    # 2 = M2 (inside a cell row's inter-cell FILL gap at this X).
+    _h_layer_grid = bytearray(nx * ny)
+    for _gy in range(ny):
+        _y_um = _gy * GRID_STEP
+        _base = _gy * nx
+        if _is_channel_y(_y_um):
+            for _gx in range(nx):
+                _h_layer_grid[_base + _gx] = 1
+        else:
+            _ridx = _row_at_y(_y_um)
+            _gaps = _gap_ranges_by_row.get(_ridx, ()) if _ridx is not None else ()
+            if _gaps:
+                for _gx in range(nx):
+                    _x_um = _gx * GRID_STEP
+                    for _l, _r in _gaps:
+                        if _l - 1e-6 <= _x_um <= _r + 1e-6:
+                            _h_layer_grid[_base + _gx] = 2
+                            break
 
     def _rasterize_blocked(region, min_space_um):
         """Bbox-per-polygon rasterization of a (clearance-grown) Region
@@ -481,14 +569,23 @@ def main():
                 if nxt in prev:
                     continue
                 if dgy == 0:
-                    # Horizontal move -- only legal while inside a channel
-                    # band (design_notes.md section 34.12: horizontal
-                    # progress must be on M1, only available there). Checked
-                    # against the M1 obstruction map.
-                    if not _channel_grid_row[cy]:
+                    # Horizontal move -- design_notes.md section 34.13:
+                    # legal on M1 inside a channel band, or on M2 inside a
+                    # cell row's inter-cell FILL gap; forbidden elsewhere
+                    # (directly over a real cell). Both endpoints must
+                    # agree on the same layer/region -- moving from a gap
+                    # straight onto a real cell (or between two different
+                    # rows' gaps in one step) is not legal.
+                    cur_layer = _h_layer_grid[cur]
+                    nxt_layer = _h_layer_grid[nxt]
+                    if cur_layer == 0 or nxt_layer != cur_layer:
                         continue
-                    if blocked_m1[nxt] and nxt != goal and cur != start:
-                        continue
+                    if cur_layer == 1:
+                        if blocked_m1[nxt] and nxt != goal and cur != start:
+                            continue
+                    else:
+                        if blocked_m2[nxt] and nxt != goal and cur != start:
+                            continue
                 else:
                     # Vertical move -- always legal (crosses cell rows on
                     # M2, no via needed against cell M1 since no electrical
@@ -552,25 +649,27 @@ def main():
             for j in range(n - 1, i, -1):
                 xb, yb = path[j]
                 # Option A: vertical (xa,ya)->(xa,yb) then horizontal
-                # (xa,yb)->(xb,yb). The horizontal leg only exists (and only
-                # needs a channel-Y + M1 clearance check) if xb != xa.
+                # (xa,yb)->(xb,yb). The horizontal leg only exists if
+                # xb != xa -- _hrun_clear itself now determines whether
+                # that leg is legal at all (channel band -> M1, or a
+                # single inter-cell FILL gap -> M2, section 34.13) and
+                # picks the right layer/clearance check internally.
                 if xb == xa:
                     if _vrun_clear(xa, ya, yb, half_m2):
                         result.append((xa, yb))
                         i = j
                         advanced = True
                         break
-                elif _is_channel_y(yb) and _vrun_clear(xa, ya, yb, half_m2) and _hrun_clear(yb, xa, xb, half_m1):
+                elif _vrun_clear(xa, ya, yb, half_m2) and _hrun_clear(yb, xa, xb):
                     result.append((xa, yb))
                     result.append((xb, yb))
                     i = j
                     advanced = True
                     break
                 # Option B: horizontal (xa,ya)->(xb,ya) then vertical
-                # (xb,ya)->(xb,yb). Only meaningful (and only legal) if ya
-                # is itself inside a channel band.
-                if not advanced and xb != xa and _is_channel_y(ya) \
-                        and _hrun_clear(ya, xa, xb, half_m1) and _vrun_clear(xb, ya, yb, half_m2):
+                # (xb,ya)->(xb,yb).
+                if not advanced and xb != xa \
+                        and _hrun_clear(ya, xa, xb) and _vrun_clear(xb, ya, yb, half_m2):
                     result.append((xb, ya))
                     result.append((xb, yb))
                     i = j
@@ -681,7 +780,7 @@ def main():
             path_clear = all(
                 (_vrun_clear(path[k][0], path[k][1], path[k + 1][1], half_m2)
                  if path[k][0] == path[k + 1][0] else
-                 (_is_channel_y(path[k][1]) and _hrun_clear(path[k][1], path[k][0], path[k + 1][0], half_m1)))
+                 _hrun_clear(path[k][1], path[k][0], path[k + 1][0]))
                 for k in range(len(path) - 1)
             )
             if not path_clear:
@@ -691,28 +790,41 @@ def main():
                 seg_paths[-1] = None
                 unresolved_segments.append((net, inst0, pin0, inst1, pin1))
                 continue
+            # Each leg's actual layer -- vertical legs are always M2;
+            # horizontal legs are M1 (channel band) or M2 (inter-cell FILL
+            # gap, section 34.13), decided by _h_leg_layer. Tracked per-leg
+            # so only a genuine layer CHANGE between two consecutive legs
+            # gets a via -- e.g. a vertical-M2 leg meeting a horizontal-M2
+            # gap leg is already the same layer and needs no via, unlike a
+            # vertical-M2 leg meeting a horizontal-M1 channel leg.
+            leg_layers = []
             for j in range(len(path) - 1):
                 (xa, ya), (xb, yb) = path[j], path[j + 1]
                 if xa == xb:
                     # Vertical run -- always M2 (crosses cell rows).
+                    leg_layers.append('M2')
                     ylo, yhi = (ya, yb) if ya <= yb else (yb, ya)
                     top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(ylo - half_m2),
                                                       um(xa + M2_CORE_WIDTH / 2), um(yhi + half_m2)))
                 else:
-                    # Horizontal run -- always M1, only ever placed inside a
-                    # channel band (design_notes.md section 34.12).
+                    layer = _h_leg_layer(ya, xa, xb)
+                    leg_layers.append(layer)
                     xlo, xhi = (xa, xb) if xa <= xb else (xb, xa)
-                    top.shapes(m1_idx).insert(db.Box(um(xlo - half_m1), um(ya - M1_CORE_WIDTH / 2),
-                                                      um(xhi + half_m1), um(ya + M1_CORE_WIDTH / 2)))
+                    if layer == 'M1':
+                        top.shapes(m1_idx).insert(db.Box(um(xlo - half_m1), um(ya - M1_CORE_WIDTH / 2),
+                                                          um(xhi + half_m1), um(ya + M1_CORE_WIDTH / 2)))
+                    else:
+                        top.shapes(m2_idx).insert(db.Box(um(xlo - half_m2), um(ya - M2_CORE_WIDTH / 2),
+                                                          um(xhi + half_m2), um(ya + M2_CORE_WIDTH / 2)))
                 shapes_drawn += 1
-            # Every interior waypoint is now a genuine M1<->M2 layer
-            # transition (the path strictly alternates: vertical legs are
-            # M2, horizontal legs are M1) -- unlike the old single-layer
-            # version, a real via is needed here to make the electrical
-            # connection, with matching M1/M2 guarantee pads sized to the
-            # bare V1 enclosure minimum (M2_PAD_SIZE = VIA_SIZE+2.0, same
+            # Only a genuine M1<->M2 layer transition between two
+            # consecutive legs needs a via + guarantee pads (sized to the
+            # bare V1 enclosure minimum, M2_PAD_SIZE = VIA_SIZE+2.0, same
             # pattern as the touched-pin offset fix in section 34.10).
-            for bx, by in path[1:-1]:
+            for k in range(1, len(path) - 1):
+                if leg_layers[k - 1] == leg_layers[k]:
+                    continue
+                bx, by = path[k]
                 top.shapes(m1_idx).insert(pad(bx, by, M2_PAD_SIZE))
                 top.shapes(m2_idx).insert(pad(bx, by, M2_PAD_SIZE))
                 top.shapes(v1_idx).insert(pad(bx, by, VIA_SIZE))
