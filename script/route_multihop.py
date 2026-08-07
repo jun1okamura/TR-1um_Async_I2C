@@ -467,6 +467,21 @@ def main():
             return _box_clear_region(xlo, y_um - half_m2, xhi, y_um + half_m2,
                                       _existing_m2, M2_MIN_SPACE)
 
+    def _bend_pad_clear(x_um, y_um):
+        # A genuine M1<->M2 transition bend draws a M2_PAD_SIZE guarantee
+        # pad on BOTH layers (plus a V1 via) -- section 34.14 root-caused
+        # 5 new "M1 space<1.4" violations to exactly this pad landing too
+        # close (by as little as 0.2um) to already-existing M1, either a
+        # channel router's own 4.0um-wide trunk or a standard cell's own
+        # M1 pin shape, because this pad was drawn completely unchecked,
+        # unlike every other pad-drawing site in this project. Require
+        # BOTH layers clear before allowing a bend here at all.
+        half = M2_PAD_SIZE / 2.0
+        return (_box_clear_region(x_um - half, y_um - half, x_um + half, y_um + half,
+                                   _existing_m1, M1_MIN_SPACE)
+                and _box_clear_region(x_um - half, y_um - half, x_um + half, y_um + half,
+                                       _existing_m2, M2_MIN_SPACE))
+
     # A simple 2-3 segment elbow/Z-shape (fixed-height horizontal runs at
     # each pin's own Y, single free-X vertical trunk) was tried first and
     # failed 100% of the time: a full sweep confirmed that a handful of
@@ -777,12 +792,34 @@ def main():
             # as unrouted rather than draw geometry known to violate DRC
             # (same "leave open, don't draw a colliding fallback"
             # convention as every other router in this project).
-            path_clear = all(
+            # Each leg's actual layer -- vertical legs are always M2;
+            # horizontal legs are M1 (channel band) or M2 (inter-cell FILL
+            # gap, section 34.13), decided by _h_leg_layer. Tracked per-leg
+            # so only a genuine layer CHANGE between two consecutive legs
+            # needs a via -- e.g. a vertical-M2 leg meeting a horizontal-M2
+            # gap leg is already the same layer and needs no via, unlike a
+            # vertical-M2 leg meeting a horizontal-M1 channel leg.
+            leg_layers = [
+                'M2' if path[k][0] == path[k + 1][0] else _h_leg_layer(path[k][1], path[k][0], path[k + 1][0])
+                for k in range(len(path) - 1)
+            ]
+            legs_clear = all(
                 (_vrun_clear(path[k][0], path[k][1], path[k + 1][1], half_m2)
                  if path[k][0] == path[k + 1][0] else
                  _hrun_clear(path[k][1], path[k][0], path[k + 1][0]))
                 for k in range(len(path) - 1)
             )
+            # Every genuine layer-transition bend draws a real via + M1/M2
+            # guarantee pad (section 34.14) -- verify BEFORE drawing
+            # anything that each such bend point actually has room for
+            # that pad on both layers, same "leave open, don't draw
+            # colliding geometry" discipline as every other check here.
+            bends_clear = all(
+                _bend_pad_clear(path[k][0], path[k][1])
+                for k in range(1, len(path) - 1)
+                if leg_layers[k - 1] != leg_layers[k]
+            )
+            path_clear = legs_clear and bends_clear
             if not path_clear:
                 print(f"WARNING: net {net}: segment {inst0}.{pin0} -> {inst1}.{pin1}: "
                       f"grid path found but failed exact re-verification; "
@@ -790,25 +827,15 @@ def main():
                 seg_paths[-1] = None
                 unresolved_segments.append((net, inst0, pin0, inst1, pin1))
                 continue
-            # Each leg's actual layer -- vertical legs are always M2;
-            # horizontal legs are M1 (channel band) or M2 (inter-cell FILL
-            # gap, section 34.13), decided by _h_leg_layer. Tracked per-leg
-            # so only a genuine layer CHANGE between two consecutive legs
-            # gets a via -- e.g. a vertical-M2 leg meeting a horizontal-M2
-            # gap leg is already the same layer and needs no via, unlike a
-            # vertical-M2 leg meeting a horizontal-M1 channel leg.
-            leg_layers = []
             for j in range(len(path) - 1):
                 (xa, ya), (xb, yb) = path[j], path[j + 1]
                 if xa == xb:
                     # Vertical run -- always M2 (crosses cell rows).
-                    leg_layers.append('M2')
                     ylo, yhi = (ya, yb) if ya <= yb else (yb, ya)
                     top.shapes(m2_idx).insert(db.Box(um(xa - M2_CORE_WIDTH / 2), um(ylo - half_m2),
                                                       um(xa + M2_CORE_WIDTH / 2), um(yhi + half_m2)))
                 else:
-                    layer = _h_leg_layer(ya, xa, xb)
-                    leg_layers.append(layer)
+                    layer = leg_layers[j]
                     xlo, xhi = (xa, xb) if xa <= xb else (xb, xa)
                     if layer == 'M1':
                         top.shapes(m1_idx).insert(db.Box(um(xlo - half_m1), um(ya - M1_CORE_WIDTH / 2),
@@ -820,7 +847,8 @@ def main():
             # Only a genuine M1<->M2 layer transition between two
             # consecutive legs needs a via + guarantee pads (sized to the
             # bare V1 enclosure minimum, M2_PAD_SIZE = VIA_SIZE+2.0, same
-            # pattern as the touched-pin offset fix in section 34.10).
+            # pattern as the touched-pin offset fix in section 34.10;
+            # clearance for each already verified above via bends_clear).
             for k in range(1, len(path) - 1):
                 if leg_layers[k - 1] == leg_layers[k]:
                     continue

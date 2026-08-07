@@ -1,5 +1,5 @@
-open pins (net partially connected): 84
-unconnected-net pins (net fully disconnected): 115 across 36 nets
+open pins (net partially connected): 81
+unconnected-net pins (net fully disconnected): 120 across 37 nets
 
 === open pins (net has a main connected group; these pins are isolated from it) ===
 net _049_:
@@ -48,18 +48,14 @@ net _126_buf1:
   _475_.RST  (775.49,748.00)
   u__126_buf1.Y  (1016.75,902.00)
 net _127_buf0:
+  _447_.RST  (1396.99,308.00)
   _449_.RST  (1187.99,572.00)
-  _453_.RST  (1017.49,572.00)
-  _468_.RST  (49.49,572.00)
+  _451_.RST  (1226.49,308.00)
   u__127_buf0.Y  (368.51,143.00)
 net _192_:
   _418_.A  (214.50,302.50)
 net _196_:
   _443_.QB  (214.50,742.50)
-net addr_ok:
-  _395_.A  (1551.00,907.50)
-  _404_.A  (1540.00,1182.50)
-  _442_.B  (1302.00,907.50)
 net busy:
   u_lat_q.Y  (220.54,907.50)
 net scl_buf0:
@@ -221,6 +217,12 @@ net _137_:
   _356_.A  (1672.00,907.50)
   _400_.A  (1628.00,907.50)
   _430_.A  (1578.50,566.50)
+net addr_ok:
+  _395_.A  (1551.00,907.50)
+  _404_.A  (1540.00,1182.50)
+  _429_.A  (1540.01,566.50)
+  _442_.B  (1302.00,907.50)
+  _467_.Q  (1254.00,907.50)
 net phase[0]:
   _346_.A  (1006.50,1188.00)
   _347_.B  (170.51,1182.50)
