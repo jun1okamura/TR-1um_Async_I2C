@@ -85,7 +85,32 @@ PIN_META = {
         "QB":  ("OUTPUT", "SIGNAL"),
         **_PWR,
     },
+    "BUF_X1":   _gate_meta("A"),
 }
+
+# BUF_X2/X4/X16 are used by script/insert_buffers.py (section 18) as
+# drive-strength variants, but no separate physical layout has been drawn
+# for them -- the user is substituting BUF_X1's physical cell for all
+# three until real drive-strength variants are drawn. Each alias below
+# becomes its own LEF MACRO (so P&R can resolve the netlist's BUF_X2/X4/X16
+# instance types), but its geometry/pins are read from BUF_X1's GDS cell
+# and its FOREIGN statement points at BUF_X1 -- LEF's normal mechanism for
+# "this macro name maps to that physical GDS structure". PIN_META is
+# shared with BUF_X1 since the pin list is identical.
+#
+# NOTE: script/gen_liberty.py's COMB_CELLS table only defines BUF_X1 --
+# BUF_X2/X4/X16 have no .lib timing entry. LEF aliasing alone is not
+# enough for STA; either extend gen_liberty.py with matching entries (all
+# pointing at the same placeholder BUF_X1 timing, since there is only one
+# physical drive strength right now), or rename the netlist instances to
+# BUF_X1 -- see design_notes.md section 35 follow-up note.
+CELL_ALIASES = {
+    "BUF_X2":  "BUF_X1",
+    "BUF_X4":  "BUF_X1",
+    "BUF_X16": "BUF_X1",
+}
+for _alias in CELL_ALIASES:
+    PIN_META[_alias] = PIN_META["BUF_X1"]
 
 
 def texts(cell, layer_idx):
@@ -108,11 +133,15 @@ def fmt(v_dbu, dbu):
     return f"{v_dbu * dbu:.3f}".rstrip("0").rstrip(".") if "." in f"{v_dbu * dbu:.3f}" else f"{v_dbu * dbu:.3f}"
 
 
-def gen_macro_lef(layout, cellname, indent="    "):
+def gen_macro_lef(layout, cellname, indent="    ", gds_cellname=None):
+    # gds_cellname lets a LEF MACRO (the name the netlist/P&R sees) be
+    # backed by a *different* physical GDS cell (used for the BUF_X2/X4/X16
+    # -> BUF_X1 aliasing above). Defaults to cellname when there's no alias.
+    gds_cellname = gds_cellname or cellname
     dbu = layout.dbu
-    cell = layout.cell(cellname)
+    cell = layout.cell(gds_cellname)
     if cell is None:
-        raise SystemExit(f"cell {cellname} not found in {GDS_PATH}")
+        raise SystemExit(f"cell {gds_cellname} not found in {GDS_PATH}")
 
     pr = region(cell, layout.layer(*PR_LAYER))
     bbox = pr.bbox()
@@ -163,7 +192,7 @@ def gen_macro_lef(layout, cellname, indent="    "):
     lines = []
     lines.append(f"MACRO {cellname}")
     lines.append(f"{indent}CLASS CORE ;")
-    lines.append(f"{indent}FOREIGN {cellname} 0.0 0.0 ;")
+    lines.append(f"{indent}FOREIGN {gds_cellname} 0.0 0.0 ;")
     lines.append(f"{indent}ORIGIN 0.0 0.0 ;")
     lines.append(f"{indent}SIZE {w:.3f} BY {h:.3f} ;")
     lines.append(f"{indent}SITE {SITE_NAME} ;")
@@ -215,12 +244,13 @@ def main():
 
     body = []
     for cellname in PIN_META:
-        h = row_height_um(layout, cellname)
+        gds_cellname = CELL_ALIASES.get(cellname, cellname)
+        h = row_height_um(layout, gds_cellname)
         if abs(h - site_height_um) > 1e-6:
             raise SystemExit(
                 f"{cellname}: row height {h} != {site_height_um} (SITE height) -- "
                 f"all cells must share the same row-height grid (section 35.1)")
-        body.append(gen_macro_lef(layout, cellname))
+        body.append(gen_macro_lef(layout, cellname, gds_cellname=gds_cellname))
 
     header = f"""VERSION 5.8 ;
 BUSBITCHARS "[]" ;
