@@ -22,12 +22,14 @@ TOP_CELL_NAME = "i2c_slave_async_nrow_fm"
 # CH_HEIGHTS[i] = height (um) of channel i, i = 0..n_rows (n_rows+1 channels
 # total: channel 0 = bottom margin, channel n_rows = top margin, channel i
 # (1<=i<=n_rows-1) = shared channel between row(i-1) and row(i)).
-# From estimate_channel_tracks_nrow_fm.py (bottom=17, ch1=34, ch2=24,
-# ch3=26, top=19 tracks incl. +2 margin), with an extra ~30% safety margin
-# on top -- the 2-row trial's real router usage came in noticeably above
-# this style of estimate (spanning/adjacent-pair track cost is only
-# coarsely approximated here).
-CH_HEIGHTS = [90.0, 180.0, 128.0, 136.0, 100.0]
+# v3 update: route_channels_nrow_fm.py's via_1-based jog mechanism claims a
+# FRESH track per row-crossing (section 38 v3 docstring), which turned out
+# to need one for essentially every crossing pin (33 jogs / 33 crossings in
+# the first v3 run) -- channel2/channel3 overflowed their old budgets
+# (43/32 and 44/34 tracks used). Raised with ~25-30% headroom on top of
+# that measured usage (not the coarse estimate below, which doesn't model
+# jog overhead at all).
+CH_HEIGHTS = [90.0, 180.0, 220.0, 224.0, 100.0]
 
 
 def main():
