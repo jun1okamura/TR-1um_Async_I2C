@@ -75,25 +75,27 @@ def _gaps_needed(cell_queue, widths):
 
 def split_fill_evenly(total_tracks, n_parts):
     """Split total_tracks into n_parts chunks, each individually fillable
-    by fill_combo (0 or >=2 -- never exactly 1), as evenly as possible."""
+    by fill_combo (0 or >=2 -- never exactly 1), as evenly as possible.
+
+    PRIOR VERSION (buggy): built an n_parts-way even split first (which,
+    whenever total_tracks < 2*n_parts, necessarily contains several 1's),
+    then tried to fix each 1 by borrowing from a neighbor in a single
+    forward pass. That pass could shove a 1 rightward past an
+    already-visited index and never revisit it -- confirmed in practice
+    (3 tracks / 7 parts produced [0,2,0,0,0,1,0], and since fill_combo(1)
+    is None, that track silently vanished, shrinking the row's total
+    width by one track without any error). Fixed by only ever using as
+    many active (non-zero) slots as total_tracks can support at >=2
+    each -- constructed directly, so a 1 can never appear in the first
+    place instead of being patched up after the fact."""
     n_parts = max(1, n_parts)
-    base, rem = divmod(total_tracks, n_parts)
-    parts = [base + (1 if i < rem else 0) for i in range(n_parts)]
-    for i in range(len(parts)):
-        if parts[i] != 1:
-            continue
-        for j in list(range(i + 1, len(parts))) + list(range(i - 1, -1, -1)):
-            if parts[j] >= 3:
-                parts[j] -= 1
-                parts[i] += 1
-                break
-        else:
-            if i + 1 < len(parts):
-                parts[i + 1] += parts[i]
-                parts[i] = 0
-            elif i - 1 >= 0:
-                parts[i - 1] += parts[i]
-                parts[i] = 0
+    if total_tracks <= 0:
+        return [0] * n_parts
+    assert total_tracks != 1, "cannot split exactly 1 track across FILL2/3 combos"
+    active = max(1, min(n_parts, total_tracks // 2))
+    base, rem = divmod(total_tracks, active)
+    parts = [base + (1 if i < rem else 0) for i in range(active)]
+    parts += [0] * (n_parts - active)
     return parts
 
 
@@ -143,7 +145,12 @@ def pack_row_distributed(cell_queue, widths, n_gaps, insert_period=INSERT_PERIOD
                 typ, name, pins = seg[idx_ptr]
                 place(typ, name, widths[typ], pins)
                 idx_ptr += 1
-            for fill_typ in (fill_combo(part_tracks) or []):
+            combo = fill_combo(part_tracks)
+            assert combo is not None, (
+                f"fill_combo({part_tracks}) is None -- split_fill_evenly produced an "
+                f"unfillable part; this must never happen (see split_fill_evenly's "
+                f"docstring for the bug this guards against)")
+            for fill_typ in combo:
                 place(fill_typ, f"FILL_{fill_idx}", widths[fill_typ])
                 fill_idx += 1
 
