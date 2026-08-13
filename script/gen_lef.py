@@ -86,6 +86,12 @@ PIN_META = {
         **_PWR,
     },
     "BUF_X1":   _gate_meta("A"),
+    # TAP2/TAP3 (section 35.3/35.9): dedicated power-tap filler cells, no
+    # signal pins at all -- just VDD/GND, each with an M1 rail port plus
+    # M2 strap-endcap ports at top and bottom (see the PIN-grouping note
+    # in gen_macro_lef above).
+    "TAP2": dict(_PWR),
+    "TAP3": dict(_PWR),
 }
 
 # BUF_X2/X4/X16 are used by script/insert_buffers.py (section 18) as
@@ -198,14 +204,28 @@ def gen_macro_lef(layout, cellname, indent="    ", gds_cellname=None):
     lines.append(f"{indent}SITE {SITE_NAME} ;")
     lines.append("")
 
+    # Group fragments by pin name before emitting. A single logical pin can
+    # be made of several disjoint marker polygons -- e.g. TAP2/TAP3's VDD
+    # and GND each have one M1 rail rect *plus* one M2 strap-endcap rect at
+    # each end the strap is contacted from (see design_notes.md section
+    # 35.9: the M2 power strap runs the cell's full height so either an
+    # above or below channel can tap it, with an endcap PIN marker at both
+    # ends). LEF requires each PIN name to appear exactly once per MACRO;
+    # multiple physical areas belong inside that one PIN's PORT as
+    # additional LAYER/RECT groups, not as separate top-level PIN blocks.
+    by_name = {}
     for name, layer_name, x0, y0, x1, y1 in pins:
+        by_name.setdefault(name, []).append((layer_name, x0, y0, x1, y1))
+
+    for name, frags in by_name.items():
         direction, use = meta[name]
         lines.append(f"{indent}PIN {name}")
         lines.append(f"{indent*2}DIRECTION {direction} ;")
         lines.append(f"{indent*2}USE {use} ;")
         lines.append(f"{indent*2}PORT")
-        lines.append(f"{indent*3}LAYER {layer_name} ;")
-        lines.append(f"{indent*4}RECT {x0:.3f} {y0:.3f} {x1:.3f} {y1:.3f} ;")
+        for layer_name, x0, y0, x1, y1 in frags:
+            lines.append(f"{indent*3}LAYER {layer_name} ;")
+            lines.append(f"{indent*4}RECT {x0:.3f} {y0:.3f} {x1:.3f} {y1:.3f} ;")
         lines.append(f"{indent*2}END")
         lines.append(f"{indent}END {name}")
         lines.append("")
