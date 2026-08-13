@@ -72,6 +72,19 @@ PIN_META = {
     "NOR4":     _gate_meta("A", "B", "C", "D"),
     "OR4":      _gate_meta("A", "B", "C", "D"),
     "MUX2":     _gate_meta("A", "B", "S"),
+    # DFFR: async-reset D flip-flop (section 35.8's 20-transistor TG-based
+    # design). CK is the clock pin (marked USE CLOCK, not plain SIGNAL, so
+    # P&R/CTS tools recognize it); D/RST are ordinary signal inputs; Q/QB
+    # are both real outputs (QB is tapped directly from the slave latch's
+    # own NAND2, not a separately buffered copy -- see section 35.8).
+    "DFFR": {
+        "D":   ("INPUT",  "SIGNAL"),
+        "CK":  ("INPUT",  "CLOCK"),
+        "RST": ("INPUT",  "SIGNAL"),
+        "Q":   ("OUTPUT", "SIGNAL"),
+        "QB":  ("OUTPUT", "SIGNAL"),
+        **_PWR,
+    },
 }
 
 
