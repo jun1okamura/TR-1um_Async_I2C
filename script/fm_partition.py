@@ -140,6 +140,65 @@ def fm_bipartition(instances, widths, seed_part, balance_tol=0.05, max_passes=60
     return part
 
 
+def fm_multiway_partition(instances, widths, n_rows, balance_tol=0.05):
+    """Recursive-bisection multiway partition into n_rows (must be a power
+    of 2): split all instances into a top half / bottom half by
+    fm_bipartition, then recurse on each half independently. Returns
+    {name: row_index}, row_index in [0, n_rows).
+
+    Why recursive bisection instead of direct k-way FM: it naturally
+    matches the physical structure (each split is a literal top/bottom
+    cut, same as the row stack itself), and reuses fm_bipartition exactly
+    as-is -- no new algorithm, just applied twice for n_rows=4. The
+    downside is it can't undo an early bad cut, but two seed-guided FM
+    passes should track the physical top/bottom split well since the
+    seed already starts from a width-ordered guess at each level."""
+    assert n_rows >= 1 and (n_rows & (n_rows - 1)) == 0, "n_rows must be a power of 2"
+    if n_rows == 1:
+        return {name: 0 for _typ, name, _pins in instances}
+
+    total_w = sum(widths[typ] for typ, _n, _p in instances)
+    half = total_w / 2.0
+    seed = {}
+    acc = 0.0
+    for typ, name, _pins in instances:
+        seed[name] = 0 if acc < half else 1
+        acc += widths[typ]
+    part2 = fm_bipartition(instances, widths, seed, balance_tol=balance_tol)
+
+    group_a = [(t, n, p) for t, n, p in instances if part2[n] == 0]
+    group_b = [(t, n, p) for t, n, p in instances if part2[n] == 1]
+    sub_n = n_rows // 2
+    part_a = fm_multiway_partition(group_a, widths, sub_n, balance_tol)
+    part_b = fm_multiway_partition(group_b, widths, sub_n, balance_tol)
+
+    result = dict(part_a)
+    for name, r in part_b.items():
+        result[name] = r + sub_n
+    return result
+
+
+def classify_multirow_nets(instances, part, n_rows):
+    """-> {"row_only": n, "adjacent_pair": n, "spanning": n} net counts,
+    for reporting cut quality of a multiway partition. adjacent_pair =
+    touches exactly 2 rows that are next to each other; spanning = touches
+    3+ rows, or 2 rows that are NOT adjacent (needs pass-through routing)."""
+    from collections import defaultdict
+    net_rows = defaultdict(set)
+    for typ, name, pins in instances:
+        for _pname, net in pins.items():
+            net_rows[net].add(part[name])
+    counts = {"row_only": 0, "adjacent_pair": 0, "spanning": 0}
+    for net, rows in net_rows.items():
+        if len(rows) <= 1:
+            counts["row_only"] += 1
+        elif len(rows) == 2 and max(rows) - min(rows) == 1:
+            counts["adjacent_pair"] += 1
+        else:
+            counts["spanning"] += 1
+    return counts
+
+
 if __name__ == "__main__":
     macros = parse_lef()
     net = parse_netlist()
