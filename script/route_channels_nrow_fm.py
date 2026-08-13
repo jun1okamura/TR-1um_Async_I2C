@@ -95,6 +95,7 @@ TRACK0_OFFSET = 2.0
 LANE_MARGIN = 2.0
 M2_MIN_GAP = 2.0
 X_GRID = 5.4              # cell/pin grid pitch -- all jog/search X steps use this
+ROW_WIDTH_UM = 5.4 * 300  # 1620.0um -- must match gen_placement_nrow_fm.py TARGET_ROW_WIDTH_UM
 
 # must match gen_placement_gds_nrow_fm.py
 CH_HEIGHTS = [90.0, 180.0, 220.0, 224.0, 100.0]
@@ -139,6 +140,10 @@ def main():
     n_ch = n_rows + 1
     row_h = placement["row_height"]
     assert len(CH_HEIGHTS) == n_ch
+    for r, row_insts in enumerate(rows):
+        last = row_insts[-1]
+        w = round(last["x"] + last["width"], 3)
+        assert abs(w - ROW_WIDTH_UM) < 1e-6, f"row {r} width {w} != ROW_WIDTH_UM {ROW_WIDTH_UM}"
 
     row_y0 = []
     ch_y0 = []
@@ -360,12 +365,20 @@ def main():
                 return False
         return True
 
+    def in_bounds(x):
+        # keep the jog's via_1 pad (and its M2_MIN_GAP clearance) fully
+        # inside the row's real cell area -- the out-of-bounds bug (task
+        # #27) was find_row_clear_x wandering past X=0 / X=ROW_WIDTH_UM
+        # into "clear" space that isn't actually over any standard cell.
+        margin = PAD_HALF + M2_MIN_GAP
+        return margin <= x <= ROW_WIDTH_UM - margin
+
     def find_row_clear_x(row_k, start_x):
-        if not x_forbidden(start_x) and row_clear(row_k, start_x):
+        if in_bounds(start_x) and not x_forbidden(start_x) and row_clear(row_k, start_x):
             return start_x
         for s in range(1, ROW_X_TRIES + 1):
             for cand in (start_x + s * X_GRID, start_x - s * X_GRID):
-                if not x_forbidden(cand) and row_clear(row_k, cand):
+                if in_bounds(cand) and not x_forbidden(cand) and row_clear(row_k, cand):
                     return cand
         raise SystemExit(f"no clear X found for row {row_k} near x={start_x}")
 
