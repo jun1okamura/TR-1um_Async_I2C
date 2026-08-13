@@ -92,6 +92,13 @@ PIN_META = {
     # in gen_macro_lef above).
     "TAP2": dict(_PWR),
     "TAP3": dict(_PWR),
+    # FILL2/FILL3: wider filler cells (section 35 follow-up to the earlier
+    # advice that a single fixed FILL1 width leaves leftover gaps -- see
+    # the standard-cell-library critique discussion). VDD/GND M1 rail only,
+    # no M2/via at all (pure density/rail-continuity filler, same role as
+    # the existing FILL1).
+    "FILL2": dict(_PWR),
+    "FILL3": dict(_PWR),
 }
 
 # BUF_X2/X4/X16 are used by script/insert_buffers.py (section 18) as

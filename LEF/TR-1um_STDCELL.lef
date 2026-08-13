@@ -1169,6 +1169,74 @@ MACRO TAP3
     END
 
 END TAP3
+MACRO FILL2
+    CLASS CORE ;
+    FOREIGN FILL2 0.0 0.0 ;
+    ORIGIN 0.0 0.0 ;
+    SIZE 10.800 BY 64.800 ;
+    SITE CoreSite ;
+
+    PIN GND
+        DIRECTION INOUT ;
+        USE GROUND ;
+        PORT
+            LAYER M1 ;
+                RECT 0.000 1.100 10.800 3.700 ;
+        END
+    END GND
+
+    PIN VDD
+        DIRECTION INOUT ;
+        USE POWER ;
+        PORT
+            LAYER M1 ;
+                RECT 0.000 61.100 10.800 63.700 ;
+        END
+    END VDD
+
+    OBS
+        LAYER M1 ;
+            POLYGON 7.200 3.700  7.200 19.100  9.800 19.100  9.800 3.700 ;
+            POLYGON 1.000 3.700  1.000 36.100  3.600 36.100  3.600 3.700 ;
+            POLYGON 1.000 37.700  1.000 61.100  3.600 61.100  3.600 37.700 ;
+            POLYGON 7.200 20.700  7.200 61.100  9.800 61.100  9.800 20.700 ;
+    END
+
+END FILL2
+MACRO FILL3
+    CLASS CORE ;
+    FOREIGN FILL3 0.0 0.0 ;
+    ORIGIN 0.0 0.0 ;
+    SIZE 16.200 BY 64.800 ;
+    SITE CoreSite ;
+
+    PIN GND
+        DIRECTION INOUT ;
+        USE GROUND ;
+        PORT
+            LAYER M1 ;
+                RECT 0.000 1.100 16.200 3.700 ;
+        END
+    END GND
+
+    PIN VDD
+        DIRECTION INOUT ;
+        USE POWER ;
+        PORT
+            LAYER M1 ;
+                RECT 0.000 61.100 16.200 63.700 ;
+        END
+    END VDD
+
+    OBS
+        LAYER M1 ;
+            POLYGON 12.600 3.700  12.600 19.100  15.200 19.100  15.200 3.700 ;
+            POLYGON 1.000 3.700  1.000 36.100  3.600 36.100  3.600 3.700 ;
+            POLYGON 1.000 37.700  1.000 61.100  3.600 61.100  3.600 37.700 ;
+            POLYGON 12.600 20.700  12.600 61.100  15.200 61.100  15.200 20.700 ;
+    END
+
+END FILL3
 MACRO BUF_X2
     CLASS CORE ;
     FOREIGN BUF_X1 0.0 0.0 ;
