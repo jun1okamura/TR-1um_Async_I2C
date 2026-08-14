@@ -187,7 +187,20 @@ PER_ROW_GUARD_TRACKS = 1
 # jog/area cost stays small -- unlike applying the same live check to an
 # entire forced-overlap zone (176 jogs, +71% core height, design_notes
 # 38.8), which was measured too costly and left disabled.
-FORCE_JOG_NETS = {"txreg[1]", "_195_", "_055_", "_059_", "_172_", "_109_"}
+# v5.1 (design_notes 38.18, user request): bit_cnt[2] added -- the OTHER
+# side of the scl_n/bit_cnt[2] short (one of the 3 remaining "priority-net"
+# shorts). Root cause: Pass 0 (per-row-local trunk+spine) runs FIRST and
+# its crossings are live-checked only against what's drawn SO FAR -- it
+# can't know where a not-yet-drawn net's own pin will land. bit_cnt[2] is
+# a simple row-only net normally drawn with no live check at all in pass
+# 1, so its pin coincidentally landed on an X scl_n's spine already
+# claimed. Deferring its drawing to this same live-checked pass (which
+# runs after Pass 0, so Pass 0's geometry IS visible to it) resolves it
+# cleanly. NOTE: _115_/_080_ (the other 2 priority-net shorts, both vs.
+# _126_buf0/_126_buf1) were ALSO tried here and did NOT resolve cleanly --
+# their collision just relocated to a different net (whack-a-mole), so
+# they are deliberately left out; see design_notes 38.18.
+FORCE_JOG_NETS = {"txreg[1]", "_195_", "_055_", "_059_", "_172_", "_109_", "bit_cnt[2]"}
 
 
 def um(v, dbu):
