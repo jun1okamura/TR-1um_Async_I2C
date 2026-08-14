@@ -31,23 +31,62 @@ trial:
           after the TAP cell, before the first real cell) -- previously
           FILL only ever appeared *between or after* groups of real
           cells, never at a gap's leading edge.
-       b. Each row gets a small row-specific extra FILL block
-          (STAGGER_TRACKS[r]) at position 0 of its first gap, on top of
-          the normal even split. This is also aimed at the row-only/
-          adjacent-pair nets' known "case 2" short pattern (design_notes
-          37.4/37.6, 38.5): those nets are routed with a live-geometry-
-          unchecked straight stub, so two different rows' pins that
-          happen to land on the exact same absolute X (very common for,
-          e.g., "the first real cell after TAP_0", since every row's
-          packing starts from x=0 the same way) can short in a shared
-          channel. Giving each row a different amount of leading FILL
-          shifts its entire cell sequence by a row-specific offset,
-          which is a placement-only, no-live-routing-changes way to
-          break the systematic (not just coincidental) source of those
-          collisions. This does not chase every individual coincidence
-          (two rows could still align by chance elsewhere), so it is a
-          mitigation, not a proof of zero case-2 shorts -- verify via
-          the connectivity checker same as always.
+       b. (superseded by v3, point 4 below) Originally each row got a
+          small row-specific extra leading FILL block (STAGGER_TRACKS)
+          to shift its cell sequence by a row-specific offset. Kept
+          only in git history now.
+
+  4. (v3, user request) Left/right anchored packing by row parity, to
+     directly attack the "case 2" short pattern (design_notes 37.4,
+     38.5, 38.6) at its structural source rather than just perturbing
+     it. Root-caused with the user in this session: row-only/
+     adjacent-pair nets' straight M2 stubs are only ever checked for
+     collision against their OWN net/channel bookkeeping, never against
+     OTHER nets -- so two nets in DIFFERENT rows that happen to share
+     both an absolute pin X (common on a shared 5.4um grid with ~50%
+     occupancy) AND a channel (i.e. the rows are adjacent -- row r and
+     row r+1 always share channel r+1) will have their stubs physically
+     merge into one polygon, an invisible-to-DRC short.
+
+     Measured before this change: adjacent (channel-sharing) row pairs
+     had just as much X overlap as non-adjacent pairs (e.g. row0/row1:
+     99/124 shared X, vs row0/row2 non-adjacent: 104 shared X) --
+     confirming the overlap is essentially the statistical consequence
+     of independent ~50%-dense placements on a shared 300-slot grid,
+     not a systematic pattern the old leading-stagger could meaningfully
+     touch.
+
+     Fix: since TAP column X positions are fixed by construction
+     (TAP_INTERVAL_TRACKS is constant per gap regardless of gap
+     content), each of the N_GAPS gaps has a fixed [TAP_i, TAP_(i+1)]
+     span for every row. Within each gap, EVEN rows (0, 2, ...) now
+     pack all their real cells contiguously right after the leading TAP
+     ("anchor=left"), with all of that gap's slack FILL trailing before
+     the next TAP; ODD rows (1, 3, ...) do the mirror image
+     ("anchor=right"): slack FILL leads, real cells trail contiguously
+     up to the next TAP. Adjacent rows always differ in parity, so this
+     puts their real-cell (and hence real-pin) X ranges at opposite
+     ends of every gap. Per gap, if the two rows' real-cell demand in
+     that gap sums to <= TAP_INTERVAL_TRACKS, their real-pin X sets
+     become provably disjoint (no shared X is even possible, regardless
+     of internal cell content) -- eliminating case 2 between that row
+     pair for that gap entirely, not just reducing its odds. Where
+     combined demand exceeds the gap budget, only the excess is forced
+     to overlap in the middle.
+
+     This replaces the old `insert_period`-based multi-point FILL
+     distribution (spreading small FILL chunks every 6 real cells) with
+     one contiguous FILL block per gap -- trading the "FILL corridors
+     scattered throughout the row" property (§38.1) for the stronger
+     interval-separation guarantee, since the router's row-crossing
+     search (ROW_X_TRIES=200, i.e. +-1080um) has ample range to reach a
+     large contiguous FILL block instead of a nearby small one. The
+     user considered and declined per-cell X-mirroring as an additional
+     measure (design_notes 38.7): plain interval separation already
+     gives the provable guarantee for gaps where it applies, and
+     per-cell mirroring has a documented history of causing new,
+     unrelated DRC/short problems elsewhere (design_notes 22.6)
+     for no proven benefit on top of that guarantee.
 
 Output schema changes from the 2-row trial's {"row1":[...],"row2":[...]}
 to {"rows": [[...row0 items...], [...row1...], ...]} (a list, so N is not
@@ -64,7 +103,6 @@ from fm_partition import fm_multiway_partition, classify_multirow_nets  # noqa: 
 from gen_placement_2row import fill_combo, TRACK_UM, TAP_CELL  # noqa: E402
 
 N_ROWS = 4
-INSERT_PERIOD = 6  # real cells between FILL insertion points, within a gap
 OUT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/placement_nrow_fm.json"
 
 # Fixed row width target (user request): 5.4um x 300 grid steps.
@@ -79,10 +117,6 @@ TAP_WIDTH_UM = 10.8  # TAP2's own width
 TAP_INTERVAL_TRACKS = round((TARGET_ROW_WIDTH_UM - (N_GAPS + 1) * TAP_WIDTH_UM) / N_GAPS / TRACK_UM)
 assert abs(3 * TAP_WIDTH_UM + N_GAPS * TAP_INTERVAL_TRACKS * TRACK_UM - TARGET_ROW_WIDTH_UM) < 1e-6
 
-# Row-specific extra leading FILL (see point 3b above). 2 tracks/row is
-# an arbitrary but simple, distinct-per-row stagger (0, 2, 4, 6 tracks =
-# 0, 10.8, 21.6, 32.4um) -- each individually a legal fill_combo (>=2).
-STAGGER_TRACKS = [2 * r for r in range(N_ROWS)]
 
 
 def _gaps_needed(cell_queue, widths):
@@ -137,17 +171,21 @@ def split_fill_evenly(total_tracks, n_parts):
     return parts
 
 
-def pack_row_distributed(cell_queue, widths, n_gaps, stagger_tracks=0, insert_period=INSERT_PERIOD):
-    """Like gen_placement_2row.pack_row, but spreads each gap's FILL2/3
-    padding across several insertion points (every insert_period real
-    cells) instead of one block at the gap's end -- INCLUDING position 0
-    (right after the TAP cell, before the first real cell), so FILL can
-    land at a gap's leading edge too, not just between/after real cells.
+def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
+    """Pack a row's cells into n_gaps TAP-bounded gaps of fixed size
+    (TAP_INTERVAL_TRACKS each, so TAP column X positions are identical
+    for every row regardless of content -- required for the TAP power
+    mesh straps in route_channels_nrow_fm.py to line up across rows).
 
-    stagger_tracks: extra FILL tracks reserved and placed at position 0
-    of the row's very first gap only, on top of the normal even split --
-    a row-specific constant shift of this row's entire cell sequence
-    (see this module's docstring, point 3b)."""
+    anchor="left": within every gap, real cells are packed contiguously
+    right after the leading TAP cell; all of that gap's slack FILL2/3
+    trails afterward, right up to the next TAP.
+    anchor="right": the mirror image -- slack FILL leads (right after
+    the TAP), real cells are packed contiguously up to the next TAP.
+
+    Calling this with anchor="left" for even rows and anchor="right"
+    for odd rows (see main()) is this module's v3 case-2 mitigation --
+    see the module docstring, point 4, for the full rationale."""
     placed = []
     x = 0.0
     tap_idx = 0
@@ -169,15 +207,22 @@ def pack_row_distributed(cell_queue, widths, n_gaps, stagger_tracks=0, insert_pe
             place(fill_typ, f"FILL_{fill_idx}", widths[fill_typ])
             fill_idx += 1
 
-    for gap_i in range(n_gaps):
-        place(TAP_CELL, f"TAP_{tap_idx}", widths[TAP_CELL])
-        tap_idx += 1
-
+    # Consume the cell queue gap-by-gap, but in an order that fills the
+    # anchor-preferred END OF THE WHOLE ROW first: left anchor consumes
+    # gap 0, 1, ... (as before); right anchor consumes the LAST gap
+    # first, spilling overflow backward into earlier gaps. Consuming
+    # gap-by-gap in row order (0, 1, ...) regardless of anchor would
+    # always saturate gap 0 first (whichever end it's anchored to
+    # within that gap) and leave gap 1+ nearly empty -- wasting the
+    # far gap's capacity and defeating the whole-row interval
+    # separation this is meant to provide (measured: this bug made the
+    # first version of this function barely move the needle -- see
+    # design_notes 38.7).
+    gap_order = list(range(n_gaps)) if anchor == "left" else list(reversed(range(n_gaps)))
+    gap_segs = {}
+    gap_slack = {}
+    for gap_i in gap_order:
         gap_tracks_left = TAP_INTERVAL_TRACKS
-        if gap_i == 0 and stagger_tracks > 0:
-            place_fill_combo(stagger_tracks)
-            gap_tracks_left -= stagger_tracks
-
         seg = []
         while cell_queue:
             typ, name, pins = cell_queue[0]
@@ -192,23 +237,24 @@ def pack_row_distributed(cell_queue, widths, n_gaps, stagger_tracks=0, insert_pe
             cell_queue.appendleft((typ, name, pins))
             gap_tracks_left += round(widths[typ] / TRACK_UM)
 
-        insertion_positions = sorted(set(
-            [0] + list(range(insert_period, len(seg), insert_period)) + ([len(seg)] if seg else [])
-        ))
-        parts = split_fill_evenly(gap_tracks_left, len(insertion_positions))
+        gap_segs[gap_i] = seg
+        gap_slack[gap_i] = gap_tracks_left
 
-        idx_ptr = 0
-        for pos, part_tracks in zip(insertion_positions, parts):
-            while idx_ptr < pos:
-                typ, name, pins = seg[idx_ptr]
-                place(typ, name, widths[typ], pins)
-                idx_ptr += 1
-            if part_tracks > 0:
-                place_fill_combo(part_tracks)
-        while idx_ptr < len(seg):
-            typ, name, pins = seg[idx_ptr]
+    # Emit in true left-to-right gap order regardless of consumption
+    # order above, so TAP columns stay at their fixed row-wide X
+    # positions.
+    for gap_i in range(n_gaps):
+        place(TAP_CELL, f"TAP_{tap_idx}", widths[TAP_CELL])
+        tap_idx += 1
+
+        seg = gap_segs[gap_i]
+        slack = gap_slack[gap_i]
+        if anchor == "right" and slack > 0:
+            place_fill_combo(slack)
+        for typ, name, pins in seg:
             place(typ, name, widths[typ], pins)
-            idx_ptr += 1
+        if anchor == "left" and slack > 0:
+            place_fill_combo(slack)
 
     place(TAP_CELL, f"TAP_{tap_idx}", widths[TAP_CELL])
     assert not cell_queue, f"{len(cell_queue)} cells left over -- n_gaps too small for this row"
@@ -246,7 +292,8 @@ def main():
     placed_rows = []
     widths_out = []
     for r, cells in enumerate(rows_cells):
-        placed, w = pack_row_distributed(deque(cells), widths, N_GAPS, stagger_tracks=STAGGER_TRACKS[r])
+        anchor = "left" if r % 2 == 0 else "right"
+        placed, w = pack_row_distributed(deque(cells), widths, N_GAPS, anchor=anchor)
         placed_rows.append(placed)
         widths_out.append(w)
     for r, w in enumerate(widths_out):
