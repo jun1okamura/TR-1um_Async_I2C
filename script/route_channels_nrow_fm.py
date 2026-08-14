@@ -343,6 +343,17 @@ def main():
     # local segment of net `net` always lives in channel R (directly
     # below row R) on its own dedicated+guarded track -- same isolation
     # idea as high-FO above, just keyed by (net, row) instead of net.
+    #
+    # Placement within the channel (user request): these dedicated
+    # tracks sit at the END nearest row R itself -- i.e. the HIGHEST
+    # track index in channel R (track_y = ch_y0[R] + TRACK0_OFFSET +
+    # idx*TRACK_PITCH increases with idx, and row R sits directly ABOVE
+    # channel R, so higher idx = physically closer to row R). Normal
+    # Pass-1 lane allocation (row_below_upper/row_above_lower/
+    # adjacent_pair/spanning) fills everything below that, right after
+    # the high-FO block. This also shortens the per-row-local nets' own
+    # M2 stubs (their pins all live in row R, right next to this end of
+    # the channel).
     per_row_rows_of = {}  # net -> sorted [row, ...] with pins
     for net, pads in per_row_local_pads.items():
         per_row_rows_of[net] = sorted({p[0] for p in pads})
@@ -350,24 +361,25 @@ def main():
     for net, rows_with_pins in per_row_rows_of.items():
         for r in rows_with_pins:
             per_row_nets_in_channel[r].append(net)
-
-    per_row_track_of = {}  # (net, row) -> track idx within channel=row
-    per_row_block_size = [0] * n_ch
-    for c in range(n_ch):
-        idx = high_fo_block_size[c]
-        for net in per_row_nets_in_channel[c]:
-            per_row_track_of[(net, c)] = idx
-            idx += 1 + PER_ROW_GUARD_TRACKS
-        per_row_block_size[c] = idx
+    per_row_block_size = [
+        (len(per_row_nets_in_channel[c]) * (1 + PER_ROW_GUARD_TRACKS) + PER_ROW_GUARD_TRACKS)
+        if per_row_nets_in_channel[c] else 0
+        for c in range(n_ch)
+    ]  # +1 extra leading guard to separate this block from the normal
+       # lanes below it (the block's own internal/trailing guards only
+       # protect nets from each other and used to double as the boundary
+       # guard back when this block sat at the front -- now that it's
+       # last, the boundary is on the OTHER side and needs its own gap)
     if per_row_local_pads:
         n_segments = sum(len(v) for v in per_row_rows_of.values())
         print(f"per-row local trunk nets: {len(per_row_local_pads)} ({sorted(per_row_local_pads)}), "
-              f"{n_segments} row-local segment(s) total, dedicated guarded tracks, routed first")
+              f"{n_segments} row-local segment(s) total, dedicated guarded tracks nearest each row, routed first")
 
     block_offset = [dict() for _ in range(n_ch)]
     channel_total = [0] * n_ch
+    per_row_track_of = {}  # (net, row) -> track idx within channel=row
     for c in range(n_ch):
-        off = per_row_block_size[c]
+        off = high_fo_block_size[c]
         if c - 1 >= 0:
             _a, n = row_only_lanes[c - 1]
             n_bottom = -(-n // 2)
@@ -385,6 +397,11 @@ def main():
         _a, n = span_lanes[c]
         block_offset[c]["spanning"] = (off,)
         off += n
+        idx = off + PER_ROW_GUARD_TRACKS  # leading guard before this block
+        for net in per_row_nets_in_channel[c]:
+            per_row_track_of[(net, c)] = idx
+            idx += 1 + PER_ROW_GUARD_TRACKS
+        off = off + per_row_block_size[c]
         channel_total[c] = off
 
     print("channel primary track usage:", channel_total)
