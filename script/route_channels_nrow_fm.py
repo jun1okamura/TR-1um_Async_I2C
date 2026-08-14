@@ -649,12 +649,23 @@ def main():
         """Does (x, [y_lo,y_hi]) physically overlap (both X AND Y) some
         OTHER net's OWN planned stub? Order-independent (uses static
         data only) -- see static_stub_spans above for why this matters
-        beyond what a live-geometry check alone can catch."""
+        beyond what a live-geometry check alone can catch.
+
+        v6 (design_notes 38.24): the threshold (PAD_HALF*2+M2_MIN_GAP)
+        is exactly the X-distance at which two nets' M2 would sit at
+        precisely the legal minimum gap -- legal, not a violation. A
+        pin exactly one 5.4um placement-grid step away lands EXACTLY on
+        this boundary, and floating-point arithmetic on real pin
+        coordinates can put `abs(sx-x)` a hair under the nominal 5.4
+        (e.g. 5.399999999999977), tripping the strict `<` and rejecting
+        a perfectly legal candidate. EPS gives the boundary itself back
+        to the legal (not-blocked) side."""
+        EPS = 1e-6
         ylo, yhi = min(y_lo, y_hi), max(y_lo, y_hi)
         for net, sx, sy_lo, sy_hi in static_stub_spans:
             if net == exclude_net:
                 continue
-            if abs(sx - x) >= PAD_HALF * 2 + M2_MIN_GAP:
+            if abs(sx - x) >= PAD_HALF * 2 + M2_MIN_GAP - EPS:
                 continue
             if sy_hi < ylo or sy_lo > yhi:
                 continue
@@ -781,9 +792,24 @@ def main():
     # X range (not a whole channel), unlike the full live-collision-
     # search attempt in section 37.6 that didn't scale.
     def channel_clear(x, y_lo, y_hi):
+        # v6 (design_notes 38.24): the probe already carries the full
+        # legal clearance margin (PAD_HALF + M2_MIN_GAP) baked into its
+        # size, so a candidate at EXACTLY the legal minimum spacing away
+        # from existing M2 makes the probe's edge exactly touch that
+        # M2's edge (zero-area intersection) -- legal (DRC requires "at
+        # least" the minimum, and exactly-minimum satisfies that), but
+        # `_touching` treats boundary-touching as a collision, over-
+        # rejecting it. `_overlapping` requires a true positive-area
+        # overlap (i.e. actually closer than the legal minimum), which
+        # is what a real violation looks like. Confirmed via live
+        # instrumentation (design_notes 38.24) that this was the
+        # blocker for _423_.B's departure leg: two immediate row-
+        # neighbor pins sit at exactly the legal 2.0um minimum gap
+        # (overlap_cnt=0, touch_cnt>0) for the entire short-departure
+        # range below bit_cnt[1]'s real stub.
         probe = db.Box(um(x - PAD_HALF - M2_MIN_GAP, dbu), um(min(y_lo, y_hi), dbu),
                         um(x + PAD_HALF + M2_MIN_GAP, dbu), um(max(y_lo, y_hi), dbu))
-        if db.Region(top.begin_shapes_rec_touching(m2_idx, probe)).count() > 0:
+        if db.Region(top.begin_shapes_rec_overlapping(m2_idx, probe)).count() > 0:
             return False
         # v6 (design_notes 38.21/38.22): also reject a box that overlaps
         # another net's OWN statically-known planned stub, even if that

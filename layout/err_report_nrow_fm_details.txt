@@ -1,9 +1,4 @@
-=== 1 SHORT(S) SUSPECTED ===
-net=bit_cnt[1] _369_.A (1104.30,260.80)  <->  net=_055_ _415_.B (218.70,268.80)
-    overlap: X=[368.20,371.60] Y=[259.90,261.70]  (layer (253, 3) in GDS)
-    overlap: X=[919.00,922.40] Y=[267.90,269.70]  (layer (253, 3) in GDS)
-    overlap: X=[492.40,495.80] Y=[259.90,309.70]  (layer (253, 3) in GDS)
-    overlap: X=[1102.60,1106.00] Y=[375.90,377.70]  (layer (253, 3) in GDS)
+=== 0 SHORT(S) SUSPECTED ===
 
 === 31 UNCONNECTED (stub) PIN(S) ===
 -- 7 are top-level ports (expected, not a defect) --
@@ -40,25 +35,9 @@ net=bit_cnt[1] _369_.A (1104.30,260.80)  <->  net=_055_ _415_.B (218.70,268.80)
   OPEN net=_199_ _462_.QB (1606.50,1038.00)
   OPEN net=sda_oe_r _468_.Q (688.50,444.40)
 
-=== 21 FORCE_JOG_NETS JOG(S) INSERTED ===
-  net=txreg[1] _392_.B  orig_x=234.90 -> clear_x=251.10  jog_y=160.80  channel=1  (layer (253, 4) in GDS)
-  net=txreg[1] _422_.C  orig_x=477.90 -> clear_x=461.70  jog_y=292.80  channel=1  (layer (253, 4) in GDS)
-  net=bit_cnt[2] _465_.Q  orig_x=558.90 -> clear_x=596.70  jog_y=412.80  channel=1  (layer (253, 4) in GDS)
-  net=bit_cnt[2] _338_.A  orig_x=861.30 -> clear_x=839.70  jog_y=408.80  channel=1  (layer (253, 4) in GDS)
-  net=bit_cnt[2] _359_.A  orig_x=936.90 -> clear_x=904.50  jog_y=404.80  channel=1  (layer (253, 4) in GDS)
-  net=bit_cnt[2] _384_.B  orig_x=1217.70 -> clear_x=1066.50  jog_y=400.80  channel=1  (layer (253, 4) in GDS)
-  net=_059_ _362_.Y  orig_x=996.30 -> clear_x=1007.10  jog_y=396.80  channel=1  (layer (253, 4) in GDS)
-  net=_059_ _371_.B  orig_x=1125.90 -> clear_x=1055.70  jog_y=392.80  channel=1  (layer (253, 4) in GDS)
-  net=_059_ _436_.B  orig_x=1466.10 -> clear_x=1444.50  jog_y=388.80  channel=1  (layer (253, 4) in GDS)
-  net=_172_ _340_.A  orig_x=13.50 -> clear_x=121.50  jog_y=717.60  channel=2  (layer (253, 4) in GDS)
-  net=_172_ _446_.QB  orig_x=1007.10 -> clear_x=1017.90  jog_y=713.60  channel=2  (layer (253, 4) in GDS)
-  net=_195_ _475_.QB  orig_x=769.50 -> clear_x=747.90  jog_y=1006.40  channel=3  (layer (253, 4) in GDS)
-  net=_195_ _440_.A  orig_x=1098.90 -> clear_x=1158.30  jog_y=1002.40  channel=3  (layer (253, 4) in GDS)
-  net=_055_ _415_.B  orig_x=369.90 -> clear_x=218.70  jog_y=300.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _423_.B  orig_x=494.10 -> clear_x=542.70  jog_y=308.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _358_.Y  orig_x=931.50 -> clear_x=980.10  jog_y=384.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _359_.B  orig_x=942.30 -> clear_x=1017.90  jog_y=380.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _366_.A  orig_x=1050.30 -> clear_x=1044.90  jog_y=412.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _371_.A  orig_x=1120.50 -> clear_x=1034.10  jog_y=376.80  channel=1  (layer (253, 4) in GDS)
-  net=_109_ _442_.A  orig_x=710.10 -> clear_x=823.50  jog_y=790.40  channel=3  (layer (253, 4) in GDS)
-  net=_109_ _441_.Y  orig_x=1152.90 -> clear_x=1185.30  jog_y=998.40  channel=3  (layer (253, 4) in GDS)
+=== 5 FORCE_JOG_NETS JOG(S) INSERTED ===
+  net=_059_ _362_.Y  orig_x=996.30 -> clear_x=1001.70  jog_y=412.80  channel=1  (layer (253, 4) in GDS)
+  net=_172_ _446_.QB  orig_x=1007.10 -> clear_x=1012.50  jog_y=717.60  channel=2  (layer (253, 4) in GDS)
+  net=_195_ _475_.QB  orig_x=769.50 -> clear_x=753.30  jog_y=1006.40  channel=3  (layer (253, 4) in GDS)
+  net=_055_ _423_.B  orig_x=494.10 -> clear_x=483.30  jog_y=160.80  channel=1  (layer (253, 4) in GDS)
+  net=_109_ _442_.A  orig_x=710.10 -> clear_x=715.50  jog_y=790.40  channel=3  (layer (253, 4) in GDS)
