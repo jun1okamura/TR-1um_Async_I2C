@@ -95,7 +95,7 @@ def rebuild_net_pins():
     row_h = placement["row_height"]
     n_rows = len(rows)
     # CH_HEIGHTS must match route_channels_nrow_fm.py / gen_placement_gds_nrow_fm.py
-    CH_HEIGHTS = [90.0, 180.0, 220.0, 224.0, 100.0]
+    CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
     assert len(CH_HEIGHTS) == n_rows + 1
     row_y0 = []
     y = 0.0

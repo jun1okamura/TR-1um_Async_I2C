@@ -501,7 +501,7 @@ def main():
         channel_used_x[(channel, idx)].extend(cxs)
         return idx
 
-    def claim_track_near(channel, cxs, target_idx):
+    def claim_track_near(channel, cxs, target_idx, extra_ok=None):
         """Like claim_track, but searches OUTWARD from `target_idx` for
         the CLOSEST unclaimed, collision-clear index, instead of always
         taking the next never-before-tried global index. `next_free_idx`
@@ -515,7 +515,18 @@ def main():
         collision zone the jog was meant to escape. Searching near a
         caller-supplied target Y (typically right at the channel
         boundary the jog starts from) keeps that departure leg as short
-        as physically possible instead."""
+        as physically possible instead.
+
+        `extra_ok(idx, jog_y) -> bool`, if given (design_notes 38.22),
+        is an additional validity test run BEFORE a candidate is
+        claimed -- e.g. verifying the departure leg itself is clear, not
+        just the via-proximity check `collides` already does. Candidates
+        that fail it are skipped (left unclaimed) and the search keeps
+        going outward, instead of blindly taking the first via-proximity-
+        clear track and drawing an unchecked departure leg through it
+        (the root cause traced in 38.21: the fallback path's own escape
+        segment could re-cross the very obstruction it was meant to
+        avoid)."""
         idx_hi = int((CH_HEIGHTS[channel] - 2 * TRACK0_OFFSET) // TRACK_PITCH)
         for offset in range(0, idx_hi + 1):
             candidates = {target_idx + offset, target_idx - offset} if offset else {target_idx}
@@ -526,10 +537,15 @@ def main():
                     continue
                 if collides(channel, idx, cxs):
                     continue
+                if extra_ok is not None:
+                    jog_y = ch_y0[channel] + TRACK0_OFFSET + idx * TRACK_PITCH
+                    if not extra_ok(idx, jog_y):
+                        continue
                 channel_used_x[(channel, idx)].extend(cxs)
                 next_free_idx[channel] = max(next_free_idx[channel], idx + 1)
                 return idx
-        raise SystemExit(f"claim_track_near: no free track near idx={target_idx} in channel {channel}")
+        raise SystemExit(f"claim_track_near: no free track near idx={target_idx} in channel {channel} "
+                          f"satisfying all checks")
 
     non_spanning_nets = {}
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in row_only_net_row})
@@ -586,6 +602,49 @@ def main():
         final_track[net] = (channel, track_y)
     if bumped:
         print(f"case-1 collisions resolved by moving {bumped} net(s) to a spare track")
+
+    # v6 (design_notes 38.21/38.22, user-directed rework): every row-only/
+    # adjacent-pair/high-FO net's OWN per-pin stub path (x, y-range from
+    # the pin's own edge to its net's track_y) is fully known from
+    # net_pins + final_track above -- STATIC, placement/assignment data,
+    # available before any drawing (mirrors exactly the direction/
+    # pin_edge_y logic pass 1's drawing loop uses below). This lets a
+    # net drawn EARLY (e.g. pass 0's per-row-local nets) know about the
+    # planned geometry of a net drawn LATER (e.g. pass 1's row-only
+    # nets) -- something no live-geometry-only check can ever do,
+    # because the later net's M2 simply doesn't exist in the GDS yet at
+    # the time the earlier net is drawn. This is what actually caused
+    # the _115_/_080_ shorts (design_notes 38.18/38.21): pass 0 draws
+    # _126_buf0/_126_buf1 before pass 1 draws _115_/_080_, so no amount
+    # of live-only checking inside pass 0 could ever see the collision
+    # coming. Deliberately stub-level (not "does this cross some other
+    # net's track_y at all", which over-blocks -- bare M1/M2 crossing
+    # without a via is not a real short, only two nets' OWN M2 stubs
+    # actually overlapping in both X and Y is).
+    static_stub_spans = []  # [(net, x, y_lo, y_hi), ...]
+    for net, pads in list(non_spanning_nets.items()) + list(high_fo_nets.items()):
+        channel, track_y = final_track[net]
+        for row, _inst, _pname, x0, y0, x1, y1 in pads:
+            cx = (x0 + x1) / 2.0
+            direction = -1 if channel <= row else 1
+            pin_edge_y = y0 if direction == -1 else y1
+            static_stub_spans.append((net, cx, min(pin_edge_y, track_y), max(pin_edge_y, track_y)))
+
+    def static_stub_blocked(x, y_lo, y_hi, exclude_net):
+        """Does (x, [y_lo,y_hi]) physically overlap (both X AND Y) some
+        OTHER net's OWN planned stub? Order-independent (uses static
+        data only) -- see static_stub_spans above for why this matters
+        beyond what a live-geometry check alone can catch."""
+        ylo, yhi = min(y_lo, y_hi), max(y_lo, y_hi)
+        for net, sx, sy_lo, sy_hi in static_stub_spans:
+            if net == exclude_net:
+                continue
+            if abs(sx - x) >= PAD_HALF * 2 + M2_MIN_GAP:
+                continue
+            if sy_hi < ylo or sy_lo > yhi:
+                continue
+            return True
+        return False
 
     # --- open the layout + register the TR-1um PCell library ---
     layout = db.Layout()
@@ -661,6 +720,12 @@ def main():
         for ux in row_signal_used[row_k]:
             if abs(ux - x) < M1_PAD_SIZE + M2_MIN_GAP:
                 return False
+        # v6 (design_notes 38.21/38.22): also reject an X whose column
+        # this row's Y-range physically overlaps another net's OWN
+        # statically-known planned stub -- order-independent, catches
+        # what live geometry alone can't yet see (see static_stub_spans).
+        if static_stub_blocked(x, y0, y1, cur_net[0]):
+            return False
         return True
 
     def in_bounds(x):
@@ -671,12 +736,22 @@ def main():
         margin = PAD_HALF + M2_MIN_GAP
         return margin <= x <= ROW_WIDTH_UM - margin
 
-    def find_row_clear_x(row_k, start_x):
-        if in_bounds(start_x) and not x_forbidden(start_x) and row_clear(row_k, start_x):
+    def find_row_clear_x(row_k, start_x, extra_ok=None):
+        """`extra_ok(x) -> bool`, if given (design_notes 38.22), is an
+        additional requirement checked alongside row_clear -- e.g. that
+        the SAME x also lands cleanly in the channel this row-crossing
+        is about to enter. Folding that requirement into the search
+        itself (instead of discovering the problem only after cur_x is
+        already fixed, at the channel-landing step) means the search can
+        simply pick a DIFFERENT x up front, rather than needing a jog to
+        escape an x it already committed to."""
+        def ok(x):
+            return in_bounds(x) and not x_forbidden(x) and row_clear(row_k, x) and (extra_ok is None or extra_ok(x))
+        if ok(start_x):
             return start_x
         for s in range(1, ROW_X_TRIES + 1):
             for cand in (start_x + s * X_GRID, start_x - s * X_GRID):
-                if in_bounds(cand) and not x_forbidden(cand) and row_clear(row_k, cand):
+                if ok(cand):
                     return cand
         raise SystemExit(f"no clear X found for row {row_k} near x={start_x}")
 
@@ -693,7 +768,15 @@ def main():
     def channel_clear(x, y_lo, y_hi):
         probe = db.Box(um(x - PAD_HALF - M2_MIN_GAP, dbu), um(min(y_lo, y_hi), dbu),
                         um(x + PAD_HALF + M2_MIN_GAP, dbu), um(max(y_lo, y_hi), dbu))
-        return db.Region(top.begin_shapes_rec_touching(m2_idx, probe)).count() == 0
+        if db.Region(top.begin_shapes_rec_touching(m2_idx, probe)).count() > 0:
+            return False
+        # v6 (design_notes 38.21/38.22): also reject a box that overlaps
+        # another net's OWN statically-known planned stub, even if that
+        # net hasn't been drawn yet (order-independent -- see
+        # static_stub_spans above).
+        if static_stub_blocked(x, y_lo, y_hi, cur_net[0]):
+            return False
+        return True
 
     def find_channel_clear_x(start_x, y_lo, y_hi):
         if in_bounds(start_x) and not x_forbidden(start_x) and channel_clear(start_x, y_lo, y_hi):
@@ -714,13 +797,54 @@ def main():
         `near_y`, if given, claims the jog's track via claim_track_near
         (search outward from near_y) instead of claim_track (always the
         next never-before-tried global index) -- keeps the departure leg
-        at `cur_x` (never live-checked) as short as possible, which
-        matters for a pass running late in the pipeline where "next
-        free" can otherwise be far from where the jog starts (v4.5,
-        design_notes 38.16)."""
+        at `cur_x` short, which matters for a pass running late in the
+        pipeline where "next free" can otherwise be far from where the
+        jog starts (v4.5, design_notes 38.16).
+
+        v6 (design_notes 38.21/38.22): a short departure leg is not
+        enough on its own -- 38.21 found the fallback path could still
+        land far from `near_y` when the channel is packed near the
+        entry point, and the departure leg (drawn at the ORIGINAL,
+        possibly-colliding `cur_x`) was never actually checked, so it
+        could cross right back through the very obstruction the jog was
+        meant to escape. When `near_y` is given, every candidate track
+        claim_track_near considers is now ALSO required to have a clear
+        departure leg (live geometry + static stubs, via channel_clear)
+        before being claimed -- so the search keeps walking outward
+        until it finds a track that is both free AND safely reachable,
+        instead of taking the nearest free track unconditionally."""
         if near_y is not None:
+            EPS = 0.01  # nudge the end touching cur_y off cur_y itself --
+                        # cur_y is usually the exact edge of a segment
+                        # this same net just drew, so an unnudged probe
+                        # self-collides with its own geometry (same fix
+                        # as the 38.17 channel-landing self-collision bug)
+
+            def departure_leg_ok(idx, jog_y):
+                if abs(jog_y - cur_y) < 1e-6:
+                    return True  # no departure leg to check (same track)
+                if jog_y > cur_y:
+                    y_lo, y_hi = cur_y + EPS, jog_y
+                else:
+                    y_lo, y_hi = jog_y, cur_y - EPS
+                return channel_clear(cur_x, y_lo, y_hi)
+
             target_idx = int(round((near_y - TRACK0_OFFSET - ch_y0[jog_channel]) / TRACK_PITCH))
-            jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx)
+            try:
+                jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx, extra_ok=departure_leg_ok)
+            except SystemExit:
+                # No track in jog_channel has a fully clear departure
+                # leg -- genuinely nowhere to escape to by moving in Y
+                # alone at this x (the obstruction spans the channel).
+                # Fall back to the pre-38.22 behavior (nearest free
+                # track, unchecked departure leg) rather than aborting
+                # the whole run -- this is a real capacity limit, not a
+                # bug, and should surface as a connectivity-check short
+                # to investigate rather than a hard crash.
+                print(f"  WARNING: draw_jog could not find a track near y={near_y} in "
+                      f"channel {jog_channel} with a clear departure leg at x={cur_x} -- "
+                      f"falling back to nearest free track (may leave a short to investigate)")
+                jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx)
         else:
             jog_idx = claim_track(jog_channel, [cur_x, clear_x])
         jog_y = ch_y0[jog_channel] + TRACK0_OFFSET + jog_idx * TRACK_PITCH
@@ -808,8 +932,28 @@ def main():
             place_via(cur_x, cur_y)  # tap into row r_lo's trunk
             for row_k in range(r_lo, r_hi):
                 track_y_k = per_row_track_y[(net, row_k)]
-                # 2a. cross row_k's own cell body (live-checked, unchanged)
-                clear_x = find_row_clear_x(row_k, cur_x)
+                row_ylo, row_yhi = row_y0[row_k], row_y0[row_k] + row_h
+                next_channel = row_k + 1
+                target_y = per_row_track_y[(net, next_channel)]
+
+                # v6 (design_notes 38.22): require the row-crossing X to
+                # ALSO land cleanly in the next channel (live geometry +
+                # other nets' static stubs), folded into the SEARCH
+                # itself -- so a bad X is never chosen in the first
+                # place, rather than discovering the problem only after
+                # cur_x is already fixed. 38.21 found the fallback jog
+                # could not fix this after the fact: its own departure
+                # leg can only move in Y at the SAME, already-blocked X,
+                # so if the obstruction spans the whole channel there, no
+                # jog_y can ever get around it -- only picking a
+                # different X up front can.
+                def landing_ok(x, _row_yhi=row_yhi, _target_y=target_y):
+                    y_lo, y_hi = min(_row_yhi, _target_y), max(_row_yhi, _target_y)
+                    return channel_clear(x, y_lo, y_hi)
+
+                # 2a. cross row_k's own cell body (live-checked, now also
+                # required to land cleanly on the other side)
+                clear_x = find_row_clear_x(row_k, cur_x, extra_ok=landing_ok)
                 row_signal_used[row_k].append(clear_x)
                 if abs(clear_x - cur_x) > 1e-6:
                     per_row_spine_jog_count += 1
@@ -817,7 +961,6 @@ def main():
                     place_via(clear_x, track_y_k)
                     log_spine_event(net, "row_jog", row_k, clear_x, track_y_k, track_y_k)
                     cur_x = clear_x
-                row_ylo, row_yhi = row_y0[row_k], row_y0[row_k] + row_h
                 m2_box(cur_x - PAD_HALF, min(cur_y, row_ylo), cur_x + PAD_HALF, max(cur_y, row_ylo))
                 m2_box(cur_x - PAD_HALF, min(row_ylo, row_yhi), cur_x + PAD_HALF, max(row_ylo, row_yhi))
                 log_spine_event(net, "row_crossing", row_k, cur_x, cur_y, row_yhi)
@@ -826,9 +969,12 @@ def main():
                 # 2b. land on the next channel's fixed track for this net
                 # -- live-checked (design_notes 38.17); X-only jog on the
                 # SAME track if blocked, generic-track fallback only if
-                # even that is blocked (should not trigger today).
-                next_channel = row_k + 1
-                target_y = per_row_track_y[(net, next_channel)]
+                # even that is blocked. Since landing_ok above already
+                # required clear_x to satisfy this exact check, this
+                # should now always succeed -- the re-check + jog
+                # fallback stays as a defensive safety net for edge
+                # cases landing_ok's static data doesn't model.
+                #
                 # nudge the probe's near edge off cur_y by a tiny epsilon --
                 # cur_y is exactly the top edge of the row_crossing M2 box
                 # this net just drew at this same cur_x, so an unnudged
