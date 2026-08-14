@@ -372,13 +372,25 @@ def main():
     # the high-FO block. This also shortens the per-row-local nets' own
     # M2 stubs (their pins all live in row R, right next to this end of
     # the channel).
-    per_row_rows_of = {}  # net -> sorted [row, ...] with pins
+    per_row_rows_of = {}  # net -> sorted [row, ...] WITH PINS
     for net, pads in per_row_local_pads.items():
         per_row_rows_of[net] = sorted({p[0] for p in pads})
-    per_row_nets_in_channel = defaultdict(list)  # channel(=row) -> [net, ...]
+    # v5 (design_notes 38.17, user request): reserve a dedicated track in
+    # EVERY channel the net's spine crosses, not just the channels where
+    # it has its own pins -- covers the (currently unused but structurally
+    # possible) case of a net whose rows-with-pins have a gap, so the
+    # spine-crossing rewrite below always has its own pre-reserved track
+    # to land on instead of ever falling back to the shared claim_track
+    # pool. For all 5 nets in the current design rows_with_pins happens to
+    # already be contiguous, so this is a no-op today (channels_of ==
+    # rows_of) but keeps the mechanism correct if that ever changes.
+    per_row_channels_of = {}  # net -> sorted [channel, ...] with pins OR pass-through
     for net, rows_with_pins in per_row_rows_of.items():
-        for r in rows_with_pins:
-            per_row_nets_in_channel[r].append(net)
+        per_row_channels_of[net] = list(range(min(rows_with_pins), max(rows_with_pins) + 1))
+    per_row_nets_in_channel = defaultdict(list)  # channel -> [net, ...]
+    for net, channels in per_row_channels_of.items():
+        for c in channels:
+            per_row_nets_in_channel[c].append(net)
     per_row_block_size = [
         (len(per_row_nets_in_channel[c]) * (1 + PER_ROW_GUARD_TRACKS) + PER_ROW_GUARD_TRACKS)
         if per_row_nets_in_channel[c] else 0
@@ -540,14 +552,13 @@ def main():
     # v4 point 8: per-row local trunk track_y for each (net, row) segment
     # of PER_ROW_LOCAL_NETS -- also claimed/registered first, same
     # priority-routing rationale as high-FO nets above.
-    per_row_track_y = {}  # (net, row) -> track_y  (channel == row)
-    for net, rows_with_pins in per_row_rows_of.items():
-        for r in rows_with_pins:
-            channel = r
-            idx = per_row_track_of[(net, r)]
-            cxs = [(x0 + x1) / 2.0 for row, _i, _p, x0, y0, x1, y1 in per_row_local_pads[net] if row == r]
+    per_row_track_y = {}  # (net, channel) -> track_y, one per channel in per_row_channels_of[net]
+    for net, channels in per_row_channels_of.items():
+        for channel in channels:
+            idx = per_row_track_of[(net, channel)]
+            cxs = [(x0 + x1) / 2.0 for row, _i, _p, x0, y0, x1, y1 in per_row_local_pads[net] if row == channel]
             channel_used_x[(channel, idx)].extend(cxs)
-            per_row_track_y[(net, r)] = ch_y0[channel] + TRACK0_OFFSET + idx * TRACK_PITCH
+            per_row_track_y[(net, channel)] = ch_y0[channel] + TRACK0_OFFSET + idx * TRACK_PITCH
 
     bumped = 0
     for net, pads in list(non_spanning_nets.items()) + list(spanning_nets.items()):
@@ -713,9 +724,39 @@ def main():
     jog_count = 0
     overlap_jog_count = 0
     per_row_spine_jog_count = 0
+    per_row_spine_events = []  # v5 (design_notes 38.17): per-step log of
+                                # every segment Pass 0's spine mechanism
+                                # draws, tagged by step name, for a
+                                # dedicated step-by-step ERR-layer
+                                # highlight (user request).
 
-    # pass 0 (v4 point 8): per-row local trunks for PER_ROW_LOCAL_NETS,
-    # tied together by a spine. Drawn FIRST, before everything else.
+    def log_spine_event(net, step, channel, x, y0, y1):
+        per_row_spine_events.append({
+            "net": net, "step": step, "channel": channel,
+            "x": x, "y0": min(y0, y1), "y1": max(y0, y1),
+        })
+
+    # pass 0 (v4 point 8, v5 design_notes 38.17): per-row local trunks for
+    # PER_ROW_LOCAL_NETS, tied together by a spine. Drawn FIRST, before
+    # everything else.
+    #
+    # v5 rewrite (user finding, design_notes 38.17): the OLD spine
+    # mechanism reused the generic claim_track/draw_jog machinery for
+    # EVERY channel it crossed, even channels where this exact net
+    # already owned a dedicated per-row-local track (per_row_track_y) --
+    # burning 1-2 extra tracks per crossing for no reason (observed:
+    # _126_buf0 alone used 2-3 tracks in a channel where it only needed
+    # 1). Now every channel the spine crosses (r_lo..r_hi inclusive,
+    # per_row_channels_of above) reuses that net's OWN fixed track --
+    # crossing a row body still uses the existing live-checked
+    # find_row_clear_x (row_clear), and landing on the next channel's
+    # fixed track is now ALSO live-checked (channel_clear) before being
+    # drawn, with an X-only jog (still on the SAME fixed track) if
+    # needed -- falling back to the old claim_track-based draw_jog
+    # (near_y-anchored, design_notes 38.16) only in the rare case that
+    # direct landing is blocked (not observed in the current design, kept
+    # as a safety net rather than risk drawing through a known
+    # obstruction).
     for net in sorted(per_row_local_pads):
         cur_net[0] = net
         pads = per_row_local_pads[net]
@@ -723,6 +764,7 @@ def main():
         by_row = defaultdict(list)
         for row, inst_name, pname, x0, y0, x1, y1 in pads:
             by_row[row].append((inst_name, pname, x0, y0, x1, y1))
+        half_w = M1_TRUNK_WIDTH / 2.0
 
         # 1. draw each row's own local trunk + connect that row's pins to
         # it (channel == row, i.e. directly below that row -- always
@@ -742,46 +784,83 @@ def main():
                 pin_map.setdefault(net, []).append((inst_name, pname, cx, track_y))
             xmin, xmax = min(pin_cxs), max(pin_cxs)
             row_trunk_xmin[r] = xmin
-            half_w = M1_TRUNK_WIDTH / 2.0
             m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
+            log_spine_event(net, "trunk", channel, (xmin + xmax) / 2.0, track_y, track_y)
 
-        # 2. spine: connect consecutive rows' local trunks, reusing the
-        # exact row-crossing machinery spanning nets use (find_row_clear_x
-        # + draw_jog), tapping into each trunk via an extra via_1 at its
-        # own xmin.
+        # 2. spine: connect consecutive rows' local trunks, staying on
+        # this net's own fixed track in every channel crossed.
         for r_lo, r_hi in zip(rows_with_pins, rows_with_pins[1:]):
             cur_x = row_trunk_xmin[r_lo]
             cur_y = per_row_track_y[(net, r_lo)]
             place_via(cur_x, cur_y)  # tap into row r_lo's trunk
             for row_k in range(r_lo, r_hi):
+                track_y_k = per_row_track_y[(net, row_k)]
+                # 2a. cross row_k's own cell body (live-checked, unchanged)
                 clear_x = find_row_clear_x(row_k, cur_x)
                 row_signal_used[row_k].append(clear_x)
                 if abs(clear_x - cur_x) > 1e-6:
                     per_row_spine_jog_count += 1
-                    jog_channel = row_k
-                    cur_x, cur_y = draw_jog(cur_x, cur_y, clear_x, jog_channel)
+                    m1_box(min(cur_x, clear_x), track_y_k - half_w, max(cur_x, clear_x), track_y_k + half_w)
+                    place_via(clear_x, track_y_k)
+                    log_spine_event(net, "row_jog", row_k, clear_x, track_y_k, track_y_k)
+                    cur_x = clear_x
                 row_ylo, row_yhi = row_y0[row_k], row_y0[row_k] + row_h
                 m2_box(cur_x - PAD_HALF, min(cur_y, row_ylo), cur_x + PAD_HALF, max(cur_y, row_ylo))
                 m2_box(cur_x - PAD_HALF, min(row_ylo, row_yhi), cur_x + PAD_HALF, max(row_ylo, row_yhi))
+                log_spine_event(net, "row_crossing", row_k, cur_x, cur_y, row_yhi)
                 cur_y = row_yhi
+
+                # 2b. land on the next channel's fixed track for this net
+                # -- live-checked (design_notes 38.17); X-only jog on the
+                # SAME track if blocked, generic-track fallback only if
+                # even that is blocked (should not trigger today).
+                next_channel = row_k + 1
+                target_y = per_row_track_y[(net, next_channel)]
+                # nudge the probe's near edge off cur_y by a tiny epsilon --
+                # cur_y is exactly the top edge of the row_crossing M2 box
+                # this net just drew at this same cur_x, so an unnudged
+                # probe starting exactly there "touches" (self-collides
+                # with) its own just-drawn geometry and channel_clear would
+                # always report blocked (observed: 9/9 landings falsely
+                # flagged before this fix).
+                EPS = 0.01
+                y_lo, y_hi = min(cur_y, target_y), max(cur_y, target_y)
+                check_y_lo = y_lo + EPS
+                if channel_clear(cur_x, check_y_lo, y_hi):
+                    m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
+                    place_via(cur_x, target_y)
+                    log_spine_event(net, "channel_land", next_channel, cur_x, cur_y, target_y)
+                else:
+                    per_row_spine_jog_count += 1
+                    clear_x2 = find_channel_clear_x(cur_x, check_y_lo, y_hi)
+                    cur_x, cur_y = draw_jog(cur_x, cur_y, clear_x2, next_channel, near_y=cur_y)
+                    log_spine_event(net, "channel_jog_fallback", next_channel, cur_x, cur_y, cur_y)
+                    if abs(cur_y - target_y) > 1e-6:
+                        m2_box(cur_x - PAD_HALF, min(cur_y, target_y), cur_x + PAD_HALF, max(cur_y, target_y))
+                    place_via(cur_x, target_y)
+                cur_y = target_y
             # force the final X to land exactly on row r_hi's own trunk
-            # tap point (row_trunk_xmin[r_hi]) -- `cur_x` after crossing
-            # the intervening rows is just "some clear X", not
-            # necessarily anywhere near row r_hi's trunk's own X-range,
-            # so without this the via below can miss the trunk entirely
-            # and leave the net split into disconnected pieces (a real
-            # bug found via connectivity check: NET SPLIT on all 4 of
-            # these nets before this fix).
+            # tap point (row_trunk_xmin[r_hi]) -- cur_y is already
+            # target_y == per_row_track_y[(net, r_hi)] at this point, so
+            # this is an X-only jog on that SAME (already-owned) track,
+            # not a new one. Without this the via below can miss the
+            # trunk box entirely and split the net (real bug found via
+            # connectivity check pre-v4 fix).
             target_x = row_trunk_xmin[r_hi]
             if abs(target_x - cur_x) > 1e-6:
                 per_row_spine_jog_count += 1
-                cur_x, cur_y = draw_jog(cur_x, cur_y, target_x, r_hi)
-            target_track_y = per_row_track_y[(net, r_hi)]
-            m2_box(cur_x - PAD_HALF, min(cur_y, target_track_y), cur_x + PAD_HALF, max(cur_y, target_track_y))
-            place_via(cur_x, target_track_y)  # tap into row r_hi's trunk
+                m1_box(min(cur_x, target_x), cur_y - half_w, max(cur_x, target_x), cur_y + half_w)
+                log_spine_event(net, "trunk_land_jog", r_hi, target_x, cur_y, cur_y)
+                cur_x = target_x
+            place_via(cur_x, cur_y)  # tap into row r_hi's trunk
         routed += 1
     if per_row_local_pads:
         print(f"per-row local trunk spine jogs: {per_row_spine_jog_count}")
+
+    per_row_spine_events_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/per_row_spine_events_nrow_fm.json"
+    with open(per_row_spine_events_path, "w") as f:
+        json.dump(per_row_spine_events, f, indent=1)
+    print(f"wrote {per_row_spine_events_path} ({len(per_row_spine_events)} spine event(s))")
 
     # pass 1: row-only / adjacent-pair nets, via_1 only. High-FO nets are
     # drawn FIRST (v4, "priority routing" -- their dedicated guarded
