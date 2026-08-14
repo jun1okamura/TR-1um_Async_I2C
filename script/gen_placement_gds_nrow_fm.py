@@ -29,7 +29,7 @@ TOP_CELL_NAME = "i2c_slave_async_nrow_fm"
 # (43/32 and 44/34 tracks used). Raised with ~25-30% headroom on top of
 # that measured usage (not the coarse estimate below, which doesn't model
 # jog overhead at all).
-CH_HEIGHTS = [90.0, 180.0, 220.0, 224.0, 100.0]
+CH_HEIGHTS = [90.0, 200.0, 220.0, 224.0, 100.0]
 
 
 def main():

@@ -64,6 +64,57 @@ v2's docstring (single-X-then-two-live-geometry-search redesigns, 70
 shorts down to 25 with a 10-pin fallback) is preserved in git history
 for anyone who needs the earlier reasoning; this version replaces that
 mechanism entirely rather than layering on top of it.
+
+v4 CHANGES (design_notes 38.8 -- two targeted mitigations for the
+remaining case-2 shorts, root-caused in 38.6/38.7):
+
+  6. High-fan-out (HIGH_FO_THRESHOLD=8 pins) row-only/adjacent-pair
+     nets (clock/reset buffer trees like scl_buf0/scl_buf1/_126_buf0
+     etc., with 13-15 pins spread across most of the row) draw an M1
+     trunk spanning most of the channel's width. `collides()`/
+     `claim_track()` only ever check DISCRETE registered pin X's
+     against nearby tracks -- they have no notion of the CONTINUOUS
+     span a wide trunk will occupy, so an unrelated net on an adjacent
+     track index, with a via nowhere near any of the wide net's actual
+     pins, can still end up geometrically under that trunk. Fix: these
+     nets are pulled out of the normal lane-assignment pools and given
+     a dedicated track region at the front of their channel, processed
+     (assigned + drawn) FIRST, with HIGH_FO_GUARD_TRACKS empty tracks
+     left on either side of each one -- a purely Y-based separation
+     that makes the trunk's X-span irrelevant (no other net's via can
+     be within reach regardless of X).
+
+  7. Row-only/adjacent-pair nets whose pin X falls inside a channel's
+     "forced overlap zone" -- the X range where the two rows sharing
+     that channel both have real-cell content, which left/right row
+     anchoring (38.7) cannot avoid once combined demand exceeds the
+     available separation budget -- now get a live collision check
+     (`channel_clear`, querying the M1/M2 already drawn in that exact
+     box) before their straight stub is drawn. On a hit, a jog (same
+     via_1+M1+via_1 pattern as spanning-net jogs, on a freshly claimed
+     track) reroutes around it. This reuses the exact mechanism §37.6
+     found did not scale when applied to an ENTIRE channel's stub
+     population; scoping it to just the (typically narrow) forced-
+     overlap zone keeps the checked population small.
+
+  8. (design_notes 38.8, user proposal, REPLACES point 6 for these
+     four specific nets) scl_buf0/scl_buf1/_126_buf0/_126_buf1 -- the
+     highest fan-out nets, whose pins spread across MULTIPLE rows --
+     no longer get ONE shared M1 trunk in ONE channel at all. Instead
+     each row that has pins of one of these nets gets its OWN LOCAL M1
+     trunk in the channel directly below that row (never shared with
+     any other row), on its own dedicated+guarded track (same Y-based
+     isolation idea as point 6, just scoped per (net, row) instead of
+     per net). These per-row local trunks are then tied into one
+     electrical net by a vertical M2 "spine" that reuses the exact
+     row-crossing machinery spanning nets already use (`find_row_clear_x`
+     + `draw_jog`) to hop from one row's local trunk, through any
+     intervening rows, to the next row's local trunk. This trades
+     routing redundancy (a real wire per row instead of one shared
+     wire) for a structural guarantee: since no two rows ever share a
+     track for these nets, the cross-row collision these nets were
+     causing (design_notes 38.8's traced 12-net blob) cannot occur for
+     them by construction, independent of trunk width.
 """
 import json
 import sys
@@ -98,7 +149,7 @@ X_GRID = 5.4              # cell/pin grid pitch -- all jog/search X steps use th
 ROW_WIDTH_UM = 5.4 * 300  # 1620.0um -- must match gen_placement_nrow_fm.py TARGET_ROW_WIDTH_UM
 
 # must match gen_placement_gds_nrow_fm.py
-CH_HEIGHTS = [90.0, 180.0, 220.0, 224.0, 100.0]
+CH_HEIGHTS = [90.0, 200.0, 220.0, 224.0, 100.0]
 
 ROW_X_TRIES = 200  # +-5.4 .. +-1080um for a row-crossing clear-X search
 
@@ -106,6 +157,19 @@ TAP_CELL = "TAP2"
 TAP_GND_X_LOCAL = (1.0, 4.4)
 TAP_VDD_X_LOCAL = (6.4, 9.8)
 TAP_STRAP_MARGIN = 1.1   # TAP2's own M2 strap starts/stops this far inside the cell edge
+
+# v4 (design_notes 38.8)
+HIGH_FO_THRESHOLD = 8    # pin count at/above which a row-only/adjacent-pair
+                          # net is treated as "high fan-out" (dedicated track)
+HIGH_FO_GUARD_TRACKS = 1  # empty tracks left on either side of a high-FO net's
+                           # own track -- Y-only separation, makes its wide
+                           # trunk's X-span irrelevant to collides()
+
+# v4 point 8 (user proposal): these highest-fanout, multi-row nets get
+# per-row local trunks + a connecting spine instead of the generic
+# dedicated-track treatment above -- see module docstring point 8.
+PER_ROW_LOCAL_NETS = {"scl_buf0", "scl_buf1", "_126_buf0", "_126_buf1"}
+PER_ROW_GUARD_TRACKS = 1
 
 
 def um(v, dbu):
@@ -168,30 +232,71 @@ def main():
                         continue
                     net_pins[pinfo["net"]].append((r, inst["name"], pname, x0, y0 + yoff, x1, y1 + yoff))
 
-    row_only = defaultdict(dict)       # row -> {net: (xmin,xmax)}
+    # v4 (design_notes 38.8, point 7): per-channel "forced overlap zone"
+    # -- the X range where BOTH rows sharing a channel have real-cell M2
+    # pins. Left/right row anchoring (38.7) cannot avoid this once the
+    # two rows' combined real-cell demand exceeds the channel's non-TAP
+    # budget; row-only/adjacent-pair stubs landing here get an extra
+    # live collision check before drawing (see pass 1 below).
+    row_real_x = defaultdict(list)
+    for net, pads in net_pins.items():
+        for r, _inst, _pname, x0, y0, x1, y1 in pads:
+            row_real_x[r].append((x0 + x1) / 2.0)
+    row_x_range = {r: (min(xs), max(xs)) for r, xs in row_real_x.items() if xs}
+    overlap_zone = {}  # channel -> (lo, hi)
+    for c in range(1, n_rows):
+        below, above = row_x_range.get(c - 1), row_x_range.get(c)
+        if below is None or above is None:
+            continue
+        lo, hi = max(below[0], above[0]), min(below[1], above[1])
+        if lo <= hi:
+            overlap_zone[c] = (lo, hi)
+    overlap_zone = {}  # TEMP DISABLED pending user decision (design_notes 38.8)
+    if overlap_zone:
+        print("forced overlap zone(s):", {c: (round(lo, 1), round(hi, 1)) for c, (lo, hi) in overlap_zone.items()})
+
+    row_only = defaultdict(dict)       # row -> {net: (xmin,xmax)}  (excludes high-FO)
     row_only_net_row = {}              # net -> row
-    adjacent_pair = defaultdict(dict)  # channel -> {net: (xmin,xmax)}
+    adjacent_pair = defaultdict(dict)  # channel -> {net: (xmin,xmax)}  (excludes high-FO)
     adj_net_ch = {}                    # net -> channel
     spanning = []                      # [(net, xmin, xmax, legal_channels)]
     stub_nets = 0
+    high_fo_row_only = {}   # net -> row  (high-FO, single-row)
+    high_fo_adjacent = {}   # net -> channel  (high-FO, adjacent-pair)
+    per_row_local_pads = {}  # net -> pads  (v4 point 8, bypasses all classification below)
     for net, pads in net_pins.items():
         if len(pads) < 2:
             stub_nets += 1
             continue
+        if net in PER_ROW_LOCAL_NETS:
+            per_row_local_pads[net] = pads
+            continue
         pin_rows = sorted({p[0] for p in pads})
         xs = [(x0 + x1) / 2.0 for _r, _i, _p, x0, y0, x1, y1 in pads]
         interval = (min(xs), max(xs))
+        is_high_fo = len(pads) >= HIGH_FO_THRESHOLD
         if len(pin_rows) == 1:
             r = pin_rows[0]
-            row_only[r][net] = interval
-            row_only_net_row[net] = r
+            if is_high_fo:
+                high_fo_row_only[net] = r
+            else:
+                row_only[r][net] = interval
+                row_only_net_row[net] = r
         elif len(pin_rows) == 2 and pin_rows[1] == pin_rows[0] + 1:
             c = pin_rows[0] + 1
-            adjacent_pair[c][net] = interval
-            adj_net_ch[net] = c
+            if is_high_fo:
+                high_fo_adjacent[net] = c
+            else:
+                adjacent_pair[c][net] = interval
+                adj_net_ch[net] = c
         else:
             legal = list(range(pin_rows[0], pin_rows[-1] + 2))
             spanning.append((net, interval[0], interval[1], legal))
+    n_high_fo = len(high_fo_row_only) + len(high_fo_adjacent)
+    if n_high_fo:
+        print(f"high fan-out (>={HIGH_FO_THRESHOLD} pins) nets: {n_high_fo} "
+              f"({len(high_fo_row_only)} row-only, {len(high_fo_adjacent)} adjacent-pair) "
+              f"-- dedicated guarded tracks, routed first")
 
     row_only_lanes = {r: assign_lanes(row_only[r]) for r in range(n_rows)}
 
@@ -206,10 +311,63 @@ def main():
     span_lanes = {c: assign_lanes(span_pool[c]) for c in range(n_ch)}
     adj_lanes = {c: assign_lanes(adjacent_pair[c]) for c in range(n_ch)}
 
+    # v4: assign each high-FO net to a channel (row-only ones pick
+    # whichever of their row's two adjacent channels currently has fewer
+    # high-FO nets, same load-balancing idea as spanning nets; adjacent-
+    # pair ones have only one legal channel already), then lay out a
+    # dedicated front-of-channel region: one track per net, with
+    # HIGH_FO_GUARD_TRACKS empty tracks on either side of it, so no
+    # other net's via can ever land within reach of its trunk regardless
+    # of the trunk's X-span (see module docstring, point 6).
+    high_fo_nets_in_channel = defaultdict(list)  # channel -> [net, ...]
+    running_hf = [0] * n_ch
+    for net, r in high_fo_row_only.items():
+        candidates = [ch for ch in (r, r + 1) if 0 <= ch < n_ch]
+        c = min(candidates, key=lambda ch: running_hf[ch])
+        running_hf[c] += 1
+        high_fo_nets_in_channel[c].append(net)
+    for net, c in high_fo_adjacent.items():
+        running_hf[c] += 1
+        high_fo_nets_in_channel[c].append(net)
+
+    high_fo_track_of = {}   # net -> track idx (within its channel)
+    high_fo_block_size = [0] * n_ch
+    for c in range(n_ch):
+        idx = 0
+        for net in high_fo_nets_in_channel[c]:
+            high_fo_track_of[net] = idx
+            idx += 1 + HIGH_FO_GUARD_TRACKS
+        high_fo_block_size[c] = idx
+
+    # v4 point 8: per-row local trunks for PER_ROW_LOCAL_NETS. Row R's
+    # local segment of net `net` always lives in channel R (directly
+    # below row R) on its own dedicated+guarded track -- same isolation
+    # idea as high-FO above, just keyed by (net, row) instead of net.
+    per_row_rows_of = {}  # net -> sorted [row, ...] with pins
+    for net, pads in per_row_local_pads.items():
+        per_row_rows_of[net] = sorted({p[0] for p in pads})
+    per_row_nets_in_channel = defaultdict(list)  # channel(=row) -> [net, ...]
+    for net, rows_with_pins in per_row_rows_of.items():
+        for r in rows_with_pins:
+            per_row_nets_in_channel[r].append(net)
+
+    per_row_track_of = {}  # (net, row) -> track idx within channel=row
+    per_row_block_size = [0] * n_ch
+    for c in range(n_ch):
+        idx = high_fo_block_size[c]
+        for net in per_row_nets_in_channel[c]:
+            per_row_track_of[(net, c)] = idx
+            idx += 1 + PER_ROW_GUARD_TRACKS
+        per_row_block_size[c] = idx
+    if per_row_local_pads:
+        n_segments = sum(len(v) for v in per_row_rows_of.values())
+        print(f"per-row local trunk nets: {len(per_row_local_pads)} ({sorted(per_row_local_pads)}), "
+              f"{n_segments} row-local segment(s) total, dedicated guarded tracks, routed first")
+
     block_offset = [dict() for _ in range(n_ch)]
     channel_total = [0] * n_ch
     for c in range(n_ch):
-        off = 0
+        off = per_row_block_size[c]
         if c - 1 >= 0:
             _a, n = row_only_lanes[c - 1]
             n_bottom = -(-n // 2)
@@ -287,8 +445,39 @@ def main():
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in row_only_net_row})
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in adj_net_ch})
     spanning_nets = {n: p for n, p in net_pins.items() if n in span_channel_assign}
+    high_fo_nets = {}
+    high_fo_nets.update({n: p for n, p in net_pins.items() if n in high_fo_row_only})
+    high_fo_nets.update({n: p for n, p in net_pins.items() if n in high_fo_adjacent})
 
     final_track = {}
+    # high-FO nets FIRST (v4, "priority routing" -- both their track
+    # claim and their drawing later happen before everything else, so
+    # their wide trunk is on the layout before anything else could ever
+    # need to consider it).
+    net_channel_of_high_fo = {}
+    for c, nets_here in high_fo_nets_in_channel.items():
+        for net in nets_here:
+            net_channel_of_high_fo[net] = c
+    for net, pads in high_fo_nets.items():
+        channel = net_channel_of_high_fo[net]
+        idx = high_fo_track_of[net]
+        cxs = [(x0 + x1) / 2.0 for _r, _i, _p, x0, y0, x1, y1 in pads]
+        channel_used_x[(channel, idx)].extend(cxs)
+        track_y = ch_y0[channel] + TRACK0_OFFSET + idx * TRACK_PITCH
+        final_track[net] = (channel, track_y)
+
+    # v4 point 8: per-row local trunk track_y for each (net, row) segment
+    # of PER_ROW_LOCAL_NETS -- also claimed/registered first, same
+    # priority-routing rationale as high-FO nets above.
+    per_row_track_y = {}  # (net, row) -> track_y  (channel == row)
+    for net, rows_with_pins in per_row_rows_of.items():
+        for r in rows_with_pins:
+            channel = r
+            idx = per_row_track_of[(net, r)]
+            cxs = [(x0 + x1) / 2.0 for row, _i, _p, x0, y0, x1, y1 in per_row_local_pads[net] if row == r]
+            channel_used_x[(channel, idx)].extend(cxs)
+            per_row_track_y[(net, r)] = ch_y0[channel] + TRACK0_OFFSET + idx * TRACK_PITCH
+
     bumped = 0
     for net, pads in list(non_spanning_nets.items()) + list(spanning_nets.items()):
         channel, idx = channel_primary(net)
@@ -382,28 +571,164 @@ def main():
                     return cand
         raise SystemExit(f"no clear X found for row {row_k} near x={start_x}")
 
+    # v4 (design_notes 38.8, point 7): live check for the forced-overlap
+    # zone only -- queries the M2 ALREADY DRAWN in the exact box the stub
+    # would occupy. M2-only (matching row_clear's precedent): M1 and M2
+    # are different layers and a bare crossing without a via never
+    # shorts, so an M1 trunk at some OTHER, unrelated track_y happening
+    # to pass through this Y-range is not a real collision -- checking
+    # M1 here produced spurious "no clear X" failures against completely
+    # unrelated tracks elsewhere in the (tall) channel. Scoped to a small
+    # X range (not a whole channel), unlike the full live-collision-
+    # search attempt in section 37.6 that didn't scale.
+    def channel_clear(x, y_lo, y_hi):
+        probe = db.Box(um(x - PAD_HALF - M2_MIN_GAP, dbu), um(min(y_lo, y_hi), dbu),
+                        um(x + PAD_HALF + M2_MIN_GAP, dbu), um(max(y_lo, y_hi), dbu))
+        return db.Region(top.begin_shapes_rec_touching(m2_idx, probe)).count() == 0
+
+    def find_channel_clear_x(start_x, y_lo, y_hi):
+        if in_bounds(start_x) and not x_forbidden(start_x) and channel_clear(start_x, y_lo, y_hi):
+            return start_x
+        for s in range(1, ROW_X_TRIES + 1):
+            for cand in (start_x + s * X_GRID, start_x - s * X_GRID):
+                if in_bounds(cand) and not x_forbidden(cand) and channel_clear(cand, y_lo, y_hi):
+                    return cand
+        raise SystemExit(f"no clear X found in overlap zone near x={start_x} (y {y_lo}-{y_hi})")
+
+    def draw_jog(cur_x, cur_y, clear_x, jog_channel):
+        """via_1(M2->M1) at (cur_x, jog_y) -> M1 run to clear_x -> via_1
+        (M1->M2) at (clear_x, jog_y). jog_y is a freshly claimed track in
+        jog_channel. Returns the new (cur_x, cur_y) to continue from.
+        Shared by pass 2's row-crossing jogs and pass 1's forced-overlap-
+        zone jogs (v4)."""
+        jog_idx = claim_track(jog_channel, [cur_x, clear_x])
+        jog_y = ch_y0[jog_channel] + TRACK0_OFFSET + jog_idx * TRACK_PITCH
+        m2_box(cur_x - PAD_HALF, min(cur_y, jog_y), cur_x + PAD_HALF, max(cur_y, jog_y))
+        place_via(cur_x, jog_y)
+        half_w = M1_TRUNK_WIDTH / 2.0
+        m1_box(min(cur_x, clear_x), jog_y - half_w, max(cur_x, clear_x), jog_y + half_w)
+        place_via(clear_x, jog_y)
+        return clear_x, jog_y
+
     pin_map = {}
     routed = 0
     passthrough_pins = 0
     jog_count = 0
+    overlap_jog_count = 0
+    per_row_spine_jog_count = 0
 
-    # pass 1: row-only / adjacent-pair nets -- unchanged routing, via_1 only
-    for net, pads in non_spanning_nets.items():
+    # pass 0 (v4 point 8): per-row local trunks for PER_ROW_LOCAL_NETS,
+    # tied together by a spine. Drawn FIRST, before everything else.
+    for net in sorted(per_row_local_pads):
+        pads = per_row_local_pads[net]
+        rows_with_pins = per_row_rows_of[net]
+        by_row = defaultdict(list)
+        for row, inst_name, pname, x0, y0, x1, y1 in pads:
+            by_row[row].append((inst_name, pname, x0, y0, x1, y1))
+
+        # 1. draw each row's own local trunk + connect that row's pins to
+        # it (channel == row, i.e. directly below that row -- always
+        # direction "-1"/downward from the row's own perspective).
+        row_trunk_xmin = {}
+        for r in rows_with_pins:
+            channel = r
+            track_y = per_row_track_y[(net, r)]
+            pin_cxs = []
+            for inst_name, pname, x0, y0, x1, y1 in by_row[r]:
+                cx = (x0 + x1) / 2.0
+                pin_edge_y = y0
+                y_lo, y_hi = min(pin_edge_y, track_y), max(pin_edge_y, track_y)
+                m2_box(cx - PAD_HALF, y_lo, cx + PAD_HALF, y_hi)
+                place_via(cx, track_y)
+                pin_cxs.append(cx)
+                pin_map.setdefault(net, []).append((inst_name, pname, cx, track_y))
+            xmin, xmax = min(pin_cxs), max(pin_cxs)
+            row_trunk_xmin[r] = xmin
+            half_w = M1_TRUNK_WIDTH / 2.0
+            m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
+
+        # 2. spine: connect consecutive rows' local trunks, reusing the
+        # exact row-crossing machinery spanning nets use (find_row_clear_x
+        # + draw_jog), tapping into each trunk via an extra via_1 at its
+        # own xmin.
+        for r_lo, r_hi in zip(rows_with_pins, rows_with_pins[1:]):
+            cur_x = row_trunk_xmin[r_lo]
+            cur_y = per_row_track_y[(net, r_lo)]
+            place_via(cur_x, cur_y)  # tap into row r_lo's trunk
+            for row_k in range(r_lo, r_hi):
+                clear_x = find_row_clear_x(row_k, cur_x)
+                row_signal_used[row_k].append(clear_x)
+                if abs(clear_x - cur_x) > 1e-6:
+                    per_row_spine_jog_count += 1
+                    jog_channel = row_k
+                    cur_x, cur_y = draw_jog(cur_x, cur_y, clear_x, jog_channel)
+                row_ylo, row_yhi = row_y0[row_k], row_y0[row_k] + row_h
+                m2_box(cur_x - PAD_HALF, min(cur_y, row_ylo), cur_x + PAD_HALF, max(cur_y, row_ylo))
+                m2_box(cur_x - PAD_HALF, min(row_ylo, row_yhi), cur_x + PAD_HALF, max(row_ylo, row_yhi))
+                cur_y = row_yhi
+            # force the final X to land exactly on row r_hi's own trunk
+            # tap point (row_trunk_xmin[r_hi]) -- `cur_x` after crossing
+            # the intervening rows is just "some clear X", not
+            # necessarily anywhere near row r_hi's trunk's own X-range,
+            # so without this the via below can miss the trunk entirely
+            # and leave the net split into disconnected pieces (a real
+            # bug found via connectivity check: NET SPLIT on all 4 of
+            # these nets before this fix).
+            target_x = row_trunk_xmin[r_hi]
+            if abs(target_x - cur_x) > 1e-6:
+                per_row_spine_jog_count += 1
+                cur_x, cur_y = draw_jog(cur_x, cur_y, target_x, r_hi)
+            target_track_y = per_row_track_y[(net, r_hi)]
+            m2_box(cur_x - PAD_HALF, min(cur_y, target_track_y), cur_x + PAD_HALF, max(cur_y, target_track_y))
+            place_via(cur_x, target_track_y)  # tap into row r_hi's trunk
+        routed += 1
+    if per_row_local_pads:
+        print(f"per-row local trunk spine jogs: {per_row_spine_jog_count}")
+
+    # pass 1: row-only / adjacent-pair nets, via_1 only. High-FO nets are
+    # drawn FIRST (v4, "priority routing" -- their dedicated guarded
+    # tracks make this a formality for correctness, but it means their
+    # wide trunk is always on the layout before anything else). Every
+    # stub whose pin X falls in that channel's forced-overlap zone (v4,
+    # point 7) gets a live collision check first; on a hit, a jog
+    # (shared `draw_jog` helper) reroutes to a clear X on a fresh track.
+    for net, pads in list(high_fo_nets.items()) + list(non_spanning_nets.items()):
         channel, track_y = final_track[net]
+        zone = overlap_zone.get(channel)
         pin_cxs = []
         for row, inst_name, pname, x0, y0, x1, y1 in pads:
             cx = (x0 + x1) / 2.0
             direction = -1 if channel <= row else 1
             pin_edge_y = y0 if direction == -1 else y1
-            y_lo, y_hi = min(pin_edge_y, track_y), max(pin_edge_y, track_y)
-            m2_box(cx - PAD_HALF, y_lo, cx + PAD_HALF, y_hi)
-            place_via(cx, track_y)
-            pin_cxs.append(cx)
-            pin_map.setdefault(net, []).append((inst_name, pname, cx, track_y))
+            cur_x, cur_y = cx, pin_edge_y
+            if zone and zone[0] <= cx <= zone[1]:
+                # only check the CHANNEL portion of the stub's path (from
+                # the row's own boundary edge to track_y) -- excluding
+                # the part still inside the row body, which is dense
+                # with unrelated intra-cell M1/M2 and was never the
+                # source of case 2 (a probe spanning the whole row body
+                # here previously produced false-positive "collisions"
+                # against ordinary standard-cell wiring).
+                channel_entry_y = row_y0[row] if direction == -1 else row_y0[row] + row_h
+                y_lo, y_hi = min(channel_entry_y, track_y), max(channel_entry_y, track_y)
+                if not channel_clear(cx, y_lo, y_hi):
+                    clear_x = find_channel_clear_x(cx, y_lo, y_hi)
+                    if abs(clear_x - cx) > 1e-6:
+                        overlap_jog_count += 1
+                        m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
+                               cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
+                        cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel)
+            y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
+            m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
+            place_via(cur_x, track_y)
+            pin_cxs.append(cur_x)
+            pin_map.setdefault(net, []).append((inst_name, pname, cur_x, track_y))
         xmin, xmax = min(pin_cxs), max(pin_cxs)
         half_w = M1_TRUNK_WIDTH / 2.0
         m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
         routed += 1
+    if overlap_jog_count:
+        print(f"forced-overlap-zone collisions resolved by jogging {overlap_jog_count} pin(s)")
 
     # pass 2: spanning nets -- M2 vertical only; X changes go through a
     # via_1 -> M1 -> via_1 jog on a freshly claimed track
@@ -431,15 +756,7 @@ def main():
                 if abs(clear_x - cur_x) > 1e-6:
                     jog_count += 1
                     jog_channel = row_k if direction > 0 else row_k + 1
-                    jog_idx = claim_track(jog_channel, [cur_x, clear_x])
-                    jog_y = ch_y0[jog_channel] + TRACK0_OFFSET + jog_idx * TRACK_PITCH
-                    m2_box(cur_x - PAD_HALF, min(cur_y, jog_y), cur_x + PAD_HALF, max(cur_y, jog_y))
-                    place_via(cur_x, jog_y)
-                    half_w = M1_TRUNK_WIDTH / 2.0
-                    m1_box(min(cur_x, clear_x), jog_y - half_w, max(cur_x, clear_x), jog_y + half_w)
-                    place_via(clear_x, jog_y)
-                    cur_y = jog_y
-                    cur_x = clear_x
+                    cur_x, cur_y = draw_jog(cur_x, cur_y, clear_x, jog_channel)
                 row_ylo, row_yhi = row_y0[row_k], row_y0[row_k] + row_h
                 entry_y = row_ylo if direction > 0 else row_yhi
                 exit_y = row_yhi if direction > 0 else row_ylo
@@ -473,9 +790,11 @@ def main():
     print(f"wrote {pin_map_path}")
     print(f"signal nets: {len(net_pins)}, routed: {routed}, stubs: {stub_nets}")
     print(f"row-only={sum(len(v) for v in row_only.values())}, "
-          f"adjacent-pair={sum(len(v) for v in adjacent_pair.values())}, spanning={len(spanning)}")
+          f"adjacent-pair={sum(len(v) for v in adjacent_pair.values())}, spanning={len(spanning)}, "
+          f"high-FO={n_high_fo}, per-row-local={len(per_row_local_pads)}")
     print(f"spanning-net pins requiring a row pass-through: {passthrough_pins}")
-    print(f"via_1-based jogs inserted: {jog_count}")
+    print(f"via_1-based jogs inserted: {jog_count} (row-crossing) + {overlap_jog_count} (forced-overlap zone) "
+          f"+ {per_row_spine_jog_count} (per-row local trunk spine)")
 
 
 if __name__ == "__main__":
