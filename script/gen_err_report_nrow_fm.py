@@ -41,6 +41,7 @@ import klayout.db as db
 
 PLACEMENT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/placement_nrow_fm.json"
 PIN_MAP_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/pin_map_nrow_fm.json"
+NET_SHAPES_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/net_shapes_nrow_fm.json"
 IN_GDS = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_nrow_fm_routed.gds"
 OUT_GDS = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_nrow_fm_with_err.gds"
 NET_FILE = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net.v"
@@ -106,15 +107,30 @@ def rebuild_net_pins():
     return net_pins
 
 
-def net_region(net, pin_map, pin_center, um):
-    """Reconstruct net's own M1(trunk)/M2(stub) rectangles from pin_map
-    (net -> [(instname,pinname,via_x,via_y=track_y), ...]) + pin_center
-    (net,instname,pinname) -> (pin's own x,y from placement), matching
-    route_channels_nrow_fm.py's stub/trunk drawing exactly enough to
-    find the physical overlap with another net's reconstructed region.
+def net_region(net, pin_map, pin_center, um, net_shapes_log=None):
+    """Build net's own M1/M2 region for overlap testing against another
+    net's region.
+
+    Ground truth (preferred): `net_shapes_log[net]` is a list of
+    ("M1"|"M2", x0,y0,x1,y1) boxes recorded DIRECTLY by
+    route_channels_nrow_fm.py at draw time (v4.1), so it captures
+    every segment -- trunk, stub, AND jog/spine dogleg alike -- with
+    perfect fidelity.
+
+    Fallback (if the log is missing/stale for this net): reconstruct
+    just the trunk+stub geometry from pin_map (net -> [(instname,
+    pinname,via_x,via_y=track_y), ...]) + pin_center (net,instname,
+    pinname) -> (pin's own x,y from placement). This misses jog/spine
+    dogleg segments, so shorts routed through those won't be found.
+
     `um` converts a float um coordinate to database units (dbu-matched
     to the loaded layout).
     """
+    region = db.Region()
+    if net_shapes_log is not None and net in net_shapes_log:
+        for kind, x0, y0, x1, y1 in net_shapes_log[net]:
+            region.insert(db.Box(um(x0), um(y0), um(x1), um(y1)))
+        return region
     boxes = []
     by_track = defaultdict(list)
     for inst, pname, vx, vy in pin_map.get(net, []):
@@ -126,7 +142,6 @@ def net_region(net, pin_map, pin_center, um):
         by_track[vy].append(vx)
     for ty, xs in by_track.items():
         boxes.append((min(xs), ty - M1_TRUNK_HALF, max(xs), ty + M1_TRUNK_HALF))
-    region = db.Region()
     for x0, y0, x1, y1 in boxes:
         region.insert(db.Box(um(x0), um(y0), um(x1), um(y1)))
     return region
@@ -139,6 +154,13 @@ def main():
         for r, instname, pname, cx, cy in pads:
             pin_center[(net, instname, pname)] = (cx, cy)
     ports = top_level_ports()
+    try:
+        net_shapes_log = json.load(open(NET_SHAPES_JSON))
+        print(f"loaded net_shapes log: {sum(len(v) for v in net_shapes_log.values())} boxes, "
+              f"{len(net_shapes_log)} nets")
+    except FileNotFoundError:
+        net_shapes_log = None
+        print("net_shapes log not found -- falling back to pin-based reconstruction for all nets")
     stub_nets = {n: p for n, p in net_pins.items() if len(p) < 2}
     print(f"{len(net_pins)} nets total, {len(stub_nets)} stub (unrouted, <2 M2 pins) nets")
     stub_port = {n: p for n, p in stub_nets.items() if n in ports}
@@ -269,8 +291,8 @@ def main():
     # whole (potentially huge, for high-FO nets) shorted net geometry.
     collision_points = []  # (netA, netB, [(x,y,w,h), ...])
     for netA, pinA, netB, pinB in conflicts:
-        regA = net_region(netA, pin_map, pin_center, um)
-        regB = net_region(netB, pin_map, pin_center, um)
+        regA = net_region(netA, pin_map, pin_center, um, net_shapes_log)
+        regB = net_region(netB, pin_map, pin_center, um, net_shapes_log)
         overlap = regA & regB
         boxes = []
         for p in overlap.each():

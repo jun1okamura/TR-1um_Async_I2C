@@ -521,11 +521,25 @@ def main():
     via_lib = pya.Library.library_by_name("TR-1um", "*")
     via_decl = via_lib.layout().pcell_declaration("via_1")
 
+    # per-net shape log (v4.1): records every M1/M2 box actually drawn,
+    # tagged with whichever net is "current" at draw time (set at the
+    # top of each per-net loop body in passes 0/1/2). This is the
+    # ground truth for gen_err_report_nrow_fm.py's exact short-overlap
+    # reconstruction -- unlike re-deriving stub/trunk geometry from
+    # pin_map after the fact, it also captures jog/spine dogleg
+    # segments that a from-pins reconstruction can't see.
+    net_shapes = defaultdict(list)
+    cur_net = [None]
+
     def m1_box(x0, y0, x1, y1):
         top.shapes(m1_idx).insert(db.Box(um(x0, dbu), um(y0, dbu), um(x1, dbu), um(y1, dbu)))
+        if cur_net[0] is not None:
+            net_shapes[cur_net[0]].append(("M1", x0, y0, x1, y1))
 
     def m2_box(x0, y0, x1, y1):
         top.shapes(m2_idx).insert(db.Box(um(x0, dbu), um(y0, dbu), um(x1, dbu), um(y1, dbu)))
+        if cur_net[0] is not None:
+            net_shapes[cur_net[0]].append(("M2", x0, y0, x1, y1))
 
     def place_via(cx, cy):
         pcell_idx = layout.add_pcell_variant(
@@ -637,6 +651,7 @@ def main():
     # pass 0 (v4 point 8): per-row local trunks for PER_ROW_LOCAL_NETS,
     # tied together by a spine. Drawn FIRST, before everything else.
     for net in sorted(per_row_local_pads):
+        cur_net[0] = net
         pads = per_row_local_pads[net]
         rows_with_pins = per_row_rows_of[net]
         by_row = defaultdict(list)
@@ -710,6 +725,7 @@ def main():
     # point 7) gets a live collision check first; on a hit, a jog
     # (shared `draw_jog` helper) reroutes to a clear X on a fresh track.
     for net, pads in list(high_fo_nets.items()) + list(non_spanning_nets.items()):
+        cur_net[0] = net
         channel, track_y = final_track[net]
         zone = overlap_zone.get(channel)
         pin_cxs = []
@@ -750,6 +766,7 @@ def main():
     # pass 2: spanning nets -- M2 vertical only; X changes go through a
     # via_1 -> M1 -> via_1 jog on a freshly claimed track
     for net, pads in spanning_nets.items():
+        cur_net[0] = net
         channel, track_y = final_track[net]
         pin_cxs = []
         for row, inst_name, pname, x0, y0, x1, y1 in pads:
@@ -803,8 +820,13 @@ def main():
     with open(pin_map_path, "w") as f:
         json.dump(pin_map, f, indent=1)
 
+    net_shapes_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/net_shapes_nrow_fm.json"
+    with open(net_shapes_path, "w") as f:
+        json.dump(net_shapes, f)
+
     print(f"wrote {OUT_GDS}")
     print(f"wrote {pin_map_path}")
+    print(f"wrote {net_shapes_path} ({sum(len(v) for v in net_shapes.values())} boxes, {len(net_shapes)} nets)")
     print(f"signal nets: {len(net_pins)}, routed: {routed}, stubs: {stub_nets}")
     print(f"row-only={sum(len(v) for v in row_only.values())}, "
           f"adjacent-pair={sum(len(v) for v in adjacent_pair.values())}, spanning={len(spanning)}, "
