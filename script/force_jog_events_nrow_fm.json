@@ -192,7 +192,7 @@
   "pin": "A",
   "orig_x": 1050.3,
   "clear_x": 1044.8999999999999,
-  "jog_y": 376.8,
+  "jog_y": 412.8,
   "channel": 1,
   "channel_entry_y": 414.8,
   "track_y": 268.8
@@ -203,7 +203,7 @@
   "pin": "A",
   "orig_x": 1120.5,
   "clear_x": 1034.1,
-  "jog_y": 372.8,
+  "jog_y": 376.8,
   "channel": 1,
   "channel_entry_y": 414.8,
   "track_y": 268.8

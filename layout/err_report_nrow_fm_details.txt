@@ -3,7 +3,7 @@ net=bit_cnt[1] _369_.A (1104.30,260.80)  <->  net=_055_ _415_.B (218.70,268.80)
     overlap: X=[368.20,371.60] Y=[259.90,261.70]  (layer (253, 3) in GDS)
     overlap: X=[919.00,922.40] Y=[267.90,269.70]  (layer (253, 3) in GDS)
     overlap: X=[492.40,495.80] Y=[259.90,309.70]  (layer (253, 3) in GDS)
-    overlap: X=[1102.60,1106.00] Y=[371.90,373.70]  (layer (253, 3) in GDS)
+    overlap: X=[1102.60,1106.00] Y=[375.90,377.70]  (layer (253, 3) in GDS)
 
 === 31 UNCONNECTED (stub) PIN(S) ===
 -- 7 are top-level ports (expected, not a defect) --
@@ -58,7 +58,7 @@ net=bit_cnt[1] _369_.A (1104.30,260.80)  <->  net=_055_ _415_.B (218.70,268.80)
   net=_055_ _423_.B  orig_x=494.10 -> clear_x=542.70  jog_y=308.80  channel=1  (layer (253, 4) in GDS)
   net=_055_ _358_.Y  orig_x=931.50 -> clear_x=980.10  jog_y=384.80  channel=1  (layer (253, 4) in GDS)
   net=_055_ _359_.B  orig_x=942.30 -> clear_x=1017.90  jog_y=380.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _366_.A  orig_x=1050.30 -> clear_x=1044.90  jog_y=376.80  channel=1  (layer (253, 4) in GDS)
-  net=_055_ _371_.A  orig_x=1120.50 -> clear_x=1034.10  jog_y=372.80  channel=1  (layer (253, 4) in GDS)
+  net=_055_ _366_.A  orig_x=1050.30 -> clear_x=1044.90  jog_y=412.80  channel=1  (layer (253, 4) in GDS)
+  net=_055_ _371_.A  orig_x=1120.50 -> clear_x=1034.10  jog_y=376.80  channel=1  (layer (253, 4) in GDS)
   net=_109_ _442_.A  orig_x=710.10 -> clear_x=823.50  jog_y=790.40  channel=3  (layer (253, 4) in GDS)
   net=_109_ _441_.Y  orig_x=1152.90 -> clear_x=1185.30  jog_y=998.40  channel=3  (layer (253, 4) in GDS)

@@ -501,7 +501,7 @@ def main():
         channel_used_x[(channel, idx)].extend(cxs)
         return idx
 
-    def claim_track_near(channel, cxs, target_idx, extra_ok=None):
+    def claim_track_near(channel, cxs, target_idx, extra_ok=None, allow_claimed=False):
         """Like claim_track, but searches OUTWARD from `target_idx` for
         the CLOSEST unclaimed, collision-clear index, instead of always
         taking the next never-before-tried global index. `next_free_idx`
@@ -526,14 +526,29 @@ def main():
         clear track and drawing an unchecked departure leg through it
         (the root cause traced in 38.21: the fallback path's own escape
         segment could re-cross the very obstruction it was meant to
-        avoid)."""
+        avoid).
+
+        `allow_claimed`, if True (design_notes 38.23), lets the search
+        also consider indices some OTHER net has already claimed --
+        every track is normally reserved exclusively for one net for its
+        entire width (v3 docstring, point 3/4: avoids ever needing a
+        live M1-vs-M1 check), but a GDS-verified audit found a large
+        fraction of "claimed" tracks in every channel have NO M1 drawn
+        anywhere near the X a stuck jog actually needs (the claiming
+        net's own trunk lives at a completely different X range) --
+        real, physically idle capacity the exclusive-ownership model
+        was leaving unused. Only meant to be used with an `extra_ok`
+        that itself verifies the specific M1 run needed doesn't
+        physically overlap whatever that other net already drew there
+        (see m1_run_clear) -- collides() alone (via-proximity only)
+        isn't enough once two different nets can share an index."""
         idx_hi = int((CH_HEIGHTS[channel] - 2 * TRACK0_OFFSET) // TRACK_PITCH)
         for offset in range(0, idx_hi + 1):
             candidates = {target_idx + offset, target_idx - offset} if offset else {target_idx}
             for idx in sorted(candidates):
                 if idx < 0 or idx > idx_hi:
                     continue
-                if (channel, idx) in channel_used_x:
+                if not allow_claimed and (channel, idx) in channel_used_x:
                     continue
                 if collides(channel, idx, cxs):
                     continue
@@ -787,6 +802,22 @@ def main():
                     return cand
         raise SystemExit(f"no clear X found in overlap zone near x={start_x} (y {y_lo}-{y_hi})")
 
+    def m1_run_clear(y, x0, x1):
+        """v6 (design_notes 38.23): does an M1 run at track_y=y spanning
+        [x0,x1] physically overlap M1 ALREADY DRAWN there (by any net,
+        claimed-track-owner or not)? A GDS-verified audit found many
+        "claimed" tracks (claim_track_near's exclusive-ownership model,
+        v3 docstring point 3/4) have long idle stretches -- the owning
+        net's own trunk simply doesn't reach the X a stuck jog needs.
+        This lets claim_track_near's allow_claimed tier safely reuse
+        that idle stretch: checked against the REAL drawn geometry, not
+        the track's claim status, so two different nets sharing one
+        track_y is safe as long as their actual metal never touches."""
+        half_w = M1_TRUNK_WIDTH / 2.0
+        probe = db.Box(um(min(x0, x1) - M2_MIN_GAP, dbu), um(y - half_w - M2_MIN_GAP, dbu),
+                        um(max(x0, x1) + M2_MIN_GAP, dbu), um(y + half_w + M2_MIN_GAP, dbu))
+        return db.Region(top.begin_shapes_rec_touching(m1_idx, probe)).count() == 0
+
     def draw_jog(cur_x, cur_y, clear_x, jog_channel, near_y=None):
         """via_1(M2->M1) at (cur_x, jog_y) -> M1 run to clear_x -> via_1
         (M1->M2) at (clear_x, jog_y). jog_y is a freshly claimed track in
@@ -812,7 +843,21 @@ def main():
         departure leg (live geometry + static stubs, via channel_clear)
         before being claimed -- so the search keeps walking outward
         until it finds a track that is both free AND safely reachable,
-        instead of taking the nearest free track unconditionally."""
+        instead of taking the nearest free track unconditionally.
+
+        v6 (design_notes 38.23): if NO exclusively-free track has a
+        clear departure leg either (the obstruction and every reachable
+        free track are on opposite sides of it -- confirmed via
+        net_shapes/GDS audit for the one remaining short: bit_cnt[1]'s
+        own stub spans nearly the whole channel, and every unclaimed
+        track happens to sit beyond it), try again ALSO allowing reuse
+        of a track some OTHER net has already claimed -- gated by BOTH
+        the same departure-leg check AND a new m1_run_clear check (the
+        M1 run itself must not physically overlap whatever that other
+        net actually drew there). A GDS-verified audit found this idle
+        capacity is real and substantial (9-24 fully-empty tracks per
+        channel), just inaccessible under the exclusive-ownership model
+        alone."""
         if near_y is not None:
             EPS = 0.01  # nudge the end touching cur_y off cur_y itself --
                         # cur_y is usually the exact edge of a segment
@@ -829,22 +874,33 @@ def main():
                     y_lo, y_hi = jog_y, cur_y - EPS
                 return channel_clear(cur_x, y_lo, y_hi)
 
+            def departure_leg_and_m1_ok(idx, jog_y):
+                if not departure_leg_ok(idx, jog_y):
+                    return False
+                return m1_run_clear(jog_y, cur_x, clear_x)
+
             target_idx = int(round((near_y - TRACK0_OFFSET - ch_y0[jog_channel]) / TRACK_PITCH))
             try:
                 jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx, extra_ok=departure_leg_ok)
             except SystemExit:
-                # No track in jog_channel has a fully clear departure
-                # leg -- genuinely nowhere to escape to by moving in Y
-                # alone at this x (the obstruction spans the channel).
-                # Fall back to the pre-38.22 behavior (nearest free
-                # track, unchecked departure leg) rather than aborting
-                # the whole run -- this is a real capacity limit, not a
-                # bug, and should surface as a connectivity-check short
-                # to investigate rather than a hard crash.
-                print(f"  WARNING: draw_jog could not find a track near y={near_y} in "
-                      f"channel {jog_channel} with a clear departure leg at x={cur_x} -- "
-                      f"falling back to nearest free track (may leave a short to investigate)")
-                jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx)
+                try:
+                    jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx,
+                                                extra_ok=departure_leg_and_m1_ok, allow_claimed=True)
+                    print(f"  INFO: draw_jog reused an already-claimed track near y={near_y} in "
+                          f"channel {jog_channel} at x={cur_x} (idle stretch, design_notes 38.23)")
+                except SystemExit:
+                    # Still nothing -- genuinely no track, free or shared,
+                    # has both a clear departure leg AND (if shared) clear
+                    # M1. Fall back to the pre-38.22 behavior (nearest
+                    # free track, unchecked departure leg) rather than
+                    # aborting the whole run -- this is a real capacity
+                    # limit, not a bug, and should surface as a
+                    # connectivity-check short to investigate rather than
+                    # a hard crash.
+                    print(f"  WARNING: draw_jog could not find a track near y={near_y} in "
+                          f"channel {jog_channel} with a clear departure leg at x={cur_x} -- "
+                          f"falling back to nearest free track (may leave a short to investigate)")
+                    jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx)
         else:
             jog_idx = claim_track(jog_channel, [cur_x, clear_x])
         jog_y = ch_y0[jog_channel] + TRACK0_OFFSET + jog_idx * TRACK_PITCH
