@@ -476,6 +476,36 @@ def main():
         channel_used_x[(channel, idx)].extend(cxs)
         return idx
 
+    def claim_track_near(channel, cxs, target_idx):
+        """Like claim_track, but searches OUTWARD from `target_idx` for
+        the CLOSEST unclaimed, collision-clear index, instead of always
+        taking the next never-before-tried global index. `next_free_idx`
+        only ever increases, so by the time a pass running LATE in the
+        pipeline (e.g. FORCE_JOG_NETS, design_notes 38.13/38.16) claims
+        a track, "next free" can be far from where this particular jog
+        actually needs to land -- and draw_jog's departure leg (the
+        vertical run at the ORIGINAL x, from the jog's start Y up to
+        whatever track_y gets picked) is never live-checked, so a track
+        far away means a long, unchecked run right back through the
+        collision zone the jog was meant to escape. Searching near a
+        caller-supplied target Y (typically right at the channel
+        boundary the jog starts from) keeps that departure leg as short
+        as physically possible instead."""
+        idx_hi = int((CH_HEIGHTS[channel] - 2 * TRACK0_OFFSET) // TRACK_PITCH)
+        for offset in range(0, idx_hi + 1):
+            candidates = {target_idx + offset, target_idx - offset} if offset else {target_idx}
+            for idx in sorted(candidates):
+                if idx < 0 or idx > idx_hi:
+                    continue
+                if (channel, idx) in channel_used_x:
+                    continue
+                if collides(channel, idx, cxs):
+                    continue
+                channel_used_x[(channel, idx)].extend(cxs)
+                next_free_idx[channel] = max(next_free_idx[channel], idx + 1)
+                return idx
+        raise SystemExit(f"claim_track_near: no free track near idx={target_idx} in channel {channel}")
+
     non_spanning_nets = {}
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in row_only_net_row})
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in adj_net_ch})
@@ -650,13 +680,25 @@ def main():
                     return cand
         raise SystemExit(f"no clear X found in overlap zone near x={start_x} (y {y_lo}-{y_hi})")
 
-    def draw_jog(cur_x, cur_y, clear_x, jog_channel):
+    def draw_jog(cur_x, cur_y, clear_x, jog_channel, near_y=None):
         """via_1(M2->M1) at (cur_x, jog_y) -> M1 run to clear_x -> via_1
         (M1->M2) at (clear_x, jog_y). jog_y is a freshly claimed track in
         jog_channel. Returns the new (cur_x, cur_y) to continue from.
         Shared by pass 2's row-crossing jogs and pass 1's forced-overlap-
-        zone jogs (v4)."""
-        jog_idx = claim_track(jog_channel, [cur_x, clear_x])
+        zone jogs (v4).
+
+        `near_y`, if given, claims the jog's track via claim_track_near
+        (search outward from near_y) instead of claim_track (always the
+        next never-before-tried global index) -- keeps the departure leg
+        at `cur_x` (never live-checked) as short as possible, which
+        matters for a pass running late in the pipeline where "next
+        free" can otherwise be far from where the jog starts (v4.5,
+        design_notes 38.16)."""
+        if near_y is not None:
+            target_idx = int(round((near_y - TRACK0_OFFSET - ch_y0[jog_channel]) / TRACK_PITCH))
+            jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx)
+        else:
+            jog_idx = claim_track(jog_channel, [cur_x, clear_x])
         jog_y = ch_y0[jog_channel] + TRACK0_OFFSET + jog_idx * TRACK_PITCH
         m2_box(cur_x - PAD_HALF, min(cur_y, jog_y), cur_x + PAD_HALF, max(cur_y, jog_y))
         place_via(cur_x, jog_y)
@@ -776,7 +818,7 @@ def main():
                         overlap_jog_count += 1
                         m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
                                cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
-                        cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel)
+                        cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel, near_y=channel_entry_y)
             y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
             m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
             place_via(cur_x, track_y)
@@ -840,6 +882,10 @@ def main():
     # run LAST so it sees every other net's true final geometry. Scoped
     # to just these 6 already-diagnosed nets, so cost stays small.
     force_jog_count = 0
+    force_jog_events = []  # v4.5 (design_notes 38.15): every jog FORCE_JOG_NETS
+                            # actually inserted, for a dedicated ERR-layer highlight
+                            # so jog placement can be visually cross-checked against
+                            # the (253,3) remaining-short overlap polygons.
     for net, pads in force_jog_pads.items():
         cur_net[0] = net
         channel, track_y = final_track[net]
@@ -857,7 +903,13 @@ def main():
                     force_jog_count += 1
                     m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
                            cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
-                    cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel)
+                    cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel, near_y=channel_entry_y)
+                    force_jog_events.append({
+                        "net": net, "inst": inst_name, "pin": pname,
+                        "orig_x": cx, "clear_x": clear_x, "jog_y": cur_y,
+                        "channel": channel, "channel_entry_y": channel_entry_y,
+                        "track_y": track_y,
+                    })
             y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
             m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
             place_via(cur_x, track_y)
@@ -869,6 +921,11 @@ def main():
         routed += 1
     if force_jog_pads:
         print(f"FORCE_JOG_NETS: {len(force_jog_pads)} net(s), {force_jog_count} pin(s) jogged")
+
+    force_jog_events_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/force_jog_events_nrow_fm.json"
+    with open(force_jog_events_path, "w") as f:
+        json.dump(force_jog_events, f, indent=1)
+    print(f"wrote {force_jog_events_path} ({len(force_jog_events)} jog event(s))")
 
     for c in range(n_ch):
         budget = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1

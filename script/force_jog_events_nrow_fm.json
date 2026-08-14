@@ -1,0 +1,178 @@
+[
+ {
+  "net": "txreg[1]",
+  "inst": "_392_",
+  "pin": "B",
+  "orig_x": 234.90000000000003,
+  "clear_x": 251.10000000000002,
+  "jog_y": 160.8,
+  "channel": 1,
+  "channel_entry_y": 154.8,
+  "track_y": 168.8
+ },
+ {
+  "net": "txreg[1]",
+  "inst": "_422_",
+  "pin": "C",
+  "orig_x": 477.90000000000003,
+  "clear_x": 461.70000000000005,
+  "jog_y": 292.8,
+  "channel": 1,
+  "channel_entry_y": 154.8,
+  "track_y": 168.8
+ },
+ {
+  "net": "_059_",
+  "inst": "_362_",
+  "pin": "Y",
+  "orig_x": 996.2999999999997,
+  "clear_x": 1007.0999999999997,
+  "jog_y": 412.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 212.8
+ },
+ {
+  "net": "_059_",
+  "inst": "_371_",
+  "pin": "B",
+  "orig_x": 1125.9,
+  "clear_x": 1066.5,
+  "jog_y": 408.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 212.8
+ },
+ {
+  "net": "_059_",
+  "inst": "_436_",
+  "pin": "B",
+  "orig_x": 1466.1000000000004,
+  "clear_x": 1444.5000000000005,
+  "jog_y": 404.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 212.8
+ },
+ {
+  "net": "_172_",
+  "inst": "_340_",
+  "pin": "A",
+  "orig_x": 13.5,
+  "clear_x": 121.5,
+  "jog_y": 717.6,
+  "channel": 2,
+  "channel_entry_y": 719.6,
+  "track_y": 525.6
+ },
+ {
+  "net": "_172_",
+  "inst": "_446_",
+  "pin": "QB",
+  "orig_x": 1007.0999999999999,
+  "clear_x": 1017.8999999999999,
+  "jog_y": 713.6,
+  "channel": 2,
+  "channel_entry_y": 719.6,
+  "track_y": 525.6
+ },
+ {
+  "net": "_195_",
+  "inst": "_475_",
+  "pin": "QB",
+  "orig_x": 769.4999999999998,
+  "clear_x": 747.8999999999997,
+  "jog_y": 1006.4,
+  "channel": 3,
+  "channel_entry_y": 1008.4,
+  "track_y": 866.4
+ },
+ {
+  "net": "_195_",
+  "inst": "_440_",
+  "pin": "A",
+  "orig_x": 1098.8999999999999,
+  "clear_x": 1158.3,
+  "jog_y": 1002.4,
+  "channel": 3,
+  "channel_entry_y": 1008.4,
+  "track_y": 866.4
+ },
+ {
+  "net": "_055_",
+  "inst": "_415_",
+  "pin": "B",
+  "orig_x": 369.9,
+  "clear_x": 218.69999999999996,
+  "jog_y": 300.8,
+  "channel": 1,
+  "channel_entry_y": 154.8,
+  "track_y": 268.8
+ },
+ {
+  "net": "_055_",
+  "inst": "_423_",
+  "pin": "B",
+  "orig_x": 494.1,
+  "clear_x": 542.7,
+  "jog_y": 308.8,
+  "channel": 1,
+  "channel_entry_y": 154.8,
+  "track_y": 268.8
+ },
+ {
+  "net": "_055_",
+  "inst": "_358_",
+  "pin": "Y",
+  "orig_x": 931.4999999999998,
+  "clear_x": 904.4999999999998,
+  "jog_y": 400.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 268.8
+ },
+ {
+  "net": "_055_",
+  "inst": "_359_",
+  "pin": "B",
+  "orig_x": 942.2999999999997,
+  "clear_x": 980.0999999999997,
+  "jog_y": 396.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 268.8
+ },
+ {
+  "net": "_055_",
+  "inst": "_371_",
+  "pin": "A",
+  "orig_x": 1120.5,
+  "clear_x": 1039.5,
+  "jog_y": 392.8,
+  "channel": 1,
+  "channel_entry_y": 414.8,
+  "track_y": 268.8
+ },
+ {
+  "net": "_109_",
+  "inst": "_442_",
+  "pin": "A",
+  "orig_x": 710.1000000000001,
+  "clear_x": 823.5000000000001,
+  "jog_y": 790.4,
+  "channel": 3,
+  "channel_entry_y": 784.4,
+  "track_y": 878.4
+ },
+ {
+  "net": "_109_",
+  "inst": "_441_",
+  "pin": "Y",
+  "orig_x": 1152.8999999999999,
+  "clear_x": 1185.3,
+  "jog_y": 998.4,
+  "channel": 3,
+  "channel_entry_y": 1008.4,
+  "track_y": 878.4
+ }
+]

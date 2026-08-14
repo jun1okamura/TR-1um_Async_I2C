@@ -20,6 +20,16 @@ the two known-outstanding issue classes (per design_notes.md 38.6):
     outside this layout's scope) and are marked with a separate label
     prefix "PORT:" so they are visually distinguishable from stub nets
     that are NOT ports (genuinely suspicious -- 24 of the 31 stubs).
+  - (253,3) ERR_SHORT_POINT: the exact overlap polygon(s) where two
+    shorted nets' M2 stub/M1 trunk geometry physically coincides,
+    reconstructed net-by-net (not from the merged GDS region, which
+    can no longer tell the two nets apart once they've physically
+    touched).
+  - (253,4) ERR_FORCE_JOG: the M1 run + both via_1 endpoints of every
+    jog route_channels_nrow_fm.py's FORCE_JOG_NETS pass actually
+    inserted (design_notes 38.13), labeled JOG-FROM:/JOG-TO:net:
+    inst.pin -- lets jog placement be visually cross-checked against
+    the (253,3) overlaps that remain.
 
 Ground truth:
   - Shorts: re-run of verify_connectivity_nrow_fm.py's algorithm, kept
@@ -42,6 +52,7 @@ import klayout.db as db
 PLACEMENT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/placement_nrow_fm.json"
 PIN_MAP_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/pin_map_nrow_fm.json"
 NET_SHAPES_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/net_shapes_nrow_fm.json"
+FORCE_JOG_EVENTS_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/force_jog_events_nrow_fm.json"
 IN_GDS = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_nrow_fm_routed.gds"
 OUT_GDS = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_nrow_fm_with_err.gds"
 NET_FILE = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net.v"
@@ -55,6 +66,7 @@ ERR_SHORT_GEOM = (253, 0)
 ERR_SHORT_PIN = (253, 1)
 ERR_UNCONNECTED_PIN = (253, 2)
 ERR_SHORT_POINT = (253, 3)
+ERR_FORCE_JOG = (253, 4)
 
 MARK = 6.0
 
@@ -170,6 +182,13 @@ def main():
 
     pin_map = json.load(open(PIN_MAP_JSON))
 
+    try:
+        force_jog_events = json.load(open(FORCE_JOG_EVENTS_JSON))
+        print(f"loaded force_jog_events log: {len(force_jog_events)} jog(s)")
+    except FileNotFoundError:
+        force_jog_events = []
+        print("force_jog_events log not found -- (253,4) layer will be empty")
+
     layout = db.Layout()
     layout.read(IN_GDS)
     dbu = layout.dbu
@@ -271,6 +290,7 @@ def main():
     err_pin_idx = layout.layer(*ERR_SHORT_PIN)
     err_unconn_idx = layout.layer(*ERR_UNCONNECTED_PIN)
     err_point_idx = layout.layer(*ERR_SHORT_POINT)
+    err_jog_idx = layout.layer(*ERR_FORCE_JOG)
 
     def um(v):
         return int(round(v / dbu))
@@ -327,13 +347,37 @@ def main():
             prefix = "PORT:" if net in ports else "OPEN:"
             mark(cx, cy, f"{prefix}{net}:{instname}.{pinname}", err_unconn_idx)
 
+    # FORCE_JOG_NETS jog highlight (design_notes 38.15): the M1 run +
+    # both via_1 endpoints of every jog route_channels_nrow_fm.py's
+    # dedicated FORCE_JOG_NETS pass actually inserted, so jog placement
+    # can be visually cross-checked in KLayout against the (253,3)
+    # overlap polygons that remain -- e.g. to see whether a jog landed
+    # too close to the other net's own geometry, or whether some pins
+    # never triggered a jog in the first place.
+    for ev in force_jog_events:
+        net, orig_x, clear_x, jog_y = ev["net"], ev["orig_x"], ev["clear_x"], ev["jog_y"]
+        half_w = M1_TRUNK_HALF
+        m1_box = db.Box(um(min(orig_x, clear_x)), um(jog_y - half_w),
+                         um(max(orig_x, clear_x)), um(jog_y + half_w))
+        top.shapes(err_jog_idx).insert(m1_box)
+        mark(orig_x, jog_y, f"JOG-FROM:{net}:{ev['inst']}.{ev['pin']}", err_jog_idx)
+        mark(clear_x, jog_y, f"JOG-TO:{net}:{ev['inst']}.{ev['pin']}", err_jog_idx)
+    if force_jog_events:
+        by_net = defaultdict(int)
+        for ev in force_jog_events:
+            by_net[ev["net"]] += 1
+        print(f"FORCE_JOG_NETS jog highlight: {len(force_jog_events)} jog(s) "
+              f"({dict(by_net)})")
+
     layout.write(OUT_GDS)
     print("\nwrote", OUT_GDS)
     print(f"layers: {ERR_SHORT_GEOM}=shorted metal geometry, {ERR_SHORT_PIN}=pins of implicated nets, "
           f"{ERR_UNCONNECTED_PIN}=unconnected (stub) pins (label PORT:=expected top-level port, "
           f"OPEN:=not a port, worth investigating), "
           f"{ERR_SHORT_POINT}=exact overlap polygon where the two nets' M2 stub/M1 trunk geometry "
-          f"physically coincide (labeled SHORT:netA<->netB)")
+          f"physically coincide (labeled SHORT:netA<->netB), "
+          f"{ERR_FORCE_JOG}=M1 run + via_1 endpoints of every jog FORCE_JOG_NETS inserted "
+          f"(labeled JOG-FROM:/JOG-TO:net:inst.pin)")
 
     txt_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/err_report_nrow_fm_details.txt"
     with open(txt_path, "w") as f:
@@ -357,6 +401,12 @@ def main():
         for net, pads in sorted(stub_nonport.items()):
             for r, instname, pinname, cx, cy in pads:
                 f.write(f"  OPEN net={net} {instname}.{pinname} ({cx:.2f},{cy:.2f})\n")
+        f.write(f"\n=== {len(force_jog_events)} FORCE_JOG_NETS JOG(S) INSERTED ===\n")
+        for ev in force_jog_events:
+            f.write(f"  net={ev['net']} {ev['inst']}.{ev['pin']}  "
+                    f"orig_x={ev['orig_x']:.2f} -> clear_x={ev['clear_x']:.2f}  "
+                    f"jog_y={ev['jog_y']:.2f}  channel={ev['channel']}  "
+                    f"(layer {ERR_FORCE_JOG} in GDS)\n")
     print("wrote", txt_path)
 
 
