@@ -168,7 +168,12 @@ HIGH_FO_GUARD_TRACKS = 1  # empty tracks left on either side of a high-FO net's
 # v4 point 8 (user proposal): these highest-fanout, multi-row nets get
 # per-row local trunks + a connecting spine instead of the generic
 # dedicated-track treatment above -- see module docstring point 8.
-PER_ROW_LOCAL_NETS = {"scl_buf0", "scl_buf1", "_126_buf0", "_126_buf1"}
+# v4.4 (design_notes 38.14, user request): scl_n added -- it was still
+# treated as a plain high-FO net (dedicated guarded track, but ONE
+# shared trunk across whichever rows/channel it landed in) and kept
+# showing up as a case-2 short with unrelated nets (scl_n/txreg[1],
+# scl_n/_080_, scl_n/_126_buf1 across this session's iterations).
+PER_ROW_LOCAL_NETS = {"scl_buf0", "scl_buf1", "_126_buf0", "_126_buf1", "scl_n"}
 PER_ROW_GUARD_TRACKS = 1
 
 # v4.3 (design_notes 38.13, user-directed targeted fix): these 6 nets are
