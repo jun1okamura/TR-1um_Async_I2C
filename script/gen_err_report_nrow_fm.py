@@ -53,8 +53,13 @@ M2_LAYER = (20, 0)
 ERR_SHORT_GEOM = (253, 0)
 ERR_SHORT_PIN = (253, 1)
 ERR_UNCONNECTED_PIN = (253, 2)
+ERR_SHORT_POINT = (253, 3)
 
 MARK = 6.0
+
+# must match route_channels_nrow_fm.py
+PAD_HALF = 3.4 / 2.0
+M1_TRUNK_HALF = 1.8 / 2.0
 
 
 def top_level_ports():
@@ -101,8 +106,38 @@ def rebuild_net_pins():
     return net_pins
 
 
+def net_region(net, pin_map, pin_center, um):
+    """Reconstruct net's own M1(trunk)/M2(stub) rectangles from pin_map
+    (net -> [(instname,pinname,via_x,via_y=track_y), ...]) + pin_center
+    (net,instname,pinname) -> (pin's own x,y from placement), matching
+    route_channels_nrow_fm.py's stub/trunk drawing exactly enough to
+    find the physical overlap with another net's reconstructed region.
+    `um` converts a float um coordinate to database units (dbu-matched
+    to the loaded layout).
+    """
+    boxes = []
+    by_track = defaultdict(list)
+    for inst, pname, vx, vy in pin_map.get(net, []):
+        px, py = pin_center.get((net, inst, pname), (vx, vy))
+        y0, y1 = min(py, vy), max(py, vy)
+        if y1 - y0 < 1e-6:
+            y1 = y0 + 1e-6
+        boxes.append((vx - PAD_HALF, y0, vx + PAD_HALF, y1))
+        by_track[vy].append(vx)
+    for ty, xs in by_track.items():
+        boxes.append((min(xs), ty - M1_TRUNK_HALF, max(xs), ty + M1_TRUNK_HALF))
+    region = db.Region()
+    for x0, y0, x1, y1 in boxes:
+        region.insert(db.Box(um(x0), um(y0), um(x1), um(y1)))
+    return region
+
+
 def main():
     net_pins = rebuild_net_pins()
+    pin_center = {}  # (net,instname,pinname) -> (x,y), pin's own placement coordinate
+    for net, pads in net_pins.items():
+        for r, instname, pname, cx, cy in pads:
+            pin_center[(net, instname, pname)] = (cx, cy)
     ports = top_level_ports()
     stub_nets = {n: p for n, p in net_pins.items() if len(p) < 2}
     print(f"{len(net_pins)} nets total, {len(stub_nets)} stub (unrouted, <2 M2 pins) nets")
@@ -213,6 +248,7 @@ def main():
     err_geom_idx = layout.layer(*ERR_SHORT_GEOM)
     err_pin_idx = layout.layer(*ERR_SHORT_PIN)
     err_unconn_idx = layout.layer(*ERR_UNCONNECTED_PIN)
+    err_point_idx = layout.layer(*ERR_SHORT_POINT)
 
     def um(v):
         return int(round(v / dbu))
@@ -223,6 +259,34 @@ def main():
         t = db.Text(label, db.Trans(um(x), um(y + MARK)))
         t.size = um(2.0)
         top.shapes(layer_idx).insert(t)
+
+    # exact collision point per conflict: reconstruct each net's own
+    # trunk+stub rectangles from pin_map/placement data (NOT the merged
+    # GDS region, since once two nets' copper touches, the merged
+    # region can no longer tell which polygon area belongs to which
+    # net) and intersect the two nets' regions directly. This pinpoints
+    # the actual X where the two M2 stubs coincide, instead of the
+    # whole (potentially huge, for high-FO nets) shorted net geometry.
+    collision_points = []  # (netA, netB, [(x,y,w,h), ...])
+    for netA, pinA, netB, pinB in conflicts:
+        regA = net_region(netA, pin_map, pin_center, um)
+        regB = net_region(netB, pin_map, pin_center, um)
+        overlap = regA & regB
+        boxes = []
+        for p in overlap.each():
+            b = p.bbox()
+            boxes.append((b.left * dbu, b.bottom * dbu, b.right * dbu, b.top * dbu))
+            top.shapes(err_point_idx).insert(p)
+        if boxes:
+            cx = (boxes[0][0] + boxes[0][2]) / 2.0
+            cy = (boxes[0][1] + boxes[0][3]) / 2.0
+            t = db.Text(f"SHORT:{netA}<->{netB}", db.Trans(um(cx), um(cy + MARK)))
+            t.size = um(2.0)
+            top.shapes(err_point_idx).insert(t)
+        collision_points.append((netA, netB, boxes))
+    n_pinpointed = sum(1 for _, _, b in collision_points if b)
+    print(f"{n_pinpointed}/{len(conflicts)} short(s) pinpointed to an exact overlap polygon "
+          f"(reconstructed trunk/stub geometry vs. merged-region ambiguity for the rest)")
 
     # geometry highlight: copy every M1/M2 polygon belonging to a bad root
     for kind_idx, polys in (("M1", m1_polys), ("M2", m2_polys)):
@@ -245,14 +309,23 @@ def main():
     print("\nwrote", OUT_GDS)
     print(f"layers: {ERR_SHORT_GEOM}=shorted metal geometry, {ERR_SHORT_PIN}=pins of implicated nets, "
           f"{ERR_UNCONNECTED_PIN}=unconnected (stub) pins (label PORT:=expected top-level port, "
-          f"OPEN:=not a port, worth investigating)")
+          f"OPEN:=not a port, worth investigating), "
+          f"{ERR_SHORT_POINT}=exact overlap polygon where the two nets' M2 stub/M1 trunk geometry "
+          f"physically coincide (labeled SHORT:netA<->netB)")
 
     txt_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/err_report_nrow_fm_details.txt"
     with open(txt_path, "w") as f:
         f.write(f"=== {len(conflicts)} SHORT(S) SUSPECTED ===\n")
-        for netA, pinA, netB, pinB in conflicts:
+        for (netA, pinA, netB, pinB), (_, _, boxes) in zip(conflicts, collision_points):
             f.write(f"net={netA} {pinA[0]}.{pinA[1]} ({pinA[2]:.2f},{pinA[3]:.2f})  <->  "
                     f"net={netB} {pinB[0]}.{pinB[1]} ({pinB[2]:.2f},{pinB[3]:.2f})\n")
+            if boxes:
+                for x0, y0, x1, y1 in boxes:
+                    f.write(f"    overlap: X=[{x0:.2f},{x1:.2f}] Y=[{y0:.2f},{y1:.2f}]"
+                            f"  (layer {ERR_SHORT_POINT} in GDS)\n")
+            else:
+                f.write(f"    overlap: not pinpointed by reconstructed-geometry check "
+                        f"(see full blob on layer {ERR_SHORT_GEOM})\n")
         f.write(f"\n=== {len(stub_nets)} UNCONNECTED (stub) PIN(S) ===\n")
         f.write(f"-- {len(stub_port)} are top-level ports (expected, not a defect) --\n")
         for net, pads in sorted(stub_port.items()):
