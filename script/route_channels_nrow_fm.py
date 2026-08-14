@@ -149,7 +149,7 @@ X_GRID = 5.4              # cell/pin grid pitch -- all jog/search X steps use th
 ROW_WIDTH_UM = 5.4 * 300  # 1620.0um -- must match gen_placement_nrow_fm.py TARGET_ROW_WIDTH_UM
 
 # must match gen_placement_gds_nrow_fm.py
-CH_HEIGHTS = [90.0, 200.0, 220.0, 224.0, 100.0]
+CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
 
 ROW_X_TRIES = 200  # +-5.4 .. +-1080um for a row-crossing clear-X search
 
@@ -170,6 +170,19 @@ HIGH_FO_GUARD_TRACKS = 1  # empty tracks left on either side of a high-FO net's
 # dedicated-track treatment above -- see module docstring point 8.
 PER_ROW_LOCAL_NETS = {"scl_buf0", "scl_buf1", "_126_buf0", "_126_buf1"}
 PER_ROW_GUARD_TRACKS = 1
+
+# v4.3 (design_notes 38.13, user-directed targeted fix): these 6 nets are
+# the lower-fan-out side of a specific, already-diagnosed case-2 short
+# (design_notes 38.10's exact-overlap-polygon analysis pinpointed all 6).
+# Each gets a live channel-collision check (reusing the exact same
+# channel_clear/find_channel_clear_x/draw_jog machinery as the general
+# forced-overlap-zone mechanism, point 7 below) in a dedicated pass run
+# AFTER every other net is drawn, so the check sees the true final
+# picture. Scoped to just these 6 named nets (not a whole zone), so the
+# jog/area cost stays small -- unlike applying the same live check to an
+# entire forced-overlap zone (176 jogs, +71% core height, design_notes
+# 38.8), which was measured too costly and left disabled.
+FORCE_JOG_NETS = {"txreg[1]", "_195_", "_055_", "_059_", "_172_", "_109_"}
 
 
 def um(v, dbu):
@@ -461,6 +474,12 @@ def main():
     non_spanning_nets = {}
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in row_only_net_row})
     non_spanning_nets.update({n: p for n, p in net_pins.items() if n in adj_net_ch})
+    # v4.3: the 6 FORCE_JOG_NETS still get their normal structural track
+    # assignment below (channel_primary/claim_track, unchanged), but
+    # their actual DRAWING is deferred to a dedicated, live-checked pass
+    # at the very end instead of the normal pass 1 loop (see
+    # FORCE_JOG_NETS definition above).
+    force_jog_pads = {n: p for n, p in non_spanning_nets.items() if n in FORCE_JOG_NETS}
     spanning_nets = {n: p for n, p in net_pins.items() if n in span_channel_assign}
     high_fo_nets = {}
     high_fo_nets.update({n: p for n, p in net_pins.items() if n in high_fo_row_only})
@@ -725,6 +744,8 @@ def main():
     # point 7) gets a live collision check first; on a hit, a jog
     # (shared `draw_jog` helper) reroutes to a clear X on a fresh track.
     for net, pads in list(high_fo_nets.items()) + list(non_spanning_nets.items()):
+        if net in FORCE_JOG_NETS:
+            continue  # drawn later in its own dedicated live-checked pass (v4.3)
         cur_net[0] = net
         channel, track_y = final_track[net]
         zone = overlap_zone.get(channel)
@@ -807,6 +828,42 @@ def main():
         half_w = M1_TRUNK_WIDTH / 2.0
         m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
         routed += 1
+
+    # pass 3 (v4.3, design_notes 38.13): FORCE_JOG_NETS -- the same live
+    # channel-collision check as the forced-overlap-zone mechanism
+    # (point 7), but unconditional (not gated by zone membership) and
+    # run LAST so it sees every other net's true final geometry. Scoped
+    # to just these 6 already-diagnosed nets, so cost stays small.
+    force_jog_count = 0
+    for net, pads in force_jog_pads.items():
+        cur_net[0] = net
+        channel, track_y = final_track[net]
+        pin_cxs = []
+        for row, inst_name, pname, x0, y0, x1, y1 in pads:
+            cx = (x0 + x1) / 2.0
+            direction = -1 if channel <= row else 1
+            pin_edge_y = y0 if direction == -1 else y1
+            cur_x, cur_y = cx, pin_edge_y
+            channel_entry_y = row_y0[row] if direction == -1 else row_y0[row] + row_h
+            y_lo, y_hi = min(channel_entry_y, track_y), max(channel_entry_y, track_y)
+            if not channel_clear(cx, y_lo, y_hi):
+                clear_x = find_channel_clear_x(cx, y_lo, y_hi)
+                if abs(clear_x - cx) > 1e-6:
+                    force_jog_count += 1
+                    m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
+                           cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
+                    cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel)
+            y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
+            m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
+            place_via(cur_x, track_y)
+            pin_cxs.append(cur_x)
+            pin_map.setdefault(net, []).append((inst_name, pname, cur_x, track_y))
+        xmin, xmax = min(pin_cxs), max(pin_cxs)
+        half_w = M1_TRUNK_WIDTH / 2.0
+        m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
+        routed += 1
+    if force_jog_pads:
+        print(f"FORCE_JOG_NETS: {len(force_jog_pads)} net(s), {force_jog_count} pin(s) jogged")
 
     for c in range(n_ch):
         budget = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1
