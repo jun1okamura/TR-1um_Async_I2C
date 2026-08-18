@@ -117,6 +117,7 @@ remaining case-2 shorts, root-caused in 38.6/38.7):
      them by construction, independent of trunk width.
 """
 import json
+import os
 import sys
 from collections import defaultdict
 
@@ -231,7 +232,8 @@ def assign_lanes(nets_subset):
 def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
          force_jog_nets=None, per_row_local_nets=None,
          pin_map_path=None, net_shapes_path=None, force_jog_events_path=None,
-         channel_usage_path=None, ch_heights=None):
+         channel_usage_path=None, ch_heights=None,
+         checkpoint_dir=None, checkpoint_prefix="step"):
     """Section 40 CLI overrides -- see insert_row_buffers.py: lets this be
     re-run against a different (placement_json, in_gds, out_gds) triple
     (e.g. the v4 row-buffered netlist's placement) without disturbing the
@@ -239,7 +241,17 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     result. force_jog_nets/per_row_local_nets, if given, REPLACE the
     module-level FORCE_JOG_NETS/PER_ROW_LOCAL_NETS sets for this call only
     (both are stale, old-netlist-specific net names when left at their
-    defaults -- a fresh netlist needs its own diagnosis)."""
+    defaults -- a fresh netlist needs its own diagnosis).
+
+    checkpoint_dir (section 43, user request "処理ごとの結果をレイアウトと
+    して保存"): if given, this router writes an intermediate GDS snapshot
+    of `layout` after each of its 5 internal drawing passes (TAP power
+    mesh; pass 0 per-row-local trunks+spine; pass 1 high-FO+row-only+
+    adjacent-pair; pass 2 spanning-net jogs; pass 3 FORCE_JOG_NETS) into
+    checkpoint_dir, named f"{checkpoint_prefix}_N_<stage>.gds". Purely
+    additive -- does not change what gets drawn or the final out_gds
+    write, only adds extra layout.write() calls along the way so each
+    stage's result can be inspected/compared on its own."""
     global FORCE_JOG_NETS, PER_ROW_LOCAL_NETS, CH_HEIGHTS
     if force_jog_nets is not None:
         FORCE_JOG_NETS = force_jog_nets
@@ -707,6 +719,19 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     via_lib = pya.Library.library_by_name("TR-1um", "*")
     via_decl = via_lib.layout().pcell_declaration("via_1")
 
+    _ckpt_n = [0]
+
+    def checkpoint(stage_name):
+        """See checkpoint_dir docstring above. No-op unless checkpoint_dir
+        was passed to main()."""
+        if not checkpoint_dir:
+            return
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        _ckpt_n[0] += 1
+        path = os.path.join(checkpoint_dir, f"{checkpoint_prefix}_{_ckpt_n[0]}_{stage_name}.gds")
+        layout.write(path)
+        print(f"  checkpoint: wrote {path}")
+
     # per-net shape log (v4.1): records every M1/M2 box actually drawn,
     # tagged with whichever net is "current" at draw time (set at the
     # top of each per-net loop body in passes 0/1/2). This is the
@@ -742,6 +767,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
             for lx0, lx1 in (TAP_GND_X_LOCAL, TAP_VDD_X_LOCAL):
                 m2_box(tap_x + lx0, y_lo, tap_x + lx1, y_hi)
     print(f"TAP power mesh: {len(tap_xs)} column(s) x {n_ch} channel(s) x 2 nets (VDD/GND)")
+    checkpoint("tap_power_mesh")
 
     forbidden_x_ranges = [
         (tap_x + lx0, tap_x + lx1)
@@ -1264,6 +1290,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     with open(per_row_spine_events_path, "w") as f:
         json.dump(per_row_spine_events, f, indent=1)
     print(f"wrote {per_row_spine_events_path} ({len(per_row_spine_events)} spine event(s))")
+    checkpoint("pass0_per_row_local")
 
     # pass 1: row-only / adjacent-pair nets, via_1 only. High-FO nets are
     # drawn FIRST (v4, "priority routing" -- their dedicated guarded
@@ -1312,6 +1339,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         routed += 1
     if overlap_jog_count:
         print(f"forced-overlap-zone collisions resolved by jogging {overlap_jog_count} pin(s)")
+    checkpoint("pass1_high_fo_row_only_adjacent")
 
     # pass 2: spanning nets -- M2 vertical only; X changes go through a
     # via_1 -> M1 -> via_1 jog on a freshly claimed track
@@ -1357,6 +1385,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         half_w = M1_TRUNK_WIDTH / 2.0
         m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
         routed += 1
+    checkpoint("pass2_spanning")
 
     # pass 3 (v4.3, design_notes 38.13): FORCE_JOG_NETS -- the same live
     # channel-collision check as the forced-overlap-zone mechanism
@@ -1421,6 +1450,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     with open(force_jog_events_path, "w") as f:
         json.dump(force_jog_events, f, indent=1)
     print(f"wrote {force_jog_events_path} ({len(force_jog_events)} jog event(s))")
+    checkpoint("pass3_force_jog_nets")
 
     channel_usage = []
     for c in range(n_ch):

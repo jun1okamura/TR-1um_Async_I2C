@@ -5315,3 +5315,76 @@ v6のプレースメント→配置GDS→配線を最新LEFで再実行し、結
 - `script/route_channels_nrow_fm.py`：per-row-localネットのstep 1
   （行トランク→ピン接続）にライブ衝突チェック＋狭域ジョグを追加
   （`m1_clear`ヘルパー新設）。
+
+# 43. 配置配線パイプラインのステップ別整理とレイアウトチェックポイント保存
+
+ユーザー要望（「一旦整理したいので、もう一度処理ごとの結果を
+レイアウトとして保存」）に応え、配置配線パイプライン全体を
+処理単位に分解し、各ステップ終了時点のGDSを個別ファイルとして
+保存できるようにした。対象はv6ネットリスト（150インスタンス、
+162信号ネット）。
+
+## 43.1 パイプライン全体のステップ一覧
+
+| # | ステップ | スクリプト | 入力 | 出力 |
+|---|---------|-----------|------|------|
+| 0 | 論理合成（Yosys, `opt_merge -share_all`） | （インライン、`yowasp_yosys`） | `src/i2c_slave_async.v` | `src/i2c_slave_async_net_v5.v` |
+| 0.5 | 行アウェアバッファ挿入（scl/scl_n） | `insert_row_buffers.py` | v5ネットリスト | `src/i2c_slave_async_net_v6.v` |
+| 1 | 配置（行割当＋セル詰め） | `gen_placement_nrow_fm.py` | v6ネットリスト | `LEF/placement_nrow_fm_v6.json`, `LEF/row_assignment_v6.json` |
+| 2 | 配置GDS生成（セル配置のみ、配線なし） | `gen_placement_gds_nrow_fm.py` | 配置JSON | `Layout/i2c_slave_async_nrow_fm_v6_placement.gds` |
+| 3 | TAP電源メッシュ配線 | `route_channels_nrow_fm.py`（内部） | 配置GDS | （routed.gds内、チェックポイントstep1） |
+| 4 | pass 0：per-row-localネット（トランク＋スパイン） | 同上 | — | チェックポイントstep2 |
+| 5 | pass 1：高FO＋行内／隣接行ペアネット | 同上 | — | チェックポイントstep3 |
+| 6 | pass 2：行またぎ（spanning）ネット | 同上 | — | チェックポイントstep4 |
+| 7 | pass 3：FORCE_JOG_NETS（診断済みネットの最終ライブチェック付き配線） | 同上 | — | チェックポイントstep5＝`Layout/i2c_slave_async_nrow_fm_v6_routed.gds` |
+| 8 | DRCチェック | `drc_check_nrow_fm.py` | routed.gds | 標準出力（違反数） |
+| 9 | 接続性検証（短絡・未接続検出） | `verify_connectivity_nrow_fm.py` | routed.gds + pin_map | 標準出力（短絡/未接続一覧） |
+| 10 | エラーハイライト生成 | `gen_err_report_nrow_fm.py` | routed.gds + pin_map + net_shapes | `Layout/i2c_slave_async_nrow_fm_v6_with_err.gds`, `err_report_nrow_fm_details.txt`（チェックポイントstep6） |
+
+ステップ3〜7は`route_channels_nrow_fm.py`の`main()`内で連続実行される
+（同一プロセス・同一`layout`オブジェクトへの累積描画）。各パスの
+処理内容：
+
+- **TAP電源メッシュ**：各行のTAP2セルのVDD/GND M2ストラップを、
+  上下のチャネルを貫通する形で1本の垂直電源メッシュに接続。
+- **pass 0（per-row-local）**：3行以上または非隣接2行にまたがる
+  高FOネット（v6では`RSTB1, RSTB2, sda_in, scl, addr_ok, _071_,
+  _086_`の7net）について、行ごとに専用ローカルトランクを引き、
+  行間はスパイン（M2縦配線＋必要に応じジョグ）で接続。
+- **pass 1（高FO＋行内／隣接行ペア）**：単一行または隣接2行のみに
+  ピンを持つネットを、専用トラックに割り当てたM1トランク＋M2
+  スタブで配線。強制重複ゾーンのライブ衝突チェック（現在は
+  ユーザー判断待ちで無効化中）もここに属する。
+- **pass 2（spanning）**：3行以上にまたがるが per-row-local
+  指定されていないネット（v6では該当0件）。行を通過する際は
+  `find_row_clear_x`でクリアなXを探索し、必要ならジョグ。
+- **pass 3（FORCE_JOG_NETS）**：既知の短絡候補として個別診断済みの
+  ネット（v6では16net）を最後に再配線。他の全ネットの最終形状に
+  対してライブ衝突チェック（`channel_clear`／`m1_run_clear`）を行い、
+  衝突があればジョグ。
+
+## 43.2 保存したチェックポイントGDS
+
+`script/run_route_v6_checkpoints.py`（新規、`route_channels_nrow_fm.
+main()`の`checkpoint_dir`引数を使用）を実行し、`Layout/steps_v6/`
+配下に7ファイルを保存：
+
+- `v6_step_0_placement.gds` — 配置直後（配線なし）
+- `v6_step_1_tap_power_mesh.gds` — TAP電源メッシュ配線後
+- `v6_step_2_pass0_per_row_local.gds` — per-row-localネット配線後
+- `v6_step_3_pass1_high_fo_row_only_adjacent.gds` — 高FO＋行内／隣接
+  行ペアネット配線後
+- `v6_step_4_pass2_spanning.gds` — spanningネット配線後（v6は0件の
+  ため step3と幾何学的に同一）
+- `v6_step_5_pass3_force_jog_nets.gds` — FORCE_JOG_NETS配線後
+  （＝最終配線結果、`i2c_slave_async_nrow_fm_v6_routed.gds`と同一）
+- `v6_step_6_with_err_highlight.gds` — エラーハイライト付き最終版
+
+`checkpoint_dir`機構自体は`route_channels_nrow_fm.py`の`main()`に
+恒久的に追加済み（デフォルト`None`＝無効、既存の呼び出しに
+影響なし）ので、今後の再配線でも同じ方法でステップ別GDSを
+再取得できる。
+
+再実行結果はDRC 0違反、162ネット中161ネット完全検証、
+`shreg[1]`/`_071_`の短絡疑い1件のみ残存——既知の結果と完全一致
+（42.11節の状態から変化なし）。
