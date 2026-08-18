@@ -5180,9 +5180,33 @@ v5に対し`insert_row_buffers.py`（パス引数化）でscl/scl_n行アウェ�
 layer 253/3に正確な重複ポリゴンをラベル`SHORT:netA<->netB`付きで
 出力）。
 
+## 42.9 GDS側のピン修正確認・LEF再生成
+
+ユーザーがGDS（`LEF/TR-1um_STDCELL.gds`）のDFFRリセットピンマーカーの
+テキストラベルを`RB`→`RSTB`に直接修正。GDSのTXM2レイヤーを確認し、
+`RSTB 56700 29700`（他のD/CK/QB/Qと同じ形式）になっていることを確認。
+ピンの矩形座標自体（RECT 55.000 27.900 58.400 31.300）は変更前と
+完全一致——純粋なラベル変更で、物理形状の変更ではないことを確認。
+
+`gen_lef.py`のPIN_META["DFFR"]を`"RB"`→`"RSTB"`に追随修正し、
+`TR-1um_STDCELL.lef`を再生成（23マクロ、DFFRピンは
+`D/CK/RSTB/Q/QB/VDD/GND`とネイティブに一致、42.5節で追加した
+`PIN_NAME_ALIASES`ワークアラウンドは不要になったが、後方互換の
+安全策として残置——`aliases.get(pname, pname)`は`RSTB`キーに対して
+no-opなので実害なし）。
+
+再生成したLEFではDEL1・TAP2・TAP3のOBS（内部M1障害物）ポリゴンにも
+差分が出た（ピン形状ではなく、DFFR以外への影響はゼロ）——これは
+本セッション中のルータ/配置スクリプトがOBS情報を一切参照しない
+ため、v6の配置配線結果には影響しないことを確認済み。念のため
+v6のプレースメント→配置GDS→配線を最新LEFで再実行し、結果が
+完全に同一（DRC 0違反、160/162ネット検証、同じ2件の短絡疑い）で
+あることを確認した。
+
 ## 42.8 変更したスクリプト
 
-- `script/gen_lef.py`：変更なし（LEF/GDSは触らない方針）。
+- `script/gen_lef.py`：PIN_META["DFFR"]を`"RB"`→`"RSTB"`（42.9節、
+  GDS側のラベル修正に追随）。
 - `script/gen_placement_nrow_fm.py`：`attach_pins()`に
   `PIN_NAME_ALIASES`（DFFR: RB→RSTB）を追加。
 - `script/insert_row_buffers.py`：`main()`を`in_path/out_path/

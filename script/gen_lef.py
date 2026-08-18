@@ -74,24 +74,25 @@ PIN_META = {
     "MUX2":     _gate_meta("A", "B", "S"),
     # DFFR: async-reset D flip-flop (section 35.8's 20-transistor TG-based
     # design). CK is the clock pin (marked USE CLOCK, not plain SIGNAL, so
-    # P&R/CTS tools recognize it); D/RB are ordinary signal inputs; Q/QB
+    # P&R/CTS tools recognize it); D/RSTB are ordinary signal inputs; Q/QB
     # are both real outputs (QB is tapped directly from the slave latch's
     # own NAND2, not a separately buffered copy -- see section 35.8).
-    # NOTE: the remade GDS (this session) labels the reset pin marker "RB"
-    # (reset-bar), not "RST" -- matching the now-confirmed active-low
-    # polarity. This is a PIN NAME MISMATCH against TR1um_5_stdcell.lib,
-    # which still declares pin(RST) (see gen_liberty.py's SEQ table entry
-    # ("DFFR", 8, "RST", "clear") and the .lib's `clear: "!RST"`). The LEF
-    # here follows the physical GDS (authoritative for pin geometry/name),
-    # so this mismatch must be reconciled -- rename the .lib/netlist pin to
-    # RB, or rename the GDS marker back to RST -- before this LEF can be
-    # used together with the current .lib in P&R.
+    # NOTE (section 42.9): the GDS marker was originally labeled "RB",
+    # mismatching TR1um_5_stdcell.lib/the synthesized netlist's "RSTB"
+    # pin name (section 39.2's rename) -- this silently dropped every
+    # DFFR's reset-pin connection from every placement JSON built before
+    # the fix (worked around at the P&R-script level first via a
+    # PIN_NAME_ALIASES translation in gen_placement_nrow_fm.py, then
+    # fixed at the source: the user relabeled the GDS marker itself to
+    # "RSTB", matching the .lib/netlist -- the PIN_META key below follows
+    # suit so gen_lef.py's own name_for_polygon lookup (which matches
+    # PIN_META keys against the GDS's own text labels) still succeeds.
     "DFFR": {
-        "D":   ("INPUT",  "SIGNAL"),
-        "CK":  ("INPUT",  "CLOCK"),
-        "RB":  ("INPUT",  "SIGNAL"),
-        "Q":   ("OUTPUT", "SIGNAL"),
-        "QB":  ("OUTPUT", "SIGNAL"),
+        "D":    ("INPUT",  "SIGNAL"),
+        "CK":   ("INPUT",  "CLOCK"),
+        "RSTB": ("INPUT",  "SIGNAL"),
+        "Q":    ("OUTPUT", "SIGNAL"),
+        "QB":   ("OUTPUT", "SIGNAL"),
         **_PWR,
     },
     # DFF: reset-less D flip-flop (no RST pin at all -- the master/slave

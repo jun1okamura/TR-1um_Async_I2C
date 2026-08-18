@@ -2349,7 +2349,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -2429,7 +2429,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -2509,7 +2509,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -2589,7 +2589,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -2669,7 +2669,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3294,7 +3294,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3374,7 +3374,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3454,7 +3454,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3534,7 +3534,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3614,7 +3614,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -3694,7 +3694,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -6985,7 +6985,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7065,7 +7065,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7145,7 +7145,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7225,7 +7225,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7305,7 +7305,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7385,7 +7385,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB2",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7465,7 +7465,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7563,7 +7563,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7643,7 +7643,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -7723,7 +7723,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -8742,7 +8742,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -8822,7 +8822,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -8902,7 +8902,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -8982,7 +8982,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -9062,7 +9062,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -9142,7 +9142,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10087,7 +10087,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10167,7 +10167,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10247,7 +10247,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10327,7 +10327,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10407,7 +10407,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
@@ -10487,7 +10487,7 @@
        ]
       ]
      },
-     "RB": {
+     "RSTB": {
       "net": "RSTB1",
       "direction": "INPUT",
       "use": "SIGNAL",
