@@ -154,6 +154,14 @@ CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
 
 ROW_X_TRIES = 200  # +-5.4 .. +-1080um for a row-crossing clear-X search
 
+CHANNEL_FREE_LAYER_BASE = 258  # non-fab, review only (section 43.3): (258, N)
+                                # marks every channel track NOT YET claimed
+                                # (channel_used_x) as of the end of checkpoint
+                                # #N -- i.e. still available for a LATER pass to
+                                # use. One datatype per checkpoint step, so all
+                                # steps can be toggled independently in KLayout
+                                # to watch free capacity shrink pass by pass.
+
 TAP_CELL = "TAP2"
 TAP_GND_X_LOCAL = (1.0, 4.4)
 TAP_VDD_X_LOCAL = (6.4, 9.8)
@@ -723,14 +731,46 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
 
     def checkpoint(stage_name):
         """See checkpoint_dir docstring above. No-op unless checkpoint_dir
-        was passed to main()."""
+        was passed to main().
+
+        v2 (section 43.3, user request "次のステップで配線可能なチャネル
+        リソースをハイライト"): also draws, on a dedicated non-fab layer
+        (258, N) where N is this checkpoint's step number, one thin
+        highlight box per channel track NOT YET present in `channel_used_x`
+        -- i.e. every track still free for a LATER pass to claim, as of
+        right now. This is drawn into a `layout.dup()` (a full deep copy),
+        never into the real `layout`/`top` this router's actual output is
+        built from -- so the highlight layers only ever appear in the
+        per-step checkpoint files, never leak into the real out_gds
+        deliverable. Each step's own (258, N) datatype keeps every step's
+        snapshot independently toggleable in KLayout even after all the
+        checkpoint files are merged/compared side by side."""
         if not checkpoint_dir:
             return
         os.makedirs(checkpoint_dir, exist_ok=True)
         _ckpt_n[0] += 1
-        path = os.path.join(checkpoint_dir, f"{checkpoint_prefix}_{_ckpt_n[0]}_{stage_name}.gds")
-        layout.write(path)
-        print(f"  checkpoint: wrote {path}")
+        n = _ckpt_n[0]
+        path = os.path.join(checkpoint_dir, f"{checkpoint_prefix}_{n}_{stage_name}.gds")
+
+        dup = layout.dup()
+        dup_top = dup.cell(TOP_CELL_NAME)
+        free_idx = dup.layer(CHANNEL_FREE_LAYER_BASE, n)
+        half_h = TRACK_PITCH * 0.35  # thin strip, not a full track pitch --
+                                      # visually distinct from real metal
+        n_free = 0
+        for c in range(n_ch):
+            budget_c = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1
+            for idx in range(budget_c):
+                if (c, idx) in channel_used_x:
+                    continue
+                track_y = ch_y0[c] + TRACK0_OFFSET + idx * TRACK_PITCH
+                dup_top.shapes(free_idx).insert(db.Box(
+                    um(0.0, dbu), um(track_y - half_h, dbu),
+                    um(ROW_WIDTH_UM, dbu), um(track_y + half_h, dbu)))
+                n_free += 1
+        dup.write(path)
+        print(f"  checkpoint: wrote {path} "
+              f"({n_free} free track(s) highlighted on layer ({CHANNEL_FREE_LAYER_BASE},{n}))")
 
     # per-net shape log (v4.1): records every M1/M2 box actually drawn,
     # tagged with whichever net is "current" at draw time (set at the
