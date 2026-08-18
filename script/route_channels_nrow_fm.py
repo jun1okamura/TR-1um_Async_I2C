@@ -241,7 +241,8 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
          force_jog_nets=None, per_row_local_nets=None,
          pin_map_path=None, net_shapes_path=None, force_jog_events_path=None,
          channel_usage_path=None, ch_heights=None,
-         checkpoint_dir=None, checkpoint_prefix="step"):
+         checkpoint_dir=None, checkpoint_prefix="step",
+         compaction_info_path=None):
     """Section 40 CLI overrides -- see insert_row_buffers.py: lets this be
     re-run against a different (placement_json, in_gds, out_gds) triple
     (e.g. the v4 row-buffered netlist's placement) without disturbing the
@@ -406,10 +407,18 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
 
     high_fo_track_of = {}   # net -> track idx (within its channel)
     high_fo_block_size = [0] * n_ch
+    guard_idx = defaultdict(set)  # (section 44) channel -> {idx, ...} that MUST
+                                   # stay empty (HIGH_FO_GUARD_TRACKS/
+                                   # PER_ROW_GUARD_TRACKS slots) -- a post-route
+                                   # compaction pass (squeeze_channels_nrow_fm.py)
+                                   # must never remove one of these, even though
+                                   # they're never in channel_used_x either.
     for c in range(n_ch):
         idx = 0
         for net in high_fo_nets_in_channel[c]:
             high_fo_track_of[net] = idx
+            for g in range(idx + 1, idx + 1 + HIGH_FO_GUARD_TRACKS):
+                guard_idx[c].add(g)
             idx += 1 + HIGH_FO_GUARD_TRACKS
         high_fo_block_size[c] = idx
 
@@ -483,9 +492,22 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         _a, n = span_lanes[c]
         block_offset[c]["spanning"] = (off,)
         off += n
-        idx = off + PER_ROW_GUARD_TRACKS  # leading guard before this block
+        # leading guard before this block (section 44: also a compaction-
+        # protected slot, same as the inter-net guards below) -- only
+        # exists when this channel actually HAS a per-row-local block;
+        # per_row_block_size[c] is 0 (no leading guard reserved either)
+        # when per_row_nets_in_channel[c] is empty, so this must match
+        # that condition exactly or a squeeze pass would treat a
+        # non-existent guard slot as protected in a channel that never
+        # reserved one.
+        if per_row_nets_in_channel[c]:
+            for g in range(off, off + PER_ROW_GUARD_TRACKS):
+                guard_idx[c].add(g)
+        idx = off + PER_ROW_GUARD_TRACKS
         for net in per_row_nets_in_channel[c]:
             per_row_track_of[(net, c)] = idx
+            for g in range(idx + 1, idx + 1 + PER_ROW_GUARD_TRACKS):
+                guard_idx[c].add(g)
             idx += 1 + PER_ROW_GUARD_TRACKS
         off = off + per_row_block_size[c]
         channel_total[c] = off
@@ -1590,6 +1612,39 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         with open(channel_usage_path, "w") as f:
             json.dump(channel_usage, f, indent=1)
         print(f"wrote {channel_usage_path}")
+
+    if compaction_info_path:
+        # section 44 (user request "既存配線はそのままに、未使用のM1
+        # チャネル分のY軸を圧縮"): everything a downstream post-route
+        # geometric squeeze (squeeze_channels_nrow_fm.py) needs to safely
+        # decide which track indices are truly removable, WITHOUT
+        # re-deriving any of this classification logic itself --
+        # channel_used_x (real via X positions per claimed index, so a
+        # squeeze script can re-validate MIN_VIA_X_SEP at any NEW
+        # adjacency compaction would create) and guard_idx (indices that
+        # MUST stay empty regardless of channel_used_x -- the
+        # HIGH_FO_GUARD_TRACKS/PER_ROW_GUARD_TRACKS slots computed above;
+        # these are never in channel_used_x since they're deliberately
+        # skipped, so without this a squeeze pass could not tell a
+        # necessary guard from a genuinely spare index).
+        compaction_info = {
+            "ch_y0": ch_y0, "ch_heights": list(CH_HEIGHTS), "row_y0": row_y0,
+            "row_h": row_h, "n_rows": n_rows, "n_ch": n_ch,
+            "track_pitch": TRACK_PITCH, "track0_offset": TRACK0_OFFSET,
+            "row_width_um": ROW_WIDTH_UM, "min_via_x_sep": MIN_VIA_X_SEP,
+            "channels": [],
+        }
+        for c in range(n_ch):
+            budget = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1
+            used_x = {str(idx): xs for (chan, idx), xs in channel_used_x.items() if chan == c}
+            compaction_info["channels"].append({
+                "channel": c, "budget": budget,
+                "guard_idx": sorted(guard_idx[c]),
+                "used_x": used_x,
+            })
+        with open(compaction_info_path, "w") as f:
+            json.dump(compaction_info, f, indent=1)
+        print(f"wrote {compaction_info_path}")
 
     layout.write(out_gds)
 
