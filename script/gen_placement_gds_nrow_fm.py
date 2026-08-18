@@ -32,7 +32,10 @@ TOP_CELL_NAME = "i2c_slave_async_nrow_fm"
 CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
 
 
-def main(placement_json=PLACEMENT_JSON, out_gds=OUT_GDS):
+def main(placement_json=PLACEMENT_JSON, out_gds=OUT_GDS, ch_heights=None):
+    global CH_HEIGHTS
+    if ch_heights is not None:
+        CH_HEIGHTS = ch_heights
     macros = parse_lef()
     placement = json.load(open(placement_json))
     row_h = placement["row_height"]

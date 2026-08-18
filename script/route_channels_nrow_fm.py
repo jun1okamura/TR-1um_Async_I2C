@@ -230,7 +230,8 @@ def assign_lanes(nets_subset):
 
 def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
          force_jog_nets=None, per_row_local_nets=None,
-         pin_map_path=None, net_shapes_path=None, force_jog_events_path=None):
+         pin_map_path=None, net_shapes_path=None, force_jog_events_path=None,
+         channel_usage_path=None, ch_heights=None):
     """Section 40 CLI overrides -- see insert_row_buffers.py: lets this be
     re-run against a different (placement_json, in_gds, out_gds) triple
     (e.g. the v4 row-buffered netlist's placement) without disturbing the
@@ -239,11 +240,13 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     module-level FORCE_JOG_NETS/PER_ROW_LOCAL_NETS sets for this call only
     (both are stale, old-netlist-specific net names when left at their
     defaults -- a fresh netlist needs its own diagnosis)."""
-    global FORCE_JOG_NETS, PER_ROW_LOCAL_NETS
+    global FORCE_JOG_NETS, PER_ROW_LOCAL_NETS, CH_HEIGHTS
     if force_jog_nets is not None:
         FORCE_JOG_NETS = force_jog_nets
     if per_row_local_nets is not None:
         PER_ROW_LOCAL_NETS = per_row_local_nets
+    if ch_heights is not None:
+        CH_HEIGHTS = ch_heights
     if pin_map_path is None:
         pin_map_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/pin_map_nrow_fm.json"
     if net_shapes_path is None:
@@ -1313,11 +1316,62 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         json.dump(force_jog_events, f, indent=1)
     print(f"wrote {force_jog_events_path} ({len(force_jog_events)} jog event(s))")
 
+    channel_usage = []
     for c in range(n_ch):
         budget = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1
         used = next_free_idx[c]
         status = "OK" if used <= budget else "OVERFLOW"
         print(f"  channel{c}: used {used} tracks, budget {budget} ({CH_HEIGHTS[c]} um) -> {status}")
+        # real geometry extent (section 41 -- channel compression post-process):
+        # max Y actually reached by M1/M2/via_1 drawn in this channel's band,
+        # relative to the channel's own bottom edge. This is the ground-truth
+        # figure for "how tall does this channel really need to be" -- more
+        # reliable than the track-count budget formula, which was observed to
+        # slightly OVER-count relative to real geometry in at least one case
+        # (channel0: 23 "used" tracks vs. budget 22, yet actual max M1 Y was
+        # 87.7um, safely under the 90um budget -- see design_notes.md 40.4).
+        # real SIGNAL geometry extent (section 41 -- channel compression
+        # post-process): max Y actually reached by M1/M2/via_1 drawn in
+        # this channel's band, relative to the channel's own bottom edge,
+        # EXCLUDING the TAP2 VDD/GND power-mesh strap columns (draw_tap_
+        # power_mesh() always runs those the FULL channel height by
+        # construction -- see TAP_GND_X_LOCAL/TAP_VDD_X_LOCAL -- so
+        # including them would always measure "full height used" and
+        # defeat the purpose). More reliable than the track-count budget
+        # formula above, which was found to disagree with real geometry
+        # in both directions (channel0 in the original run: 23 "used"
+        # tracks vs budget 22, yet real max M1 Y was only 87.7 of a 90um
+        # budget; see design_notes.md 40.4/41).
+        band_lo, band_hi = ch_y0[c], ch_y0[c] + CH_HEIGHTS[c]
+        tap_x_ranges = []
+        for row_insts in rows:
+            for inst in row_insts:
+                if inst["type"] == TAP_CELL:
+                    x0 = inst["x"]
+                    tap_x_ranges.append((x0 + TAP_GND_X_LOCAL[0], x0 + TAP_GND_X_LOCAL[1]))
+                    tap_x_ranges.append((x0 + TAP_VDD_X_LOCAL[0], x0 + TAP_VDD_X_LOCAL[1]))
+            break  # TAP columns are at identical X in every row, by construction
+        v1_idx = layout.layer(*V1_LAYER)
+        max_y_rel = 0.0
+        for lyr_idx in (m1_idx, m2_idx, v1_idx):
+            probe = db.Box(0, um(band_lo, dbu), um(ROW_WIDTH_UM, dbu), um(band_hi, dbu))
+            r = db.Region(top.begin_shapes_rec_touching(lyr_idx, probe))
+            if r.count() == 0:
+                continue
+            for tx0, tx1 in tap_x_ranges:
+                tap_box = db.Box(um(tx0 - 0.1, dbu), um(band_lo, dbu), um(tx1 + 0.1, dbu), um(band_hi, dbu))
+                r -= db.Region(tap_box)
+            if r.count() == 0:
+                continue
+            b = r.bbox()
+            top_um = min(b.top * dbu, band_hi)  # clip: a shape can straddle into the next row
+            max_y_rel = max(max_y_rel, top_um - band_lo)
+        channel_usage.append({"channel": c, "used_tracks": used, "budget_tracks": budget,
+                               "height_um": CH_HEIGHTS[c], "max_signal_geom_y_um": round(max_y_rel, 3)})
+    if channel_usage_path:
+        with open(channel_usage_path, "w") as f:
+            json.dump(channel_usage, f, indent=1)
+        print(f"wrote {channel_usage_path}")
 
     layout.write(out_gds)
 
