@@ -640,6 +640,20 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
     high_fo_nets = {}
     high_fo_nets.update({n: p for n, p in net_pins.items() if n in high_fo_row_only})
     high_fo_nets.update({n: p for n, p in net_pins.items() if n in high_fo_adjacent})
+    # A net can be BOTH high-FO (>=HIGH_FO_THRESHOLD pins, row-only/
+    # adjacent-pair) and listed in FORCE_JOG_NETS -- e.g. a net that's
+    # comfortably spread across many rows in a 4-row partition (never
+    # single-row, so never high-FO) can collapse to a single row's 8+
+    # pins once repartitioned into fewer rows. Before this fix,
+    # force_jog_pads was built only from non_spanning_nets, so such a
+    # net was skipped in pass 1 (deferred to FORCE_JOG_NETS's dedicated
+    # pass, per the "continue" below) but never actually present in
+    # force_jog_pads either -- silently dropped from pin_map entirely,
+    # with 0 DRC/0-shorts still reported since the connectivity checker
+    # only checks nets present in pin_map (same failure class as the
+    # DFFR RB/RSTB bug, section 39.2). Confirmed via the 2-row/3-channel
+    # variant: scl_row2 (8 pins, all row-only there) vanished this way.
+    force_jog_pads.update({n: p for n, p in high_fo_nets.items() if n in FORCE_JOG_NETS})
 
     final_track = {}
     # high-FO nets FIRST (v4, "priority routing" -- both their track

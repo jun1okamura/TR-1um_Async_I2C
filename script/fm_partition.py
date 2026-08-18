@@ -58,7 +58,11 @@ def cut_size(part, nets):
     return cut
 
 
-def fm_bipartition(instances, widths, seed_part, balance_tol=0.05, max_passes=60):
+def fm_bipartition(instances, widths, seed_part, balance_tol=0.05, max_passes=60, target_ratio=0.5):
+    """target_ratio: fraction of total weight side 0 should end up with
+    (default 0.5 = even split). Needed by fm_multiway_partition to support
+    non-power-of-2 n_rows, e.g. n_rows=3 splits 1 row vs 2 rows, an
+    asymmetric 1/3 vs 2/3 weight target, not a 50/50 one."""
     node_weight, nets = build_hypergraph(instances, widths)
     node_nets = defaultdict(list)  # name -> [net, ...]
     for net, members in nets.items():
@@ -67,7 +71,7 @@ def fm_bipartition(instances, widths, seed_part, balance_tol=0.05, max_passes=60
 
     part = dict(seed_part)
     total_w = sum(node_weight.values())
-    target = total_w / 2.0
+    target = total_w * target_ratio
     lo, hi = target * (1 - balance_tol), target * (1 + balance_tol)
 
     def side_weight(side):
@@ -141,40 +145,53 @@ def fm_bipartition(instances, widths, seed_part, balance_tol=0.05, max_passes=60
 
 
 def fm_multiway_partition(instances, widths, n_rows, balance_tol=0.05):
-    """Recursive-bisection multiway partition into n_rows (must be a power
-    of 2): split all instances into a top half / bottom half by
-    fm_bipartition, then recurse on each half independently. Returns
-    {name: row_index}, row_index in [0, n_rows).
+    """Recursive-bisection multiway partition into n_rows: split all
+    instances into a top group / bottom group by fm_bipartition, then
+    recurse on each group independently. Returns {name: row_index},
+    row_index in [0, n_rows).
+
+    Generalized (this session, for a 3-row/4-channel area comparison) to
+    ANY n_rows>=1, not just powers of 2: the top/bottom split is sized
+    n_rows//2 vs n_rows-n_rows//2 rows, and fm_bipartition's weight
+    target is scaled to that ratio (target_ratio) instead of always 0.5.
+    For n_rows a power of 2 this is byte-for-byte the old behavior (every
+    split is still even, ratio 0.5 at every level) -- e.g. n_rows=4 still
+    splits 2/2 then 1/1 twice, identical to the original code. n_rows=3
+    now splits 1 row vs 2 rows (ratio 1/3), then the 2-row side splits
+    1/1 as usual.
 
     Why recursive bisection instead of direct k-way FM: it naturally
     matches the physical structure (each split is a literal top/bottom
     cut, same as the row stack itself), and reuses fm_bipartition exactly
-    as-is -- no new algorithm, just applied twice for n_rows=4. The
-    downside is it can't undo an early bad cut, but two seed-guided FM
-    passes should track the physical top/bottom split well since the
-    seed already starts from a width-ordered guess at each level."""
-    assert n_rows >= 1 and (n_rows & (n_rows - 1)) == 0, "n_rows must be a power of 2"
+    as-is -- no new algorithm, just applied recursively. The downside is
+    it can't undo an early bad cut, but two seed-guided FM passes should
+    track the physical top/bottom split well since the seed already
+    starts from a width-ordered guess at each level."""
+    assert n_rows >= 1, "n_rows must be >= 1"
     if n_rows == 1:
         return {name: 0 for _typ, name, _pins in instances}
 
+    n_top = n_rows // 2
+    n_bottom = n_rows - n_top
+    target_ratio = n_top / n_rows
+
     total_w = sum(widths[typ] for typ, _n, _p in instances)
-    half = total_w / 2.0
+    target = total_w * target_ratio
     seed = {}
     acc = 0.0
     for typ, name, _pins in instances:
-        seed[name] = 0 if acc < half else 1
+        seed[name] = 0 if acc < target else 1
         acc += widths[typ]
-    part2 = fm_bipartition(instances, widths, seed, balance_tol=balance_tol)
+    part2 = fm_bipartition(instances, widths, seed, balance_tol=balance_tol, target_ratio=target_ratio)
 
     group_a = [(t, n, p) for t, n, p in instances if part2[n] == 0]
     group_b = [(t, n, p) for t, n, p in instances if part2[n] == 1]
-    sub_n = n_rows // 2
-    part_a = fm_multiway_partition(group_a, widths, sub_n, balance_tol)
-    part_b = fm_multiway_partition(group_b, widths, sub_n, balance_tol)
+    part_a = fm_multiway_partition(group_a, widths, n_top, balance_tol)
+    part_b = fm_multiway_partition(group_b, widths, n_bottom, balance_tol)
 
     result = dict(part_a)
     for name, r in part_b.items():
-        result[name] = r + sub_n
+        result[name] = r + n_top
     return result
 
 
