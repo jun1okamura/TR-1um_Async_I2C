@@ -733,18 +733,37 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         """See checkpoint_dir docstring above. No-op unless checkpoint_dir
         was passed to main().
 
-        v2 (section 43.3, user request "次のステップで配線可能なチャネル
-        リソースをハイライト"): also draws, on a dedicated non-fab layer
-        (258, N) where N is this checkpoint's step number, one thin
-        highlight box per channel track NOT YET present in `channel_used_x`
-        -- i.e. every track still free for a LATER pass to claim, as of
-        right now. This is drawn into a `layout.dup()` (a full deep copy),
-        never into the real `layout`/`top` this router's actual output is
-        built from -- so the highlight layers only ever appear in the
-        per-step checkpoint files, never leak into the real out_gds
-        deliverable. Each step's own (258, N) datatype keeps every step's
-        snapshot independently toggleable in KLayout even after all the
-        checkpoint files are merged/compared side by side."""
+        v3 (section 43.5, user finding): v2 marked a track "free" purely
+        from `channel_used_x` BOOKKEEPING -- was this (channel, idx) ever
+        RESERVED by primary track assignment, whether or not real metal
+        ends up there. That over-counts "used": every net's own M1 trunk
+        is only ever drawn from that net's own xmin to xmax (see the
+        `m1_box(xmin, ..., xmax, ...)` calls throughout passes 0-3), never
+        the FULL channel width -- so a "claimed" track is still mostly
+        empty outside its owner's own span (design_notes 38.23 found
+        9-24 fully-idle claimed tracks per channel this way; `draw_jog`'s
+        `allow_claimed=True` tier already exploits exactly this). The user
+        confirmed (looking at v6_step_2 vs v6_step_3) that a track
+        reserved for a net not yet DRAWN at this checkpoint reads as
+        "still free" the same way a genuinely idle stretch of an
+        already-drawn track does -- both are real capacity a later step
+        could use.
+
+        This version drops the bookkeeping check entirely and instead
+        measures, per track, the ACTUAL merged M1 already drawn in
+        `layout` (real geometry, not the assignment-time registry) within
+        that track's own Y-band, and highlights the GEOMETRIC COMPLEMENT
+        (full channel width minus that merged M1) on non-fab layer
+        (258, N), N = this checkpoint's step number. At an early
+        checkpoint this still includes space reserved-but-not-yet-drawn
+        for a LATER pass (not truly "up for grabs" by anyone else yet);
+        by the FINAL checkpoint (after every pass has drawn), it is the
+        true, trustworthy residual capacity of the finished layout.
+
+        Drawn into a `layout.dup()` (a full deep copy), never into the
+        real `layout`/`top` this router's actual output is built from --
+        so these review layers never leak into the real out_gds
+        deliverable."""
         if not checkpoint_dir:
             return
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -754,23 +773,29 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
 
         dup = layout.dup()
         dup_top = dup.cell(TOP_CELL_NAME)
+        dup_m1_idx = dup.layer(*M1_LAYER)
         free_idx = dup.layer(CHANNEL_FREE_LAYER_BASE, n)
-        half_h = TRACK_PITCH * 0.35  # thin strip, not a full track pitch --
-                                      # visually distinct from real metal
-        n_free = 0
+        half_w = M1_TRUNK_WIDTH / 2.0
+        free_area_um2 = 0.0
+        n_tracks_with_free_space = 0
         for c in range(n_ch):
             budget_c = int((CH_HEIGHTS[c] - 2 * TRACK0_OFFSET) // TRACK_PITCH) + 1
             for idx in range(budget_c):
-                if (c, idx) in channel_used_x:
-                    continue
                 track_y = ch_y0[c] + TRACK0_OFFSET + idx * TRACK_PITCH
-                dup_top.shapes(free_idx).insert(db.Box(
-                    um(0.0, dbu), um(track_y - half_h, dbu),
-                    um(ROW_WIDTH_UM, dbu), um(track_y + half_h, dbu)))
-                n_free += 1
+                band = db.Box(um(0.0, dbu), um(track_y - half_w, dbu),
+                               um(ROW_WIDTH_UM, dbu), um(track_y + half_w, dbu))
+                drawn_m1 = db.Region(dup_top.begin_shapes_rec_touching(dup_m1_idx, band)).merged()
+                free_here = db.Region(band) - drawn_m1
+                if free_here.is_empty():
+                    continue
+                dup_top.shapes(free_idx).insert(free_here)
+                free_area_um2 += free_here.area() * dbu * dbu
+                n_tracks_with_free_space += 1
         dup.write(path)
         print(f"  checkpoint: wrote {path} "
-              f"({n_free} free track(s) highlighted on layer ({CHANNEL_FREE_LAYER_BASE},{n}))")
+              f"({n_tracks_with_free_space} track(s) with real idle capacity, "
+              f"{free_area_um2/1e6:.4f} mm^2 total, highlighted on layer "
+              f"({CHANNEL_FREE_LAYER_BASE},{n}))")
 
     # per-net shape log (v4.1): records every M1/M2 box actually drawn,
     # tagged with whichever net is "current" at draw time (set at the
