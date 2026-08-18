@@ -1057,15 +1057,32 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
                     return False
                 return m1_run_clear(jog_y, cur_x, clear_x)
 
+            # v12 (this session, design_notes 43.6, user goal "最終的に
+            # 使っていないM1チャネルを最大化" -- maximize leftover free
+            # channel capacity): try reusing an idle stretch of an
+            # ALREADY-CLAIMED track FIRST (allow_claimed=True), and only
+            # fall back to claiming a genuinely FRESH track if no safe
+            # reusable stretch exists nearby. This is the exact opposite
+            # priority from the v10/38.23 version, which tried fresh
+            # tracks first and only reused claimed ones as a last resort
+            # -- correct for "make the short go away" but not for "leave
+            # as much capacity unclaimed as possible", since it always
+            # burns a new track when a same-good reusable one was
+            # available just as close. Reordering here doesn't change
+            # WHAT'S checked (still both departure_leg_and_m1_ok's
+            # channel_clear + m1_run_clear gates), only which is tried
+            # FIRST for a given near_y.
             target_idx = int(round((near_y - TRACK0_OFFSET - ch_y0[jog_channel]) / TRACK_PITCH))
             try:
-                jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx, extra_ok=departure_leg_ok)
+                jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx,
+                                            extra_ok=departure_leg_and_m1_ok, allow_claimed=True)
             except SystemExit:
                 try:
                     jog_idx = claim_track_near(jog_channel, [cur_x, clear_x], target_idx,
-                                                extra_ok=departure_leg_and_m1_ok, allow_claimed=True)
-                    print(f"  INFO: draw_jog reused an already-claimed track near y={near_y} in "
-                          f"channel {jog_channel} at x={cur_x} (idle stretch, design_notes 38.23)")
+                                                extra_ok=departure_leg_ok)
+                    print(f"  INFO: draw_jog claimed a fresh track near y={near_y} in "
+                          f"channel {jog_channel} at x={cur_x} (no reusable idle stretch nearby, "
+                          f"design_notes 43.6)")
                 except SystemExit:
                     # Still nothing -- genuinely no track, free or shared,
                     # has both a clear departure leg AND (if shared) clear
