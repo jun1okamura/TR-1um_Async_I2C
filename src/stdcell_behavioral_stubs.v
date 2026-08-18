@@ -11,16 +11,18 @@
 // (~/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell, .sym
 // dir=in/out/inout) -- see logic_cells_mapping.md.
 //
-// DFFR/DFFS RST/SET polarity is modeled active-HIGH per the partial
-// transistor trace of DFFR.sch documented in design_notes.md /
-// logic_cells_mapping.md. This is NOT yet SPICE-confirmed; if it turns out
-// to be active-LOW in silicon, invert the DFFR.RST connection at the call
-// site (i2c_slave_async.v) and re-simulate, no change needed here.
+// DFFR reset pin is named RSTB and modeled active-LOW, confirmed from the
+// real schematic/SPICE trace (design_notes.md section 39.2; the pin was
+// renamed RST -> RB -> RSTB across sections 35.8/39.1/39.2 as the physical
+// cell and its Liberty model were corrected -- RSTB is the current, final
+// name). DFFS's SET is still unconfirmed/active-HIGH placeholder (DFFS has
+// no physical cell in the current TR-1um_STDCELL.gds -- kept only for
+// completeness, not currently instantiated by any synthesis run).
 //
 // Only the cells actually instantiated by this project are included:
 // INV_X1, DEL1, NOR2, NOR3, NOR4, NAND2, NAND3, NAND4, AND2_X1, OR2, OR3,
-// OR4, MUX2, DFFR. Add more here (matching TR1um_5_stdcell.lib) if future
-// synthesis runs pull in others (BUF_X*, XOR2, XNOR2, DFFS, ...).
+// OR4, MUX2, DFFR, DFF. Add more here (matching TR1um_5_stdcell.lib) if
+// future synthesis runs pull in others (BUF_X*, XOR2, XNOR2, DFFS, ...).
 // =============================================================================
 `timescale 1ns/1ps
 
@@ -143,12 +145,21 @@ module MUX2 (input A, B, S, output Y, input VDD, input GND);
     assign #1 Y = S ? B : A;
 endmodule
 
-// Async-reset D flip-flop, RST active-HIGH (see header note on polarity).
-module DFFR (input CK, D, RST, output reg Q, output QB, input VDD, input GND);
+// Async-reset D flip-flop, RSTB active-LOW (see header note on polarity).
+module DFFR (input CK, D, RSTB, output reg Q, output QB, input VDD, input GND);
     assign #1 QB = ~Q;
-    always @(posedge CK or posedge RST)
-        if (RST) Q <= 1'b0;
-        else     Q <= D;
+    always @(posedge CK or negedge RSTB)
+        if (!RSTB) Q <= 1'b0;
+        else       Q <= D;
+endmodule
+
+// Reset-less D flip-flop (no async reset pin at all -- see design_notes.md
+// section 39.1 / DFFR-minimization discussion). Same CK/D/Q/QB pinout as
+// DFFR minus RSTB.
+module DFF (input CK, D, output reg Q, output QB, input VDD, input GND);
+    assign #1 QB = ~Q;
+    always @(posedge CK)
+        Q <= D;
 endmodule
 
 // Async-set D flip-flop, SET active-HIGH (unused by the current design but
