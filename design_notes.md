@@ -4834,3 +4834,106 @@ SCL_nドメイン側のリセット前段（AND2_X1(rst_n,busy)の入力2本）�
 正式ネットリスト差し替え・P&R再実行は未着手（ユーザー判断待ち、
 39.3節末尾を参照）。実行時は`script/route_channels_nrow_fm.py`の
 FORCE_JOG_NETSにこの4本を設定する。
+
+# 40. scl/scl_n の行単位バッファ挿入とv4の配置配線（0短絡達成）
+
+## 40.1 行単位バッファ挿入（insert_row_buffers.py）
+
+ユーザー指示：「SCL SCL_N の優先ネットは、各スタセル行に BUF1 を挿入
+してから配線することは出来ますか？」「スタセルは４行にしてください。」
+
+既存の`insert_buffers.py`（18章）は配置より前に走り、行の概念を持たない
+ラウンドロビン分割だった（旧設計の`scl_buf0/scl_buf1`等が結果的に複数行
+にまたがり、ルーター側で`PER_ROW_LOCAL_NETS`機構による回避が必要だった
+原因）。新規`script/insert_row_buffers.py`は：
+
+1. `fm_multiway_partition`でリファレンス行割当を計算（N_ROWS=4）。
+2. `scl`/`scl_n`各ネットのシンク（DFFR.CK）を行ごとにグループ化。
+3. 行ごとに1個のBUF_X1を挿入、その行のシンクだけを新規ローカルネット
+   （`scl_row0`〜`scl_row3`、`scl_n_row1`/`scl_n_row2`）へリダイレクト。
+
+結果：`scl`は4行 FO=[6,4,5,12]、`scl_n`は2行 FO=[2,7]に分割。
+`i2c_slave_async_net_v3.v`→`i2c_slave_async_net_v4.v`として出力
+（v3は変更せず保持）。
+
+**発覚した罠**：バッファ追加後に`fm_multiway_partition`を素で再実行す
+ると、たった6個の小さいインスタンス追加だけで再帰二分割の上位カット
+が変わり、大半のインスタンス（バッファとその意図したシンクの組含む）
+が別の行に再配置されてしまうことを確認（再現性のない結果）。対策：
+リファレンスパスの行割当をJSON（`LEF/row_assignment_v4.json`）として
+保存し、2回目の配置では**再計算せずそのまま使う**よう
+`gen_placement_nrow_fm.py`に`part_json`引数を追加。バッファは「作った
+時点で行が分かっている」ため計算不要——この方式で全6バッファが意図
+した行に厳密一致することを確認済み。
+
+## 40.2 v4の配置配線パイプライン
+
+`gen_placement_nrow_fm.py`/`gen_placement_gds_nrow_fm.py`/
+`route_channels_nrow_fm.py`/`gen_err_report_nrow_fm.py`いずれも、
+（元の`i2c_slave_async_net.v`用の）デフォルト引数を一切変えずに、
+`net_file`/`placement_json`/`in_gds`/`out_gds`等をキーワード引数で
+上書きできるよう拡張（CLI直接呼び出しでも`-`で個別にデフォルト維持
+可）。旧ネットリスト用の0短絡/0DRC結果の再現性を損なわないことを
+最後に再確認済み（回帰チェックOK）。
+
+配置：全175個の元インスタンスはリファレンス行割当のまま、6個の新規
+バッファは意図した行に配置。ネット分類：row-only=198, adjacent-pair=21,
+spanning=8（旧ネットリストのspanning=2桁台と比べても悪化なし）。
+
+## 40.3 配線の初回失敗と診断（サブエージェントに委譲）
+
+初回ルーティング（FORCE_JOG_NETS/PER_ROW_LOCAL_NETS空）は
+`RSTB1`（39.4節で確定した優先ネットの1つ、FO=24、4行にまたがる）の
+行またぎ探索が失敗しクラッシュ。`RSTB1`/`RSTB2`を`PER_ROW_LOCAL_NETS`
+に追加（旧設計の`scl_buf0`等と同じ、複数行にまたがる高FOネット用の
+機構）して解決——ルーティング自体は完走。
+
+DRC：M1間隔違反1件。接続性検証：18件の"SHORT SUSPECTED"（Union-Find
+の連鎖報告のため実際の物理短絡ブロブ数はもっと少ない）。
+
+この診断・修正の反復（Phase Aの38章と同種の作業）はサブエージェントに
+委譲。結果：
+
+- 18件の報告は**6個の物理的な短絡ブロブ**に集約されることが判明。
+- 原因：一部の「ハブ」ネット（`_116_`, `_154_`, `scl`, `sda_in`）は
+  pin_mapのY座標だけでは見えない**複数行にまたがる真のspanningネット**
+  であり、Pass 2（spanning）はPass 0（per-row-local trunk）で既に
+  描画済みの配線に対するライブ衝突チェックを一切行っていなかった
+  （盲点）。これらを`PER_ROW_LOCAL_NETS`（ライブチェック付き）に移動
+  して解決。
+- 残りのrow-only/adjacent-pairの短絡は`FORCE_JOG_NETS`（既存機構）で
+  個別に解決（計17ネット）。
+- 1件のDRC違反（M1間隔）は上記どちらの機構でも直せない新規パターン
+  だったため、`via_x_clear()`/`register_via_x()`をFORCE_JOG_NETSパスの
+  着地点チェックに追加（隣接トラックのvia-vs-viaパッド近接を初めて
+  ライブチェック）——ただしこれとは無関係の、`DEL1`セル自身の内部
+  M1形状に起因する既存の1件（配置のみのGDSでも再現、標準セル
+  ライブラリ側の問題）は対象外として残存。
+
+最終確定設定：
+```python
+force_jog_nets = {'_048_','_049_','bit_cnt[0]','bit_cnt[2]','_003_','_097_',
+                   'scl_row1','_106_','_108_','_203_','shreg[1]','shreg[4]',
+                   'bit_cnt[3]','_071_','_107_','txreg[3]','_117_'}  # 17net
+per_row_local_nets = {'RSTB1','RSTB2','_154_','sda_in','scl','_116_'}  # 6net
+```
+
+## 40.4 最終結果
+
+- DRC：M1間隔違反1件（`DEL1`セル内部の既存欠陥、配置のみのGDSでも
+  再現することを確認済み——今回の配線作業とは無関係、対象外）
+- 接続性：**0短絡**（`ALL NETS FULLY CONNECTED, NO SHORTS DETECTED`）
+- channel0のトラック使用数は予算をわずかに超過表示（23/22）だが、
+  実際のM1最大Y=87.7umは行境界90.0um内に収まっており実害無し
+  （トラック予算計算がやや保守的なだけ）。
+- FORCE_JOG_NETS：17ネット、57ピンにジョグ挿入。
+- per-row-local spine jog：32件。
+
+出力ファイル：
+- `Layout/i2c_slave_async_nrow_fm_v4_routed.gds`（配線済み）
+- `Layout/i2c_slave_async_nrow_fm_v4_with_err.gds`（エラー/ジョグ
+  ハイライト付き、旧設計と同じ253番台レイヤー規約）
+- `Layout/err_report_nrow_fm_v4_details.txt`
+
+旧ネットリスト（`i2c_slave_async_net.v`）用の0短絡/0DRC結果は
+無傷で再現性維持を確認済み（回帰なし）。

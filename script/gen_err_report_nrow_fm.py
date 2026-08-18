@@ -75,8 +75,8 @@ PAD_HALF = 3.4 / 2.0
 M1_TRUNK_HALF = 1.8 / 2.0
 
 
-def top_level_ports():
-    src = open(NET_FILE).read()
+def top_level_ports(net_file=NET_FILE):
+    src = open(net_file).read()
     ports = set()
     for m in re.finditer(r'^\s*(input|output)\s*(\[(\d+):(\d+)\])?\s*(\w+)\s*;', src, re.M):
         _kind, _, msb, lsb, name = m.groups()
@@ -88,9 +88,9 @@ def top_level_ports():
     return ports
 
 
-def rebuild_net_pins():
+def rebuild_net_pins(placement_json=PLACEMENT_JSON):
     """Same construction as route_channels_nrow_fm.py's net_pins dict."""
-    placement = json.load(open(PLACEMENT_JSON))
+    placement = json.load(open(placement_json))
     rows = placement["rows"]
     row_h = placement["row_height"]
     n_rows = len(rows)
@@ -159,15 +159,20 @@ def net_region(net, pin_map, pin_center, um, net_shapes_log=None):
     return region
 
 
-def main():
-    net_pins = rebuild_net_pins()
+def main(placement_json=PLACEMENT_JSON, pin_map_json=PIN_MAP_JSON, net_shapes_json=NET_SHAPES_JSON,
+         force_jog_events_json=FORCE_JOG_EVENTS_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
+         net_file=NET_FILE, ch_heights=None, txt_path=None):
+    global CH_HEIGHTS
+    if ch_heights is not None:
+        CH_HEIGHTS = ch_heights
+    net_pins = rebuild_net_pins(placement_json)
     pin_center = {}  # (net,instname,pinname) -> (x,y), pin's own placement coordinate
     for net, pads in net_pins.items():
         for r, instname, pname, cx, cy in pads:
             pin_center[(net, instname, pname)] = (cx, cy)
-    ports = top_level_ports()
+    ports = top_level_ports(net_file)
     try:
-        net_shapes_log = json.load(open(NET_SHAPES_JSON))
+        net_shapes_log = json.load(open(net_shapes_json))
         print(f"loaded net_shapes log: {sum(len(v) for v in net_shapes_log.values())} boxes, "
               f"{len(net_shapes_log)} nets")
     except FileNotFoundError:
@@ -180,17 +185,17 @@ def main():
     print(f"  {len(stub_port)} are top-level module ports (expected: other end is off-chip)")
     print(f"  {len(stub_nonport)} are NOT ports (genuinely suspicious, worth a closer look)")
 
-    pin_map = json.load(open(PIN_MAP_JSON))
+    pin_map = json.load(open(pin_map_json))
 
     try:
-        force_jog_events = json.load(open(FORCE_JOG_EVENTS_JSON))
+        force_jog_events = json.load(open(force_jog_events_json))
         print(f"loaded force_jog_events log: {len(force_jog_events)} jog(s)")
     except FileNotFoundError:
         force_jog_events = []
         print("force_jog_events log not found -- (253,4) layer will be empty")
 
     layout = db.Layout()
-    layout.read(IN_GDS)
+    layout.read(in_gds)
     dbu = layout.dbu
     top = layout.cell(TOP_CELL)
     m1_idx = layout.layer(*M1_LAYER)
@@ -369,8 +374,8 @@ def main():
         print(f"FORCE_JOG_NETS jog highlight: {len(force_jog_events)} jog(s) "
               f"({dict(by_net)})")
 
-    layout.write(OUT_GDS)
-    print("\nwrote", OUT_GDS)
+    layout.write(out_gds)
+    print("\nwrote", out_gds)
     print(f"layers: {ERR_SHORT_GEOM}=shorted metal geometry, {ERR_SHORT_PIN}=pins of implicated nets, "
           f"{ERR_UNCONNECTED_PIN}=unconnected (stub) pins (label PORT:=expected top-level port, "
           f"OPEN:=not a port, worth investigating), "
@@ -379,7 +384,8 @@ def main():
           f"{ERR_FORCE_JOG}=M1 run + via_1 endpoints of every jog FORCE_JOG_NETS inserted "
           f"(labeled JOG-FROM:/JOG-TO:net:inst.pin)")
 
-    txt_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/err_report_nrow_fm_details.txt"
+    if txt_path is None:
+        txt_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/err_report_nrow_fm_details.txt"
     with open(txt_path, "w") as f:
         f.write(f"=== {len(conflicts)} SHORT(S) SUSPECTED ===\n")
         for (netA, pinA, netB, pinB), (_, _, boxes) in zip(conflicts, collision_points):

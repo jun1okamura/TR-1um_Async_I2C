@@ -32,9 +32,9 @@ TOP_CELL_NAME = "i2c_slave_async_nrow_fm"
 CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
 
 
-def main():
+def main(placement_json=PLACEMENT_JSON, out_gds=OUT_GDS):
     macros = parse_lef()
-    placement = json.load(open(PLACEMENT_JSON))
+    placement = json.load(open(placement_json))
     row_h = placement["row_height"]
     row_w = placement["row_width"]
     rows = placement["rows"]
@@ -83,8 +83,8 @@ def main():
     for i in range(n_rows + 1):
         top.shapes(ann).insert(box(0, ch_y0[i], row_w, ch_y0[i] + CH_HEIGHTS[i]))
 
-    layout.write(OUT_GDS)
-    print(f"wrote {OUT_GDS}")
+    layout.write(out_gds)
+    print(f"wrote {out_gds}")
     print(f"core bbox: (0,0)-({row_w:.1f},{core_h:.1f})")
     for i in range(n_rows + 1):
         label = "bottom margin" if i == 0 else ("top margin" if i == n_rows else f"channel {i}")
@@ -95,4 +95,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    _args = sys.argv[1:]
+    _pj = _args[0] if len(_args) > 0 and _args[0] != "-" else PLACEMENT_JSON
+    _og = _args[1] if len(_args) > 1 and _args[1] != "-" else OUT_GDS
+    main(placement_json=_pj, out_gds=_og)

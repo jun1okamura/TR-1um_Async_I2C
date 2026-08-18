@@ -262,9 +262,22 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
     return placed, x
 
 
-def main():
+def main(net_file=None, out_json=OUT_JSON, part_json=None):
+    """net_file: override netlist_parser's default NET_PATH (section 40 --
+    used to point this at i2c_slave_async_net_v4.v instead of the
+    canonical i2c_slave_async_net.v, without touching netlist_parser.py's
+    own default used elsewhere).
+
+    part_json: path to a precomputed {instance_name: row_index} JSON
+    (written by insert_row_buffers.py's ROW_ASSIGNMENT_JSON) -- if given,
+    SKIPS fm_multiway_partition entirely and uses this mapping as-is.
+    See insert_row_buffers.py's docstring/comment for why: re-running the
+    recursive-bisection FM partition on a netlist that only differs by a
+    handful of newly-inserted buffer instances was found to reshuffle the
+    row assignment of many unrelated, unchanged instances (section 40),
+    defeating row-aware buffer insertion's whole purpose."""
     macros = parse_lef()
-    net = parse_netlist()
+    net = parse_netlist(path=net_file) if net_file else parse_netlist()
     instances = net["instances"]
 
     row_h = macros["INV_X1"]["size"][1]
@@ -272,7 +285,14 @@ def main():
     for name, m in macros.items():
         assert m["size"][1] == row_h, f"{name} height {m['size'][1]} != {row_h}"
 
-    part = fm_multiway_partition(instances, widths, N_ROWS)
+    if part_json:
+        with open(part_json) as f:
+            part = json.load(f)
+        missing = [name for _t, name, _p in instances if name not in part]
+        assert not missing, f"part_json missing rows for instances: {missing[:10]}"
+        print(f"using precomputed row assignment from {part_json} ({len(part)} instances)")
+    else:
+        part = fm_multiway_partition(instances, widths, N_ROWS)
     counts = classify_multirow_nets(instances, part, N_ROWS)
     print(f"net classification: row-only={counts['row_only']}, "
           f"adjacent-pair={counts['adjacent_pair']}, spanning(3+ or non-adjacent)={counts['spanning']}")
@@ -339,10 +359,10 @@ def main():
         rows_out.append(with_pins(placed, r))
 
     result = {"row_height": row_h, "row_width": row_width, "n_rows": N_ROWS, "rows": rows_out}
-    with open(OUT_JSON, "w") as f:
+    with open(out_json, "w") as f:
         json.dump(result, f, indent=1)
 
-    print(f"wrote {OUT_JSON}")
+    print(f"wrote {out_json}")
     print(f"row width (all rows, by construction) = {row_width:.1f} um")
     for r, placed in enumerate(rows_out):
         n_tap = sum(1 for p in placed if p["type"] == TAP_CELL)
@@ -353,4 +373,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # optional CLI overrides (section 40): net_file out_json part_json
+    _args = sys.argv[1:]
+    _net_file = _args[0] if len(_args) > 0 and _args[0] != "-" else None
+    _out_json = _args[1] if len(_args) > 1 and _args[1] != "-" else OUT_JSON
+    _part_json = _args[2] if len(_args) > 2 and _args[2] != "-" else None
+    main(net_file=_net_file, out_json=_out_json, part_json=_part_json)

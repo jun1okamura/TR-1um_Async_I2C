@@ -228,8 +228,28 @@ def assign_lanes(nets_subset):
     return assignment, len(lane_last_x)
 
 
-def main():
-    placement = json.load(open(PLACEMENT_JSON))
+def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
+         force_jog_nets=None, per_row_local_nets=None,
+         pin_map_path=None, net_shapes_path=None, force_jog_events_path=None):
+    """Section 40 CLI overrides -- see insert_row_buffers.py: lets this be
+    re-run against a different (placement_json, in_gds, out_gds) triple
+    (e.g. the v4 row-buffered netlist's placement) without disturbing the
+    known-good defaults used for the original netlist's 0-shorts/0-DRC
+    result. force_jog_nets/per_row_local_nets, if given, REPLACE the
+    module-level FORCE_JOG_NETS/PER_ROW_LOCAL_NETS sets for this call only
+    (both are stale, old-netlist-specific net names when left at their
+    defaults -- a fresh netlist needs its own diagnosis)."""
+    global FORCE_JOG_NETS, PER_ROW_LOCAL_NETS
+    if force_jog_nets is not None:
+        FORCE_JOG_NETS = force_jog_nets
+    if per_row_local_nets is not None:
+        PER_ROW_LOCAL_NETS = per_row_local_nets
+    if pin_map_path is None:
+        pin_map_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/pin_map_nrow_fm.json"
+    if net_shapes_path is None:
+        net_shapes_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/net_shapes_nrow_fm.json"
+
+    placement = json.load(open(placement_json))
     rows = placement["rows"]
     n_rows = len(rows)
     n_ch = n_rows + 1
@@ -674,7 +694,7 @@ def main():
 
     # --- open the layout + register the TR-1um PCell library ---
     layout = db.Layout()
-    layout.read(IN_GDS)
+    layout.read(in_gds)
     dbu = layout.dbu
     top = layout.cell(TOP_CELL_NAME)
     m1_idx = layout.layer(*M1_LAYER)
@@ -779,7 +799,7 @@ def main():
             for cand in (start_x + s * X_GRID, start_x - s * X_GRID):
                 if ok(cand):
                     return cand
-        raise SystemExit(f"no clear X found for row {row_k} near x={start_x}")
+        raise SystemExit(f"no clear X found for row {row_k} near x={start_x} (net={cur_net[0]!r})")
 
     # v4 (design_notes 38.8, point 7): live check for the forced-overlap
     # zone only -- queries the M2 ALREADY DRAWN in the exact box the stub
@@ -819,14 +839,52 @@ def main():
             return False
         return True
 
-    def find_channel_clear_x(start_x, y_lo, y_hi):
-        if in_bounds(start_x) and not x_forbidden(start_x) and channel_clear(start_x, y_lo, y_hi):
+    def find_channel_clear_x(start_x, y_lo, y_hi, extra_ok=None):
+        """v4.6 (design_notes 38.x, this session): `extra_ok(x) -> bool`,
+        if given, is an additional requirement checked alongside
+        channel_clear -- e.g. via-proximity to a NEIGHBORING track's
+        already-registered via X (see via_x_clear below). Without this,
+        a FORCE_JOG_NETS pin could land its via_1 pad at an X that is
+        clear of live M2 (channel_clear's only check) but still too
+        close, in Y, to an unrelated net's via on the immediately
+        adjacent track -- channel_clear is deliberately M2-only (a bare
+        M1/M2 crossing without a via is never a short), so it cannot see
+        this M1-pad-vs-M1-pad proximity case; a real instance of exactly
+        this (an M1+M2 space violation between _003_'s force-jogged via
+        and txreg[1]'s untouched one, both landing near the same X on
+        adjacent tracks) was found and fixed by adding this check."""
+        def ok(x):
+            return (in_bounds(x) and not x_forbidden(x) and channel_clear(x, y_lo, y_hi)
+                    and (extra_ok is None or extra_ok(x)))
+        if ok(start_x):
             return start_x
         for s in range(1, ROW_X_TRIES + 1):
             for cand in (start_x + s * X_GRID, start_x - s * X_GRID):
-                if in_bounds(cand) and not x_forbidden(cand) and channel_clear(cand, y_lo, y_hi):
+                if ok(cand):
                     return cand
         raise SystemExit(f"no clear X found in overlap zone near x={start_x} (y {y_lo}-{y_hi})")
+
+    def via_x_clear(channel, track_y, x):
+        """Is `x` far enough (MIN_VIA_X_SEP) from every via X already
+        registered (channel_used_x) on the same or an immediately
+        Y-adjacent track in `channel`? Reuses the exact same proximity
+        test `collides()` already applies at initial track assignment --
+        this just re-applies it at the point a FORCE_JOG_NETS pin's live
+        landing X is chosen, since a jog can move a pin's via to an X
+        collides() never got to re-check post-jog."""
+        idx = int(round((track_y - ch_y0[channel] - TRACK0_OFFSET) / TRACK_PITCH))
+        return not collides(channel, idx, [x])
+
+    def register_via_x(channel, track_y, x):
+        """Record a (post-jog) via X under its track's index in
+        channel_used_x, so a LATER net in the same live-checked pass
+        (e.g. another FORCE_JOG_NETS net) sees it via via_x_clear too --
+        without this, only the ORIGINAL pre-jog X's of every net are
+        registered (from the early track-assignment phase), so a jog
+        earlier in this same pass would stay invisible to a jog later in
+        it."""
+        idx = int(round((track_y - ch_y0[channel] - TRACK0_OFFSET) / TRACK_PITCH))
+        channel_used_x[(channel, idx)].append(x)
 
     def m1_run_clear(y, x0, x1):
         """v6 (design_notes 38.23): does an M1 run at track_y=y spanning
@@ -1217,13 +1275,20 @@ def main():
             cur_x, cur_y = cx, pin_edge_y
             channel_entry_y = row_y0[row] if direction == -1 else row_y0[row] + row_h
             y_lo, y_hi = min(channel_entry_y, track_y), max(channel_entry_y, track_y)
-            if not channel_clear(cx, y_lo, y_hi):
-                clear_x = find_channel_clear_x(cx, y_lo, y_hi)
+            # v4.6 (this session): also require via-X proximity clearance
+            # (via_x_clear) against neighboring tracks' already-registered
+            # vias -- channel_clear alone is M2-only and cannot see a
+            # too-close M1-pad-vs-M1-pad case (see find_channel_clear_x
+            # docstring for the real short this fixed: _003_/txreg[1]).
+            if not channel_clear(cx, y_lo, y_hi) or not via_x_clear(channel, track_y, cx):
+                clear_x = find_channel_clear_x(cx, y_lo, y_hi,
+                                                extra_ok=lambda x: via_x_clear(channel, track_y, x))
                 if abs(clear_x - cx) > 1e-6:
                     force_jog_count += 1
                     m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
                            cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
                     cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel, near_y=channel_entry_y)
+                    register_via_x(channel, track_y, clear_x)
                     force_jog_events.append({
                         "net": net, "inst": inst_name, "pin": pname,
                         "orig_x": cx, "clear_x": clear_x, "jog_y": cur_y,
@@ -1242,7 +1307,8 @@ def main():
     if force_jog_pads:
         print(f"FORCE_JOG_NETS: {len(force_jog_pads)} net(s), {force_jog_count} pin(s) jogged")
 
-    force_jog_events_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/force_jog_events_nrow_fm.json"
+    if force_jog_events_path is None:
+        force_jog_events_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/force_jog_events_nrow_fm.json"
     with open(force_jog_events_path, "w") as f:
         json.dump(force_jog_events, f, indent=1)
     print(f"wrote {force_jog_events_path} ({len(force_jog_events)} jog event(s))")
@@ -1253,17 +1319,15 @@ def main():
         status = "OK" if used <= budget else "OVERFLOW"
         print(f"  channel{c}: used {used} tracks, budget {budget} ({CH_HEIGHTS[c]} um) -> {status}")
 
-    layout.write(OUT_GDS)
+    layout.write(out_gds)
 
-    pin_map_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/pin_map_nrow_fm.json"
     with open(pin_map_path, "w") as f:
         json.dump(pin_map, f, indent=1)
 
-    net_shapes_path = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script/net_shapes_nrow_fm.json"
     with open(net_shapes_path, "w") as f:
         json.dump(net_shapes, f)
 
-    print(f"wrote {OUT_GDS}")
+    print(f"wrote {out_gds}")
     print(f"wrote {pin_map_path}")
     print(f"wrote {net_shapes_path} ({sum(len(v) for v in net_shapes.values())} boxes, {len(net_shapes)} nets)")
     print(f"signal nets: {len(net_pins)}, routed: {routed}, stubs: {stub_nets}")
@@ -1276,4 +1340,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # optional CLI overrides (section 40): placement_json in_gds out_gds
+    _a = sys.argv[1:]
+    _pj = _a[0] if len(_a) > 0 and _a[0] != "-" else PLACEMENT_JSON
+    _ig = _a[1] if len(_a) > 1 and _a[1] != "-" else IN_GDS
+    _og = _a[2] if len(_a) > 2 and _a[2] != "-" else OUT_GDS
+    main(placement_json=_pj, in_gds=_ig, out_gds=_og)
