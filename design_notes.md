@@ -4739,3 +4739,81 @@ touch_cnt>0だがoverlap_cnt=0——つまり隣接ピンとの間隔は法定�
 ケースを誤って塞がっていると判定していた点）だった。ユーザーが
 KLayout上で実際の配線を目視確認し、具体的な代替ルートを提案した
 ことが、この最終的な発見の決め手となった。
+
+# 39. STDCELL再構築（DFF追加・DFFR: RST→RSTB改名）とLEF/.lib再生成
+
+## 39.1 新GDS（DFF追加、DFFS廃止）からのLEF再生成
+
+STDCELLライブラリのGDS（`LEF/TR-1um_STDCELL.gds`）が再構築され、
+リセット無しのDFFセル（`DFF`、64.8um角、D/CK/Q/QBのみ、RSTピン無し）が
+新規追加された。旧`DFFS`は今回のGDSには含まれない（意図的な削除と
+判断、`gen_lef.py`の`PIN_META`にも元々未登録のため実害なし）。
+
+`DFF`セルのピンマーカー形状を点内包判定で確認：M1PIN 2個→vdd/gnd、
+M2PIN 4個→CK/D/QB/Q。GDS上のテキストラベルには`CKP`/`CKB`/`QM`/`QS`も
+あるが、いずれもピンマーカー多角形の外にある内部ノードラベルであり、
+実際のポートではないことを確認（`DFFR`と同じ設計思想）。
+
+`script/gen_lef.py`の`PIN_META`に`"DFF"`エントリを追加し、
+`LEF/TR-1um_STDCELL.lef`を再生成。全21マクロ（物理20セル＋
+BUF_X2/X4/X16エイリアス）が正常出力、ピン未マッチ・row height不一致
+エラー無し。
+
+（なお、以前「アップロードGDSとディスク上GDSのMD5が不一致」と
+疑っていた件は誤検出と判明：比較対象がuploads/に残っていた別セッション
+由来の古いファイル（INV_X1単体1セルのみ）であり、実際のライブラリ一式は
+Dropbox同期で`LEF/TR-1um_STDCELL.gds`に直接反映されていた。）
+
+## 39.2 DFFRのリセットピン名変更：RB → RSTB、および.lib側の追随漏れ
+
+初回のLEF生成時点で、新GDSの`DFFR`のリセットピンマーカーのラベルが
+`RST`ではなく`RB`になっていることを発見。ユーザーへ報告したところ、
+xschemスキーマティック（`DFFR.sch`/`DFFR.sym`）とGDSの双方でピン名を
+`RSTB`に統一する修正が行われた（`DFFR.sch`のトップレベル`ipin.sym`が
+`lab=RSTB`、内部配線ラベルは引き続き`RB`のまま——電気的に同一ネット）。
+
+これを受けて：
+
+- `TR1um_5_stdcell.lib`のDFFRセルブロック内、`pin(RST)`→`pin(RSTB)`、
+  `clear: "!RST"`→`"!RSTB"`、`related_pin: "RST"`→`"RSTB"`（計4箇所）
+  を改名。
+- `script/gen_liberty.py`の`FF_CELLS`テーブルも`"RST"`→`"RSTB"`に追随。
+
+**併せて発覚した潜在バグ**：`gen_liberty.py`の`ff_cell()`は
+`clear: "RSTB"`のように常に無反転で出力する実装だった。つまり
+`TR1um_5_stdcell.lib`のヘッダーに書かれた
+「`Regenerate with: python3 script/gen_liberty.py > TR1um_5_stdcell.lib`」
+を額面通り実行すると、38.x台のセッションで手で修正したはずの
+active-low反転（`!RST`）が消え、RST極性バグが再発する状態になって
+いた（.libファイルは手パッチ済みだがスクリプト側は追随していな
+かった）。
+
+`ff_cell()`に`active_low`引数を追加し、`FF_CELLS`テーブルで
+`DFFR`を`active_low=True`と明示（DFFSは未確認のため`False`のまま
+維持）。修正後のスクリプトで再生成した`.lib`と、手動改名した
+`.lib`を`diff`したところ完全一致——スクリプトを再び正しい
+ソース・オブ・トゥルースとして確定させた。
+
+## 39.3 再合成（Yosys）で確認
+
+修正済み`.lib`で`i2c_slave_async.v`を再合成
+（`src/i2c_slave_async_net_v3.v`として出力）。
+
+```
+dfflibmap: cell DFFR (noninv, pins=5, area=8.00) is a direct match
+           for cell type $_DFF_PN0_.
+    \DFFR _538_ (.CK(C), .D(D), .Q(Q), .QB(~Q), .RSTB(R));
+```
+
+`$_DFF_PN0_`（posedge clock / active-low非同期リセット）に`DFFR`が
+「直接一致」——余分な反転ゲート無しで正しく極性がマッチしている
+ことを確認。セル数：DFFR×33、NOR2×40、NAND2×29、MUX2×19、
+AND2_X1×16、INV_X1×10、他（NAND3/OR2/NOR3/NOR4/OR3/NAND4/OR4）。
+全33個のDFFRインスタンスが`.RSTB(...)`で接続されており、
+GDS/LEFのピン名と一致。
+
+**未対応（保留中）**：`i2c_slave_async_net_v3.v`はまだ正式版
+`i2c_slave_async_net.v`を置き換えていない——`plan_placement.py`他、
+配置配線スクリプト群が正式版ネットリストを直接パースしており、
+差し替えるとPass Aで完成させた配置配線が無効になるため。差し替えの
+是非はユーザー未回答（38章末の質問を継続保留）。

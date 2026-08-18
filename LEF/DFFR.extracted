@@ -1,0 +1,69 @@
+* Created by KLayout
+*** My special header ***
+
+* cell DFFR
+* pin CK
+* pin CKB
+* pin CKP
+* pin D
+* pin Q
+* pin QB
+* pin QM
+* pin QS
+* pin RSTB
+* pin gnd
+* pin vdd
+.SUBCKT DFFR CK CKB CKP D Q QB QM QS RSTB gnd vdd
+* device instance $1 r0 *1 60.3,41.8 PMOS
+XM$1 vdd QB Q vdd PMOS L=1u W=10.4u AS=29.12p AD=29.12p PS=26.4u PD=26.4u
+* device instance $2 r0 *1 16,39.2 PMOS
+XM$2 vdd D \$16 vdd PMOS L=1u W=5.2u AS=14.56p AD=3.12p PS=16u PD=6.4u
+* device instance $3 r0 *1 18.2,39.2 PMOS
+XM$3 \$16 CKP \$6 vdd PMOS L=1u W=5.2u AS=3.12p AD=7.8p PS=6.4u PD=8.2u
+* device instance $4 r0 *1 22.2,39.2 PMOS
+XM$4 \$6 CKB \$7 vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $5 r0 *1 26.2,39.2 PMOS
+XM$5 \$7 QM vdd vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $6 r0 *1 30.2,39.2 PMOS
+XM$6 vdd \$6 QM vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $7 r0 *1 34.2,39.2 PMOS
+XM$7 QM CKB QS vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $8 r0 *1 38.2,39.2 PMOS
+XM$8 QS CKP \$9 vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $9 r0 *1 42.2,39.2 PMOS
+XM$9 \$9 QB vdd vdd PMOS L=1u W=5.2u AS=7.8p AD=20.28p PS=8.2u PD=15.4u
+* device instance $10 r0 *1 48.2,41.8 PMOS
+XM$10 vdd QS QB vdd PMOS L=1u W=10.4u AS=20.28p AD=15.6p PS=15.4u PD=13.4u
+* device instance $11 r0 *1 52.2,41.8 PMOS
+XM$11 QB RSTB vdd vdd PMOS L=1u W=10.4u AS=15.6p AD=29.12p PS=13.4u PD=26.4u
+* device instance $12 r0 *1 4,41.8 PMOS
+XM$12 CKB CK vdd vdd PMOS L=1u W=10.4u AS=29.12p AD=15.6p PS=26.4u PD=13.4u
+* device instance $13 r0 *1 8,41.8 PMOS
+XM$13 vdd CKB CKP vdd PMOS L=1u W=10.4u AS=15.6p AD=29.12p PS=13.4u PD=26.4u
+* device instance $14 r0 *1 60.3,17.9 NMOS
+XM$14 gnd QB Q gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+* device instance $15 r0 *1 16,17.9 NMOS
+XM$15 gnd D \$12 gnd NMOS L=1u W=3.4u AS=9.52p AD=2.04p PS=12.4u PD=4.6u
+* device instance $16 r0 *1 18.2,17.9 NMOS
+XM$16 \$12 CKB \$6 gnd NMOS L=1u W=3.4u AS=2.04p AD=5.1p PS=4.6u PD=6.4u
+* device instance $17 r0 *1 22.2,17.9 NMOS
+XM$17 \$6 CKP \$7 gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $18 r0 *1 26.2,17.9 NMOS
+XM$18 \$7 QM gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $19 r0 *1 30.2,17.9 NMOS
+XM$19 gnd \$6 QM gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $20 r0 *1 34.2,17.9 NMOS
+XM$20 QM CKP QS gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $21 r0 *1 38.2,17.9 NMOS
+XM$21 QS CKB \$9 gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $22 r0 *1 42.2,17.9 NMOS
+XM$22 \$9 QB gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=8.5p PS=6.4u PD=8.4u
+* device instance $23 r0 *1 48.2,17.9 NMOS
+XM$23 gnd QS \$13 gnd NMOS L=1u W=3.4u AS=8.5p AD=2.21p PS=8.4u PD=4.7u
+* device instance $24 r0 *1 50.5,17.9 NMOS
+XM$24 \$13 RSTB QB gnd NMOS L=1u W=3.4u AS=2.21p AD=9.52p PS=4.7u PD=12.4u
+* device instance $25 r0 *1 4,17.9 NMOS
+XM$25 CKB CK gnd gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $26 r0 *1 8,17.9 NMOS
+XM$26 gnd CKB CKP gnd NMOS L=1u W=3.4u AS=5.1p AD=9.52p PS=6.4u PD=12.4u
+.ENDS DFFR

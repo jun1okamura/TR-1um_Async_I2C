@@ -386,11 +386,11 @@ library(TR1um_5_stdcell) {
         ff(IQ, IQN) {
             clocked_on : "CK";
             next_state : "D";
-            clear    : "RST";
+            clear    : "!RSTB";
         }
         pin(CK)  { direction: input; clock: true; capacitance: 1.0; }
         pin(D)   { direction: input; capacitance: 1.0; }
-        pin(RST) { direction: input; capacitance: 1.0; }
+        pin(RSTB) { direction: input; capacitance: 1.0; }
         pin(Q) {
             direction: output; function: "IQ";
             timing() {
@@ -402,7 +402,7 @@ library(TR1um_5_stdcell) {
                 fall_transition(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
             }
             timing() {
-                related_pin: "RST";
+                related_pin: "RSTB";
                 timing_sense: non_unate;
                 cell_rise(delay_template) { values("0.2, 0.2", "0.2, 0.2"); }
                 cell_fall(delay_template) { values("0.2, 0.2", "0.2, 0.2"); }
@@ -421,7 +421,7 @@ library(TR1um_5_stdcell) {
                 fall_transition(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
             }
             timing() {
-                related_pin: "RST";
+                related_pin: "RSTB";
                 timing_sense: non_unate;
                 cell_rise(delay_template) { values("0.2, 0.2", "0.2, 0.2"); }
                 cell_fall(delay_template) { values("0.2, 0.2", "0.2, 0.2"); }

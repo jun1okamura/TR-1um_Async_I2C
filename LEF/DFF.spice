@@ -1,0 +1,28 @@
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/DFF.sch
+.subckt DFF VDD QB D Q GND CK
+*.PININFO VDD:B GND:B D:I Q:O QB:O CK:I
+MM2 net1 D VDD VDD PMOS w=5.2u l=1u
+MM1 net2 CKP net1 VDD PMOS w=5.2u l=1u
+MM7 net2 CKB net3 GND NMOS w=3.4u l=1u
+MM8 net3 D GND GND NMOS w=3.4u l=1u
+MM10 QS net2 VDD VDD PMOS w=5.2u l=1u
+MM11 QS net2 GND net10 NMOS w=3.4u l=1u
+MM12 net11 net12 net13 net14 PMOS w=5.2u l=1u
+MM13 net4 QS GND net15 NMOS w=3.4u l=1u
+MM14 net4 net16 net2 net17 PMOS w=5.2u l=1u
+MM15 net18 CKP net19 GND NMOS w=3.4u l=1u
+MM16 QM net20 QS VDD PMOS w=5.2u l=1u
+MM17 net21 CKP net22 net23 NMOS w=3.4u l=1u
+MM18 net5 QB VDD net24 PMOS w=5.2u l=1u
+MM19 net5 QB GND GND NMOS w=3.4u l=1u
+MM20 net5 net25 QM VDD PMOS w=5.2u l=1u
+MM21 net26 CKB net27 net28 NMOS w=3.4u l=1u
+MM22 QB QM VDD VDD PMOS w=10.4u l=1u
+MM23 QB QM GND net29 NMOS w=3.4u l=1u
+MM24 Q QB VDD net30 PMOS w=10.4u l=1u
+MM25 Q QB GND net31 NMOS w=3.4u l=1u
+MM26 net32 net7 VDD net33 PMOS w=10.4u l=1u
+MM27 net34 net7 net35 net36 NMOS w=3.4u l=1u
+MM28 net8 net37 net38 net39 PMOS w=10.4u l=1u
+MM29 net8 net40 net41 net42 NMOS w=3.4u l=1u
+.ends

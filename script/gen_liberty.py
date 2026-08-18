@@ -86,12 +86,19 @@ def comb_cell(name, area, in_pins, func, sense, delay):
     out += "        }\n    }\n"
     return out
 
-def ff_cell(name, area, rst_pin, rst_attr):
+def ff_cell(name, area, rst_pin, rst_attr, active_low=False):
+    # active_low=True emits the Liberty "!pin" inversion syntax on the
+    # clear/preset attribute (see design_notes.md: DFFR.RSTB was
+    # SPICE/schematic-confirmed active-low; the "!" prefix is Liberty's
+    # own inversion notation, not a separate pin). The pin() declaration
+    # itself always uses the bare (uninverted) pin name -- only the
+    # ff() attribute value carries the "!".
+    rst_expr = f"!{rst_pin}" if active_low else rst_pin
     out = f"    cell({name}) {{\n        area: {area};\n"
     out += "        ff(IQ, IQN) {\n"
     out += "            clocked_on : \"CK\";\n"
     out += "            next_state : \"D\";\n"
-    out += f"            {rst_attr:8s} : \"{rst_pin}\";\n"
+    out += f"            {rst_attr:8s} : \"{rst_expr}\";\n"
     out += "        }\n"
     out += "        pin(CK)  { direction: input; clock: true; capacitance: 1.0; }\n"
     out += "        pin(D)   { direction: input; capacitance: 1.0; }\n"
@@ -131,17 +138,22 @@ COMB_CELLS = [
     ("DEL4",    5,   ["A"],           "A",                  "positive_unate", "1.6"),
 ]
 
+# DFFR.RSTB confirmed active-low from the real schematic/SPICE trace (see
+# design_notes.md) -- active_low=True emits Liberty's "!RSTB" inversion.
+# DFFS is a legacy/placeholder entry: no physical cell currently exists in
+# TR-1um_STDCELL.gds (dropped from the remade library), kept here only so
+# the generator doesn't error if it's reintroduced later; polarity unverified.
 FF_CELLS = [
-    ("DFFR", 8, "RST", "clear"),
-    ("DFFS", 8, "SET", "preset"),
+    ("DFFR", 8, "RSTB", "clear",  True),
+    ("DFFS", 8, "SET",  "preset", False),
 ]
 
 def main():
     out = HEADER
     for name, area, in_pins, func, sense, delay in COMB_CELLS:
         out += comb_cell(name, area, in_pins, func, sense, delay)
-    for name, area, rst_pin, rst_attr in FF_CELLS:
-        out += ff_cell(name, area, rst_pin, rst_attr)
+    for name, area, rst_pin, rst_attr, active_low in FF_CELLS:
+        out += ff_cell(name, area, rst_pin, rst_attr, active_low)
     out += "}\n"
     print(out, end="")
 

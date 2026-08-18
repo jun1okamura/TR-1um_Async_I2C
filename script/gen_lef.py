@@ -74,13 +74,39 @@ PIN_META = {
     "MUX2":     _gate_meta("A", "B", "S"),
     # DFFR: async-reset D flip-flop (section 35.8's 20-transistor TG-based
     # design). CK is the clock pin (marked USE CLOCK, not plain SIGNAL, so
-    # P&R/CTS tools recognize it); D/RST are ordinary signal inputs; Q/QB
+    # P&R/CTS tools recognize it); D/RB are ordinary signal inputs; Q/QB
     # are both real outputs (QB is tapped directly from the slave latch's
     # own NAND2, not a separately buffered copy -- see section 35.8).
+    # NOTE: the remade GDS (this session) labels the reset pin marker "RB"
+    # (reset-bar), not "RST" -- matching the now-confirmed active-low
+    # polarity. This is a PIN NAME MISMATCH against TR1um_5_stdcell.lib,
+    # which still declares pin(RST) (see gen_liberty.py's SEQ table entry
+    # ("DFFR", 8, "RST", "clear") and the .lib's `clear: "!RST"`). The LEF
+    # here follows the physical GDS (authoritative for pin geometry/name),
+    # so this mismatch must be reconciled -- rename the .lib/netlist pin to
+    # RB, or rename the GDS marker back to RST -- before this LEF can be
+    # used together with the current .lib in P&R.
     "DFFR": {
         "D":   ("INPUT",  "SIGNAL"),
         "CK":  ("INPUT",  "CLOCK"),
-        "RST": ("INPUT",  "SIGNAL"),
+        "RB":  ("INPUT",  "SIGNAL"),
+        "Q":   ("OUTPUT", "SIGNAL"),
+        "QB":  ("OUTPUT", "SIGNAL"),
+        **_PWR,
+    },
+    # DFF: reset-less D flip-flop (no RST pin at all -- the master/slave
+    # TG-based cell with the RST transistors removed, added this session to
+    # let non-critical registers skip DFFR's RST-tree loading; see
+    # design_notes.md DFFR-minimization discussion). D/CK inputs, Q/QB
+    # outputs, same pin naming and row height (64.8um) as DFFR so it drops
+    # into the same placement/routing flow. CKP/CKB/QM/QS text labels seen
+    # in the GDS are internal-node labels only (no M1PIN/M2PIN marker
+    # geometry backs them) -- confirmed by point-in-polygon match against
+    # the 2 M1PIN (vdd/gnd) + 4 M2PIN (CK/D/QB/Q) marker polygons actually
+    # present, so they are correctly excluded as non-ports here.
+    "DFF": {
+        "D":   ("INPUT",  "SIGNAL"),
+        "CK":  ("INPUT",  "CLOCK"),
         "Q":   ("OUTPUT", "SIGNAL"),
         "QB":  ("OUTPUT", "SIGNAL"),
         **_PWR,

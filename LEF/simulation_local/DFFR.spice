@@ -1,0 +1,30 @@
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/DFFR.sch
+.subckt DFFR VDD QB D Q RB GND CK
+*.PININFO VDD:B GND:B D:I QB:O CK:I RB:I Q:O
+XM2 net1 D VDD VDD PMOS w=5.2u l=1u nrd=0 nrs=0
+XM1 net2 CKP net1 VDD PMOS w=5.2u l=1u nrd=0 nrs=0
+XM7 net2 CKB net3 GND NMOS w=3.4u l=1u nrd=0 nrs=0
+XM8 net3 D GND GND NMOS w=3.4u l=1u nrd=0 nrs=0
+XM10 QS net2 VDD VDD PMOS w=5.2u l=1u nrd=0 nrs=0
+XM11 QS net2 GND net10 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM12 net11 net12 net13 net14 PMOS w=5.2u l=1u nrd=0 nrs=0
+XM13 net4 QS GND net15 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM14 net4 net16 net2 net17 PMOS w=5.2u l=1u nrd=0 nrs=0
+XM15 net18 CKP net19 GND NMOS w=3.4u l=1u nrd=0 nrs=0
+XM16 QM net20 QS VDD PMOS w=5.2u l=1u nrd=0 nrs=0
+XM17 net21 CKP net22 net23 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM18 net5 QB VDD net24 PMOS w=5.2u l=1u nrd=0 nrs=0
+XM19 net5 QB net25 GND NMOS w=3.4u l=1u nrd=0 nrs=0
+XM20 net5 net26 QM VDD PMOS w=5.2u l=1u nrd=0 nrs=0
+XM21 net27 CKB net28 net29 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM22 QB QM VDD VDD PMOS w=10.4u l=1u nrd=0 nrs=0
+XM23 QB QM GND net30 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM24 Q QB VDD net31 PMOS w=10.4u l=1u nrd=0 nrs=0
+XM25 Q QB GND net32 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM26 net33 net7 VDD net34 PMOS w=10.4u l=1u nrd=0 nrs=0
+XM27 net35 net7 net36 net37 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM28 net8 net38 net39 net40 PMOS w=10.4u l=1u nrd=0 nrs=0
+XM29 net8 net41 net42 net43 NMOS w=3.4u l=1u nrd=0 nrs=0
+XM3 net5 RB VDD net44 PMOS w=5.2u l=1u nrd=0 nrs=0
+XM4 net25 RB GND GND NMOS w=3.4u l=1u nrd=0 nrs=0
+.ends
