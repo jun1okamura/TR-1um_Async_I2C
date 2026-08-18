@@ -1013,25 +1013,30 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         leaves that to its caller) -- returns (x, target_y), already
         fully connected and ready for a via at target_y.
 
-        Currently used only by per-row-local step 1's channel leg (where
-        it cleanly fixed the sda_in/scl collision, design_notes 42).
-        Also tried in the FORCE_JOG_NETS pass and the per-row-local
-        spine's channel-landing fallback, where it fixed the specific
-        shreg[1]/_071_ collision it was built for but introduced 2 new
-        M1 and 2 new M2 min-spacing DRC violations elsewhere (the ad-hoc
-        M1 bridge this function draws isn't itself guaranteed to respect
-        M1-to-M1 spacing against whatever real geometry already occupies
-        the claimed track at other X's -- unlike draw_jog's own M1 run,
-        which is protected by claim_track's/claim_track_near's track-
-        exclusivity model). Reverted from both of those call sites
-        pending a proper fix (e.g. an m1_run_clear-gated search here
-        too, which was tried but then made the per-row-local pass fail
-        to find any valid X at all for a different net -- needs a more
-        careful redesign, not a quick patch). shreg[1] vs _071_ remains
-        a documented residual short as of this session's end."""
+        v10 (design_notes 42.11): the bridge itself now also requires
+        m1_run_clear (the ALREADY-CLAIMED track cur_y is a real M1 run,
+        so a second net's bridge landing on top of existing M1 there is
+        a real short -- channel_clear/find_channel_clear_x alone are
+        M2-only and missed this, which is exactly how the first version
+        of this fix traded the shreg[1]/_071_ short for 2 new M1 + 2 new
+        M2 DRC violations elsewhere). find_channel_clear_x raises
+        SystemExit when no candidate satisfies every constraint within
+        its search radius -- caught here and treated as "no safe bridge
+        available", falling back to the pre-fix behavior (draw straight
+        through, unchecked) with a warning rather than aborting the
+        whole route, so one hard-to-place net can't break every other
+        net's routing."""
         final_lo, final_hi = min(cur_y, target_y), max(cur_y, target_y)
         if not channel_clear(cur_x, final_lo, final_hi):
-            clear_x3 = find_channel_clear_x(cur_x, final_lo, final_hi)
+            try:
+                clear_x3 = find_channel_clear_x(cur_x, final_lo, final_hi,
+                                                 extra_ok=lambda x: m1_run_clear(cur_y, cur_x, x))
+            except SystemExit:
+                print(f"  WARNING: bridge_final found no clear+M1-safe landing X near "
+                      f"x={cur_x} (y {final_lo}-{final_hi}) in channel {jog_channel} -- "
+                      f"falling back to the unchecked direct run (may leave a short to "
+                      f"investigate)")
+                clear_x3 = cur_x
             if abs(clear_x3 - cur_x) > 1e-6:
                 half_w2 = M1_TRUNK_WIDTH / 2.0
                 m1_box(min(cur_x, clear_x3), cur_y - half_w2, max(cur_x, clear_x3), cur_y + half_w2)
@@ -1233,8 +1238,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
                     clear_x2 = find_channel_clear_x(cur_x, check_y_lo, y_hi)
                     cur_x, cur_y = draw_jog(cur_x, cur_y, clear_x2, next_channel, near_y=cur_y)
                     log_spine_event(net, "channel_jog_fallback", next_channel, cur_x, cur_y, cur_y)
-                    if abs(cur_y - target_y) > 1e-6:
-                        m2_box(cur_x - PAD_HALF, min(cur_y, target_y), cur_x + PAD_HALF, max(cur_y, target_y))
+                    cur_x, cur_y = bridge_final(cur_x, cur_y, target_y, next_channel)
                     place_via(cur_x, target_y)
                     register_via_x(next_channel, target_y, cur_x)
                 cur_y = target_y
@@ -1380,23 +1384,28 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
             # vias -- channel_clear alone is M2-only and cannot see a
             # too-close M1-pad-vs-M1-pad case (see find_channel_clear_x
             # docstring for the real short this fixed: _003_/txreg[1]).
+            jogged = False
             if not channel_clear(cx, y_lo, y_hi) or not via_x_clear(channel, track_y, cx):
                 clear_x = find_channel_clear_x(cx, y_lo, y_hi,
                                                 extra_ok=lambda x: via_x_clear(channel, track_y, x))
                 if abs(clear_x - cx) > 1e-6:
                     force_jog_count += 1
+                    jogged = True
                     m2_box(cx - PAD_HALF, min(pin_edge_y, channel_entry_y),
                            cx + PAD_HALF, max(pin_edge_y, channel_entry_y))
                     cur_x, cur_y = draw_jog(cx, channel_entry_y, clear_x, channel, near_y=channel_entry_y)
-                    register_via_x(channel, track_y, clear_x)
+                    jog_y_logged = cur_y
+                    cur_x, cur_y = bridge_final(cur_x, cur_y, track_y, channel)
+                    register_via_x(channel, track_y, cur_x)
                     force_jog_events.append({
                         "net": net, "inst": inst_name, "pin": pname,
-                        "orig_x": cx, "clear_x": clear_x, "jog_y": cur_y,
+                        "orig_x": cx, "clear_x": clear_x, "jog_y": jog_y_logged,
                         "channel": channel, "channel_entry_y": channel_entry_y,
                         "track_y": track_y,
                     })
-            y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
-            m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
+            if not jogged:
+                y_lo, y_hi = min(cur_y, track_y), max(cur_y, track_y)
+                m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
             place_via(cur_x, track_y)
             pin_cxs.append(cur_x)
             pin_map.setdefault(net, []).append((inst_name, pname, cur_x, track_y))
