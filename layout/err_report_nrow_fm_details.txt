@@ -1,8 +1,4 @@
-=== 2 SHORT(S) SUSPECTED ===
-net=scl u_buf_scl_row3.A (791.10,922.40)  <->  net=sda_in _199_.A (477.90,62.00)
-    overlap: X=[735.40,738.80] Y=[612.70,638.50]  (layer (253, 3) in GDS)
-    overlap: X=[1010.80,1014.20] Y=[636.70,638.50]  (layer (253, 3) in GDS)
-    overlap: X=[1027.00,1030.40] Y=[897.50,899.30]  (layer (253, 3) in GDS)
+=== 1 SHORT(S) SUSPECTED ===
 net=_071_ _215_.S (1115.10,882.40)  <->  net=shreg[1] _269_.Q (888.30,870.40)
     overlap: X=[875.80,879.20] Y=[881.50,883.30]  (layer (253, 3) in GDS)
     overlap: X=[1005.40,1008.80] Y=[881.50,883.30]  (layer (253, 3) in GDS)

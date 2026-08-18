@@ -998,6 +998,49 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         place_via(clear_x, jog_y)
         return clear_x, jog_y
 
+    def bridge_final(cur_x, cur_y, target_y, jog_channel):
+        """v9 (this session, design_notes 42): after draw_jog lands on
+        (cur_x, jog_y), the caller still needs one more vertical M2 run
+        from jog_y to the TRUE target_y at cur_x -- but jog_y is chosen
+        by claim_track_near searching OUTWARD from near_y for a clear
+        DEPARTURE leg + M1 run, with no guarantee it stays inside
+        whatever Y-range the caller originally validated for cur_x. This
+        re-validates the actual final [cur_y, target_y] run at cur_x
+        and, if blocked, adds one more horizontal M1 bridge (at the
+        ALREADY-CLAIMED track cur_y, so no new claim_track call is
+        needed) to a nearby clear X before continuing down to target_y.
+        Draws the final vertical run itself (unlike draw_jog, which
+        leaves that to its caller) -- returns (x, target_y), already
+        fully connected and ready for a via at target_y.
+
+        Currently used only by per-row-local step 1's channel leg (where
+        it cleanly fixed the sda_in/scl collision, design_notes 42).
+        Also tried in the FORCE_JOG_NETS pass and the per-row-local
+        spine's channel-landing fallback, where it fixed the specific
+        shreg[1]/_071_ collision it was built for but introduced 2 new
+        M1 and 2 new M2 min-spacing DRC violations elsewhere (the ad-hoc
+        M1 bridge this function draws isn't itself guaranteed to respect
+        M1-to-M1 spacing against whatever real geometry already occupies
+        the claimed track at other X's -- unlike draw_jog's own M1 run,
+        which is protected by claim_track's/claim_track_near's track-
+        exclusivity model). Reverted from both of those call sites
+        pending a proper fix (e.g. an m1_run_clear-gated search here
+        too, which was tried but then made the per-row-local pass fail
+        to find any valid X at all for a different net -- needs a more
+        careful redesign, not a quick patch). shreg[1] vs _071_ remains
+        a documented residual short as of this session's end."""
+        final_lo, final_hi = min(cur_y, target_y), max(cur_y, target_y)
+        if not channel_clear(cur_x, final_lo, final_hi):
+            clear_x3 = find_channel_clear_x(cur_x, final_lo, final_hi)
+            if abs(clear_x3 - cur_x) > 1e-6:
+                half_w2 = M1_TRUNK_WIDTH / 2.0
+                m1_box(min(cur_x, clear_x3), cur_y - half_w2, max(cur_x, clear_x3), cur_y + half_w2)
+                place_via(clear_x3, cur_y)
+                cur_x = clear_x3
+        if abs(cur_y - target_y) > 1e-6:
+            m2_box(cur_x - PAD_HALF, min(cur_y, target_y), cur_x + PAD_HALF, max(cur_y, target_y))
+        return cur_x, target_y
+
     pin_map = {}
     routed = 0
     passthrough_pins = 0
@@ -1060,63 +1103,58 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         # nets this never manifested; with 7, verify_connectivity found
         # real cross-net M2 overlaps (e.g. sda_in's row2 stub landing
         # directly on top of scl's already-drawn channel2 spine segment,
-        # same X column, overlapping Y). Fixed by live-checking the raw X
-        # first (channel_clear, M2-only -- same semantics as everywhere
-        # else in this file) and, if blocked, searching nearby X the same
-        # way find_channel_clear_x does, then landing there instead --
-        # with a short M1 jog at the pin's own Y edge to bridge from the
-        # pin's fixed physical X to the clear landing X. That jog segment
-        # is itself checked against live M1 (a bare M1/M2 crossing at an
-        # unrelated track is never a short, per channel_clear's own
-        # precedent, but two M1 segments overlapping IS a real short) so
-        # the fallback can't introduce a new problem of the same kind it
-        # fixes.
-        def m1_clear(x0, x1, y):
-            if abs(x1 - x0) < 1e-9:
-                return True
-            lo, hi = min(x0, x1), max(x0, x1)
-            probe = db.Box(um(lo, dbu), um(y - half_w - M2_MIN_GAP, dbu),
-                            um(hi, dbu), um(y + half_w + M2_MIN_GAP, dbu))
-            return db.Region(top.begin_shapes_rec_overlapping(m1_idx, probe)).count() == 0
-
+        # same X column, overlapping Y).
+        #
+        # v8 (this session, superseding v7's first attempt): v7 tried
+        # live-checking the raw X and, if blocked, jogging with a short
+        # M1 run AT THE PIN'S OWN Y (inside the busy cell row) -- that
+        # search almost always failed to find clearance (a wide M1 jog
+        # inside a row packed with unrelated cells' M1 pin geometry is
+        # rarely free) and fell back to the unchecked raw X, leaving the
+        # short unresolved. Root cause of the miss: the actual collision
+        # (verified via net_shapes) always sits well INSIDE the channel,
+        # not near the row edge -- so jogging inside the crowded row was
+        # solving the problem in the wrong place. Fixed by splitting the
+        # stub into two legs, each jogged in the space best suited for
+        # it: (1) a fixed-X vertical run from the pin down to the row's
+        # own boundary (short, stays inside the row, same
+        # never-checked assumption every other pin-to-trunk connection
+        # in this codebase already relies on) -- then (2), once past the
+        # row boundary and into the open channel, the exact same
+        # find_channel_clear_x + draw_jog(near_y=...) mechanism already
+        # proven throughout step 2's row/channel crossings: search for a
+        # clear landing X across just the channel portion of the run,
+        # and if the direct X is blocked, jog via a freshly claimed M1
+        # track (live departure-leg-checked) rather than a raw,
+        # unchecked M1 box at a crowded Y.
         row_trunk_xmin = {}
         for r in rows_with_pins:
             channel = r
             track_y = per_row_track_y[(net, r)]
+            row_boundary = row_y0[r]  # this row's edge nearest channel r (below it)
             pin_cxs = []
             for inst_name, pname, x0, y0, x1, y1 in by_row[r]:
                 cx = (x0 + x1) / 2.0
                 pin_edge_y = y0
-                y_lo, y_hi = min(pin_edge_y, track_y), max(pin_edge_y, track_y)
-                land_x = cx
-                if not channel_clear(land_x, y_lo, y_hi):
-                    found = None
-                    # small search radius only (not the full ROW_X_TRIES
-                    # range): pin_edge_y sits inside the busy cell ROW, not
-                    # the open channel, so a wide M1 jog there is unrealistic
-                    # (near-certain to cross unrelated cell M1) -- a short
-                    # jog is the only kind that's both findable and safe.
-                    for s in range(1, 81):
-                        for cand in (cx + s * X_GRID, cx - s * X_GRID):
-                            if (in_bounds(cand) and not x_forbidden(cand)
-                                    and channel_clear(cand, y_lo, y_hi)
-                                    and m1_clear(cx, cand, pin_edge_y)):
-                                found = cand
-                                break
-                        if found is not None:
-                            break
-                    if found is None:
-                        print(f"  WARNING: per-row-local stub {inst_name}.{pname} "
-                              f"(net={net!r}, row={r}) has no clear short-range landing X "
-                              f"near x={cx} -- falling back to its raw pin X (may leave a "
-                              f"short to investigate)")
-                    else:
-                        land_x = found
-                if abs(land_x - cx) > 1e-6:
-                    m1_box(min(cx, land_x), pin_edge_y - half_w, max(cx, land_x), pin_edge_y + half_w)
-                    log_spine_event(net, "stub_jog", r, land_x, pin_edge_y, pin_edge_y)
-                m2_box(land_x - PAD_HALF, y_lo, land_x + PAD_HALF, y_hi)
+                # leg 1: fixed-X, pin -> row boundary (stays inside the row)
+                if abs(pin_edge_y - row_boundary) > 1e-6:
+                    m2_box(cx - PAD_HALF, min(pin_edge_y, row_boundary), cx + PAD_HALF,
+                           max(pin_edge_y, row_boundary))
+                # leg 2: row boundary -> track_y, entirely inside the channel --
+                # live-checked, jogged via draw_jog if the direct X is blocked.
+                y_lo, y_hi = min(row_boundary, track_y), max(row_boundary, track_y)
+                if channel_clear(cx, y_lo, y_hi):
+                    land_x, land_y = cx, row_boundary
+                else:
+                    clear_x = find_channel_clear_x(cx, y_lo, y_hi)
+                    land_x, land_y = draw_jog(cx, row_boundary, clear_x, channel, near_y=row_boundary)
+                    land_x, land_y = bridge_final(land_x, land_y, track_y, channel)
+                    log_spine_event(net, "stub_jog", r, land_x, row_boundary, land_y)
+                if abs(land_y - track_y) > 1e-6:
+                    m2_box(land_x - PAD_HALF, min(land_y, track_y), land_x + PAD_HALF,
+                           max(land_y, track_y))
                 place_via(land_x, track_y)
+                register_via_x(channel, track_y, land_x)
                 pin_cxs.append(land_x)
                 pin_map.setdefault(net, []).append((inst_name, pname, land_x, track_y))
             xmin, xmax = min(pin_cxs), max(pin_cxs)
@@ -1188,6 +1226,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
                 if channel_clear(cur_x, check_y_lo, y_hi):
                     m2_box(cur_x - PAD_HALF, y_lo, cur_x + PAD_HALF, y_hi)
                     place_via(cur_x, target_y)
+                    register_via_x(next_channel, target_y, cur_x)
                     log_spine_event(net, "channel_land", next_channel, cur_x, cur_y, target_y)
                 else:
                     per_row_spine_jog_count += 1
@@ -1197,6 +1236,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
                     if abs(cur_y - target_y) > 1e-6:
                         m2_box(cur_x - PAD_HALF, min(cur_y, target_y), cur_x + PAD_HALF, max(cur_y, target_y))
                     place_via(cur_x, target_y)
+                    register_via_x(next_channel, target_y, cur_x)
                 cur_y = target_y
             # force the final X to land exactly on row r_hi's own trunk
             # tap point (row_trunk_xmin[r_hi]) -- cur_y is already
