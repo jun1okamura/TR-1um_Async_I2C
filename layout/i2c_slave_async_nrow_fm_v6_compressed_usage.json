@@ -1,0 +1,37 @@
+[
+ {
+  "channel": 0,
+  "used_tracks": 23,
+  "budget_tracks": 24,
+  "height_um": 96.0,
+  "max_signal_geom_y_um": 96.0
+ },
+ {
+  "channel": 1,
+  "used_tracks": 65,
+  "budget_tracks": 65,
+  "height_um": 260.0,
+  "max_signal_geom_y_um": 260.0
+ },
+ {
+  "channel": 2,
+  "used_tracks": 60,
+  "budget_tracks": 60,
+  "height_um": 240.0,
+  "max_signal_geom_y_um": 240.0
+ },
+ {
+  "channel": 3,
+  "used_tracks": 56,
+  "budget_tracks": 56,
+  "height_um": 224.0,
+  "max_signal_geom_y_um": 224.0
+ },
+ {
+  "channel": 4,
+  "used_tracks": 9,
+  "budget_tracks": 10,
+  "height_um": 40.0,
+  "max_signal_geom_y_um": 35.7
+ }
+]
