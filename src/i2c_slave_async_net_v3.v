@@ -135,7 +135,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   wire _082_;
   wire _083_;
   wire _084_;
-  wire _085_;
+  wire RSTB1;
   wire _086_;
   wire _087_;
   wire _088_;
@@ -254,7 +254,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   (* src = "src/i2c_slave_async.v:107.15-107.20" *)
   wire _178_;
   (* src = "src/i2c_slave_async.v:93.10-93.21" *)
-  wire _179_;
+  wire RSTB2;
   (* src = "src/i2c_slave_async.v:72.23-72.30" *)
   wire _180_;
   (* src = "src/i2c_slave_async.v:72.23-72.30" *)
@@ -588,7 +588,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   );
   INV_X1 _406_ (
     .A(_158_),
-    .Y(_085_)
+    .Y(RSTB1)
   );
   INV_X1 _407_ (
     .A(_170_),
@@ -602,11 +602,11 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   NOR2 _409_ (
     .A(_171_),
     .B(_087_),
-    .Y(_179_)
+    .Y(RSTB2)
   );
   NOR2 _410_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_015_)
   );
   AND2_X1 _411_ (
@@ -1134,33 +1134,33 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .Y(_072_)
   );
   NOR2 _507_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_016_)
   );
   NOR2 _508_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_017_)
   );
   NOR2 _509_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_019_)
   );
   NOR2 _510_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_020_)
   );
   NOR2 _511_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_021_)
   );
   NOR2 _512_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_022_)
   );
   AND2_X1 _513_ (
@@ -1199,78 +1199,78 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .Y(_029_)
   );
   NOR2 _520_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_030_)
   );
   NOR2 _521_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_031_)
   );
   NOR2 _522_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_032_)
   );
   NOR2 _523_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_033_)
   );
   NOR2 _524_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_034_)
   );
   NOR2 _525_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_035_)
   );
   NOR2 _526_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_036_)
   );
   NOR2 _527_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_037_)
   );
   NOR2 _528_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_038_)
   );
   NOR2 _529_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_039_)
   );
   NOR2 _530_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_040_)
   );
   NOR2 _531_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_041_)
   );
   NOR2 _532_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_042_)
   );
   NOR2 _533_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_043_)
   );
   NOR2 _534_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_044_)
   );
   AND2_X1 _535_ (
@@ -1279,13 +1279,13 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
     .Y(_045_)
   );
   NOR2 _536_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_046_)
   );
   NOR2 _537_ (
-    .A(_085_),
-    .B(_179_),
+    .A(RSTB1),
+    .B(RSTB2),
     .Y(_047_)
   );
   (* src = "src/i2c_slave_async.v:113.5-158.8" *)
@@ -1726,7 +1726,7 @@ module i2c_slave_async(VDD, GND, rst_n, scl, sda_in, sda_oe, tx_data, rx_data, r
   assign _291_ = _047_;
   assign _077_ = busy;
   assign _158_ = rst_n;
-  assign start_pulse = _179_;
+  assign start_pulse = RSTB2;
   assign _315_ = _071_;
   assign busy_clr = _078_;
   assign _169_ = scl;
