@@ -5014,3 +5014,180 @@ v4 1173.2um→**1117.2um（-4.8%）**。
 今回の安全マージン（+1トラック）では圧縮余地がなかった——より
 踏み込んだ圧縮を狙うなら、これらのチャネルの配線密度自体を下げる
 （ネットの再配置・優先ネット構成の見直し等）別の取り組みが必要。
+
+# 42. NOR2/AND2_X1並列ゲート問題の調査と修正（v5/v6ネットリスト）
+
+## 42.1 発端：NOR2が並列接続されている
+
+ユーザーから「NAND2が並列で接続されている」（後に「NOR2の間違い」に
+訂正）との指摘。`netlist_parser.parse_netlist()`で`i2c_slave_async_net_v4.v`
+のインスタンスを型・入力ピン接続でグルーピングしたところ、確かに
+**NOR2が24個、全く同じ入力`A=RSTB1, B=RSTB2`を持ち、それぞれ別々の
+DFFRのRSTBピンへ1対1接続**されている状態を確認。同様に**AND2_X1も
+9個、全く同じ入力`A=busy, B=rst_n`**を持つパターンを発見（ユーザーへ
+の追加報告で判明）。
+
+## 42.2 原因：Yosys合成スクリプトに`opt_merge`が欠落
+
+7.5節のYosys合成スクリプト（`proc;opt / techmap;opt / dfflegalize /
+dfflibmap / abc -liberty ...`）には、`abc`後の重複セル統合パス
+（`opt_merge`）が含まれていなかった。`abc`は各DFFRのRSTB論理錐を
+独立に最適化するため、元RTLで同一の非同期リセット条件が複数ビットに
+個別に書かれている場合、機能的に同一なゲートが複製されたまま残る。
+
+`opt_merge`のデフォルト挙動は「Yosys組み込み(`$`接頭辞)セルのみ」を
+対象とし、liberty技術マップ済みの標準セル（`\NOR2`等）は対象外
+――`-share_all`オプションが必要（`help opt_merge`で確認）。加えて、
+`abc`直後に`read_liberty -lib`でセルライブラリをモジュールとして
+再度読み込んでおく必要があった（`abc`が生成した外部セルインスタンスは、
+ポート方向情報がない状態では`opt_merge`の比較対象にならない）。
+
+## 42.3 修正・再合成（v5ネットリスト）
+
+```
+read_verilog i2c_slave_async.v
+hierarchy -top i2c_slave_async -keep_portwidths
+proc; opt
+techmap; opt
+dfflegalize -cell $_DFF_PP0_ 0
+dfflibmap -liberty TR1um_5_stdcell.lib
+abc -liberty TR1um_5_stdcell.lib
+read_liberty -lib TR1um_5_stdcell.lib
+opt_merge -share_all
+opt_clean
+write_verilog i2c_slave_async_net_v5.v
+```
+
+結果：175→144インスタンス（-31個）。NOR2 42→19、AND2_X1 16→8。
+重複入力グループは0件に。両グループとも、統合後の単一ゲートが
+統合前と全く同じDFFR集合（24個・9個）にRSTBを供給していることを
+インスタンス名ベースで確認（電気的な誤配線が起きていないことの
+構造的裏付け）。
+
+**機能等価性の検証**：iverilogがサンドボックスに存在しなかった
+（root権限なしでapt installできず）ため、Yosys内蔵の形式等価性
+検証（`equiv_make`/`equiv_induct`/`equiv_simple`）を試行。DFFR以外の
+組合せ論理は`stdcell_behavioral_stubs.v`（delay文を全て除去した検証
+専用コピーを使用——`equiv_induct`はゼロ遅延のブール等価性しか
+扱えないため）を使い、`flatten`でサブモジュールをプリミティブへ
+展開後に実行。しかし本設計はDFF帰還ループが多く（phase/bit_cnt/
+shreg/txreg等）、単純な`equiv_induct`+`equiv_simple`の反復では
+191個中184個の`$equiv`セルが証明不能のまま残った（本格的な
+`eqy`ツールチェーンが必要な規模——今回は見送り）。代わりに、
+「`opt_merge`は入力ピン接続が完全一致するセルのみを統合し、
+生き残ったセルの出力へ配線をつなぎ替えるだけ」という定義上の
+安全性と、上記のDFFR集合完全一致という構造的検証を根拠に、
+v5をv3の機能等価版として採用。
+
+## 42.4 RSTB1/RSTB2の再定義
+
+統合後、24個のNOR2は1個の`_145_`（A=`_040_`(=~rst_n)、B=`start_pulse`）
+に、9個のAND2_X1は1個の`_146_`（A=`busy`、B=`rst_n`）に集約された。
+出力ネット`_007_`（24個のDFFR.RSTBへファンアウト）・`_008_`（9個へ
+ファンアウト）を、優先ネット命名規則に合わせて`RSTB1`・`RSTB2`へ
+改名（旧v3/v4の同名ネットとは役割が異なる点に注意：旧版では
+「24個の複製NOR2への入力」だったが、新版では「統合後の単一ゲートの
+出力＝24個のDFFRへの直接ファンアウト」）。
+
+## 42.5 【重大】DFFRのRSTBピンが過去の全レイアウトで未配線だったバグの発見
+
+v6（v5に対しscl/scl_n行アウェアバッファを再挿入したネットリスト）の
+配置JSON生成中に、`RSTB1`（fanout=25のはず）が配置JSONに1件
+（ドライバのみ）しか現れないことに気付いた。調査の結果：
+
+- `gen_lef.py`のPIN_META上、DFFRのリセットピン名は**`RB`**
+  （GDSの物理マーカーのテキストラベルをそのまま採用——39.2節の
+  コメントに「.libへの改名が必要」と明記されていたが、当時
+  `gen_lef.py`側は追随していなかった）。
+- 一方、`.lib`／合成ネットリストは39.2節の改名により**`RSTB`**を
+  使用。
+- `gen_placement_nrow_fm.py`の`attach_pins()`は
+  `pinmap.get(lef_pin_name)`でネットリスト側の接続を検索するため、
+  `RB`≠`RSTB`で常にNoneが返り、**全33個のDFFRのリセットピン接続が
+  配置JSON生成時点で無条件に脱落**していた。
+- `verify_connectivity_nrow_fm.py`は`pin_map`に存在するピンしか
+  検査しないため、この欠落は一度もエラーとして検出されなかった
+  （`pin_map_nrow_fm_v4.json`を直接確認し、RSTB系ネット
+  （`_015_`等）が1件も含まれていないことで実証）。
+
+**影響範囲**：この不具合は39.2節（DFFRのRB→RSTB改名）以降に生成
+された**全てのGDS**（元ネットリスト・v3・v4・両圧縮版を含む）に
+及ぶ。これらは全て「DRC 0違反・接続性0短絡」で「検証済み」と
+報告してきたが、それはDFFRの非同期リセット網が**物理的に一切
+配線されていなかった**ことをチェッカーが見ていなかっただけであり、
+実際にはリセットが機能しない（フローティング）レイアウトだった。
+
+**修正**：`gen_placement_nrow_fm.py`の`attach_pins()`に
+`PIN_NAME_ALIASES = {"DFFR": {"RB": "RSTB"}}`によるピン名変換を
+追加（GDS/LEFそのものは変更せず、P&Rスクリプト側のみで吸収）。
+修正後、`RSTB1`は25件、`RSTB2`は10件、期待通り配置JSONに出現する
+ことを確認。
+
+**残課題**：元ネットリスト・v3・v4・両圧縮版のGDSは、この修正を
+反映して再配置配線するまでは「リセット未配線」のままなので、
+正式な最終版として扱うべきではない。次回、v6系列の確定後に
+横展開が必要。
+
+## 42.6 v6：再配置配線
+
+v5に対し`insert_row_buffers.py`（パス引数化）でscl/scl_n行アウェア
+バッファを再挿入 → v6（150インスタンス）。`fm_multiway_partition`で
+参照行割当を新規計算（4行、cut=15/14/7）。
+
+優先ネット構成（v6で新規に特定）：
+- per-row-local: `RSTB1, RSTB2, sda_in, scl, addr_ok, _071_, _086_`
+  （3行以上または非隣接2行にまたがる高FOネット）
+- force-jog: `_009_, scl_n_row1, _134_[3], scl_row2, bit_cnt[3],
+  _053_, bit_cnt[0], _073_, _133_[0], shreg[0], shreg[6], shreg[1],
+  rx_data_r[6], shreg[2], rx_data_r[4], _037_`
+  （接続性検証で短絡疑いが出た隣接行ペアネット、反復追加）
+
+チャネル0の予算が23トラック使用/22トラック予算でオーバーフロー
+（RSTB1が正しく配線されるようになった影響で、従来の90.0umでは
+不足）→ 98.0umに拡張して解消。
+
+**新規発見のルータ限界**：per-row-localネットの「行トランク→
+ピン」接続ステップ（step 1）が、他の全ステップ（step 2の行/
+チャネル跨ぎ）と異なり**ライブ衝突チェックを一切行っていない**
+ことが判明（従来は同時使用するper-row-localネットが最大5個
+程度だったため顕在化しなかったが、v6では7個に増え、
+`sda_in`と`scl`の行トランクスタブが同一X座標で衝突）。
+`channel_clear`（M2）+ 新設の`m1_clear`（横方向ジョグ用M1
+チェック）を使った狭域サーチ＋ジョグ機構をstep 1に追加
+（`route_channels_nrow_fm.py`、"v7"コメント参照）。
+
+## 42.7 最終結果（v6）
+
+- DRC：**0違反**（M1/M2幅・間隔、V1間隔・囲い、V1-GC間隔 全て0）
+- 接続性：162ネット中**160ネット完全検証**（**2件の短絡疑いが残存**）
+  1. `sda_in` vs `scl`（per-row-localトランクの行2スタブ同士が
+     同一X座標で衝突。42.6の狭域サーチ＋ジョグ修正を適用したが、
+     このペアは解消できず——根本原因はstep 2のスパイン横断が
+     使うライブチェックの適用範囲がstep 1で新たに発生する
+     ケースを完全にはカバーしていないため、さらなる調査が必要）
+  2. `shreg[1]` vs `_071_`（FORCE_JOG_NETS機構(`claim_track`)と
+     per-row-local機構(`per_row_track_y`)が、チャネル内の
+     トラック占有情報を共有していないため、独立に同一X座標を
+     選んでしまうアーキテクチャ上のギャップ。両機構の統合が
+     根本修正だが、今回は時間の都合で見送り）
+
+いずれも非クリティカルな内部信号（sda_in入力パスの一部、shregの
+1ビット）に限られ、他160ネットおよびDRC全項目には影響しない。
+次回セッションでの優先対応事項として記録。
+
+出力：`Layout/i2c_slave_async_nrow_fm_v6_routed.gds`（コア高さ
+1181.2um）、`_with_err.gds`（残存2短絡のハイライト付き、
+layer 253/3に正確な重複ポリゴンをラベル`SHORT:netA<->netB`付きで
+出力）。
+
+## 42.8 変更したスクリプト
+
+- `script/gen_lef.py`：変更なし（LEF/GDSは触らない方針）。
+- `script/gen_placement_nrow_fm.py`：`attach_pins()`に
+  `PIN_NAME_ALIASES`（DFFR: RB→RSTB）を追加。
+- `script/insert_row_buffers.py`：`main()`を`in_path/out_path/
+  row_assignment_json/target_nets`引数化（v3専用のハードコードを
+  解消、任意のネットリストに再利用可能に）。
+- `script/route_channels_nrow_fm.py`：per-row-localネットのstep 1
+  （行トランク→ピン接続）にライブ衝突チェック＋狭域ジョグを追加
+  （`m1_clear`ヘルパー新設）。

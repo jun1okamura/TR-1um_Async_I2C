@@ -321,6 +321,22 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
         assert abs(w - TARGET_ROW_WIDTH_UM) < 1e-6, f"row{r} width {w} != target {TARGET_ROW_WIDTH_UM}"
     row_width = widths_out[0]
 
+    # LEF pin name -> netlist/.lib pin name, for cells where the GDS's own
+    # text-label marker (which gen_lef.py uses verbatim as the LEF pin
+    # name) diverges from the liberty/synthesis pin name. Currently only
+    # DFFR: the GDS marks the reset pin "RB" (matching the physical
+    # active-low reset-bar convention) but TR1um_5_stdcell.lib/the
+    # synthesized netlist use "RSTB" (section 39.2's rename). Without this
+    # alias, pinmap.get("RB") always misses (the netlist has no "RB" key),
+    # so every DFFR's reset pin was silently dropped from every placement
+    # JSON built before this fix -- confirmed missing from
+    # pin_map_nrow_fm_v4.json (0 entries for any DFFR-RSTB net), meaning
+    # the async reset network was never actually routed in any prior GDS
+    # despite 0 DRC / 0 shorts (the connectivity checker only checks pins
+    # present in pin_map, so an entirely-missing pin was never examined,
+    # not correctly verified).
+    PIN_NAME_ALIASES = {"DFFR": {"RB": "RSTB"}}
+
     def attach_pins(placed_list, cell_list):
         by_name = {name: pins for _typ, name, pins in cell_list}
         for item in placed_list:
@@ -329,9 +345,10 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
                 continue
             pinmap = by_name[item["name"]]
             lef_pins = macros[item["type"]]["pins"]
+            aliases = PIN_NAME_ALIASES.get(item["type"], {})
             resolved = {}
             for pname, pinfo in lef_pins.items():
-                net_name = pinmap.get(pname)
+                net_name = pinmap.get(aliases.get(pname, pname))
                 if net_name is None:
                     continue
                 resolved[pname] = {"net": net_name, "direction": pinfo["direction"],

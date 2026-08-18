@@ -64,14 +64,18 @@ BUF_CELL = "BUF_X1"
 TARGET_NETS = ["scl", "scl_n"]
 
 
-def main():
+def main(in_path=V3_PATH, out_path=V4_PATH, row_assignment_json=ROW_ASSIGNMENT_JSON,
+         target_nets=None):
+    global TARGET_NETS
+    if target_nets is not None:
+        TARGET_NETS = target_nets
     macros = parse_lef()
     widths = {name: m["size"][0] for name, m in macros.items()}
 
-    net = parse_netlist(path=V3_PATH)
+    net = parse_netlist(path=in_path)
     instances = net["instances"]  # [(typ, name, {pin: canon_net}), ...]
 
-    print(f"parsed {len(instances)} instances from {V3_PATH}")
+    print(f"parsed {len(instances)} instances from {in_path}")
 
     part = fm_multiway_partition(instances, widths, N_ROWS)
     print(f"reference row assignment computed ({N_ROWS} rows)")
@@ -98,7 +102,7 @@ def main():
     for t in TARGET_NETS:
         assert sinks_by_net[t], f"net {t!r} has no INPUT-direction sinks -- check net name"
 
-    src = open(V3_PATH).read()
+    src = open(in_path).read()
 
     def redirect(instname, pinname, new_net):
         nonlocal src
@@ -145,19 +149,19 @@ def main():
     endmod_idx = src.rindex("endmodule")
     src = src[:endmod_idx] + "\n" + "\n\n".join(inserted_blocks) + "\n\n" + src[endmod_idx:]
 
-    with open(V4_PATH, "w") as f:
+    with open(out_path, "w") as f:
         f.write(src)
-    print(f"\nwrote {V4_PATH}")
+    print(f"\nwrote {out_path}")
 
-    # full v4 row assignment: reference `part` for the 175 original
-    # instances (unchanged names) + each new buffer's row by construction.
+    # full row assignment: reference `part` for the original instances
+    # (unchanged names) + each new buffer's row by construction.
     full_part = dict(part)
     for target_net, branch_report in report:
         for r, bn, _c in branch_report:
             full_part[f"u_buf_{target_net}_row{r}"] = r
-    with open(ROW_ASSIGNMENT_JSON, "w") as f:
+    with open(row_assignment_json, "w") as f:
         json.dump(full_part, f, indent=1)
-    print(f"wrote {ROW_ASSIGNMENT_JSON} ({len(full_part)} instances)")
+    print(f"wrote {row_assignment_json} ({len(full_part)} instances)")
 
     print("\n=== summary ===")
     for target_net, branch_report in report:

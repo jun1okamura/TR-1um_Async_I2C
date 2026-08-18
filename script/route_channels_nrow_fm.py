@@ -1049,6 +1049,36 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         # 1. draw each row's own local trunk + connect that row's pins to
         # it (channel == row, i.e. directly below that row -- always
         # direction "-1"/downward from the row's own perspective).
+        #
+        # v7 (this session, discovered while re-routing after the
+        # RSTB1/RSTB2 pin-name fix added 2 more simultaneous
+        # PER_ROW_LOCAL_NETS): this per-pin stub used to draw straight
+        # down from the pin's own raw X (cx) to track_y with NO live
+        # collision check at all -- unlike every other drawing step in
+        # this pass (step 2's row/channel crossings are all
+        # channel_clear-guarded). With only ~5 simultaneous per-row-local
+        # nets this never manifested; with 7, verify_connectivity found
+        # real cross-net M2 overlaps (e.g. sda_in's row2 stub landing
+        # directly on top of scl's already-drawn channel2 spine segment,
+        # same X column, overlapping Y). Fixed by live-checking the raw X
+        # first (channel_clear, M2-only -- same semantics as everywhere
+        # else in this file) and, if blocked, searching nearby X the same
+        # way find_channel_clear_x does, then landing there instead --
+        # with a short M1 jog at the pin's own Y edge to bridge from the
+        # pin's fixed physical X to the clear landing X. That jog segment
+        # is itself checked against live M1 (a bare M1/M2 crossing at an
+        # unrelated track is never a short, per channel_clear's own
+        # precedent, but two M1 segments overlapping IS a real short) so
+        # the fallback can't introduce a new problem of the same kind it
+        # fixes.
+        def m1_clear(x0, x1, y):
+            if abs(x1 - x0) < 1e-9:
+                return True
+            lo, hi = min(x0, x1), max(x0, x1)
+            probe = db.Box(um(lo, dbu), um(y - half_w - M2_MIN_GAP, dbu),
+                            um(hi, dbu), um(y + half_w + M2_MIN_GAP, dbu))
+            return db.Region(top.begin_shapes_rec_overlapping(m1_idx, probe)).count() == 0
+
         row_trunk_xmin = {}
         for r in rows_with_pins:
             channel = r
@@ -1058,10 +1088,37 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
                 cx = (x0 + x1) / 2.0
                 pin_edge_y = y0
                 y_lo, y_hi = min(pin_edge_y, track_y), max(pin_edge_y, track_y)
-                m2_box(cx - PAD_HALF, y_lo, cx + PAD_HALF, y_hi)
-                place_via(cx, track_y)
-                pin_cxs.append(cx)
-                pin_map.setdefault(net, []).append((inst_name, pname, cx, track_y))
+                land_x = cx
+                if not channel_clear(land_x, y_lo, y_hi):
+                    found = None
+                    # small search radius only (not the full ROW_X_TRIES
+                    # range): pin_edge_y sits inside the busy cell ROW, not
+                    # the open channel, so a wide M1 jog there is unrealistic
+                    # (near-certain to cross unrelated cell M1) -- a short
+                    # jog is the only kind that's both findable and safe.
+                    for s in range(1, 81):
+                        for cand in (cx + s * X_GRID, cx - s * X_GRID):
+                            if (in_bounds(cand) and not x_forbidden(cand)
+                                    and channel_clear(cand, y_lo, y_hi)
+                                    and m1_clear(cx, cand, pin_edge_y)):
+                                found = cand
+                                break
+                        if found is not None:
+                            break
+                    if found is None:
+                        print(f"  WARNING: per-row-local stub {inst_name}.{pname} "
+                              f"(net={net!r}, row={r}) has no clear short-range landing X "
+                              f"near x={cx} -- falling back to its raw pin X (may leave a "
+                              f"short to investigate)")
+                    else:
+                        land_x = found
+                if abs(land_x - cx) > 1e-6:
+                    m1_box(min(cx, land_x), pin_edge_y - half_w, max(cx, land_x), pin_edge_y + half_w)
+                    log_spine_event(net, "stub_jog", r, land_x, pin_edge_y, pin_edge_y)
+                m2_box(land_x - PAD_HALF, y_lo, land_x + PAD_HALF, y_hi)
+                place_via(land_x, track_y)
+                pin_cxs.append(land_x)
+                pin_map.setdefault(net, []).append((inst_name, pname, land_x, track_y))
             xmin, xmax = min(pin_cxs), max(pin_cxs)
             row_trunk_xmin[r] = xmin
             m1_box(xmin, track_y - half_w, xmax, track_y + half_w)
