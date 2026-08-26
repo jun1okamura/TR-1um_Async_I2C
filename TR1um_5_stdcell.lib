@@ -65,6 +65,22 @@ library(TR1um_5_stdcell) {
             }
         }
     }
+    cell(BUFTH) {
+        area: 3;
+        pin(A) { direction: input; capacitance: 1.0; }
+        pin(Y) {
+            direction: output;
+            function: "A";
+            timing() {
+                related_pin: "A";
+                timing_sense: positive_unate;
+                cell_rise(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
+                cell_fall(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
+                rise_transition(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
+                fall_transition(delay_template) { values("0.1, 0.1", "0.1, 0.1"); }
+            }
+        }
+    }
     cell(AND2_X1) {
         area: 2;
         pin(A) { direction: input; capacitance: 1.0; }
@@ -381,7 +397,7 @@ library(TR1um_5_stdcell) {
             }
         }
     }
-    cell(DFFR) {
+    cell(DFFRB) {
         area: 8;
         ff(IQ, IQN) {
             clocked_on : "CK";

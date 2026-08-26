@@ -1,0 +1,40 @@
+=== 0 SHORT(S) SUSPECTED ===
+
+=== 33 UNCONNECTED (stub) PIN(S) ===
+-- 10 are top-level ports (expected, not a defect) --
+  PORT net=scl u_bufth_scl.A (720.90,1625.30)
+  PORT net=sda_in u_bufth_sda_in.A (753.30,1625.30)
+  PORT net=sda_oe_r _267_.Q (791.10,687.00)
+  PORT net=tx_data[0] _196_.A (1190.70,687.00)
+  PORT net=tx_data[1] _195_.A (1158.30,687.00)
+  PORT net=tx_data[2] _194_.A (1142.10,1625.20)
+  PORT net=tx_data[3] _193_.A (1109.70,1625.20)
+  PORT net=tx_data[4] _192_.A (1077.30,1625.20)
+  PORT net=tx_data[5] _191_.A (1044.90,1625.20)
+  PORT net=tx_data[6] _190_.A (1012.50,1625.20)
+-- 23 are NOT ports (worth investigating) --
+  OPEN net=_110_ _269_.QB (526.50,1625.20)
+  OPEN net=_111_ _261_.QB (780.30,1169.60)
+  OPEN net=_112_ _253_.QB (521.10,687.00)
+  OPEN net=_113_ _271_.QB (1007.10,1169.60)
+  OPEN net=_114_ _273_.QB (1136.70,1169.60)
+  OPEN net=_115_ _260_.QB (715.50,1169.60)
+  OPEN net=_116_ _259_.QB (650.70,1169.60)
+  OPEN net=_117_ _258_.QB (585.90,1169.60)
+  OPEN net=_118_ _257_.QB (521.10,1169.60)
+  OPEN net=_119_ _256_.QB (456.30,1169.60)
+  OPEN net=_120_ _255_.QB (391.50,1169.60)
+  OPEN net=_121_ _254_.QB (1584.90,1625.20)
+  OPEN net=_122_ _252_.QB (1520.10,1625.20)
+  OPEN net=_123_ _251_.QB (1455.30,1625.20)
+  OPEN net=_124_ _250_.QB (1390.50,1625.20)
+  OPEN net=_125_ _249_.QB (1325.70,1625.20)
+  OPEN net=_126_ _248_.QB (1260.90,1625.20)
+  OPEN net=_127_ _247_.QB (456.30,687.00)
+  OPEN net=_128_ _246_.QB (391.50,687.00)
+  OPEN net=_129_ _270_.QB (942.30,1169.60)
+  OPEN net=_130_ _267_.QB (780.30,687.00)
+  OPEN net=_131_ _268_.QB (461.70,1625.20)
+  OPEN net=_132_ _266_.QB (877.50,1169.60)
+
+=== 0 FORCE_JOG_NETS JOG(S) INSERTED ===

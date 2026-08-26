@@ -87,7 +87,7 @@ PIN_META = {
     # "RSTB", matching the .lib/netlist -- the PIN_META key below follows
     # suit so gen_lef.py's own name_for_polygon lookup (which matches
     # PIN_META keys against the GDS's own text labels) still succeeds.
-    "DFFR": {
+    "DFFRB": {
         "D":    ("INPUT",  "SIGNAL"),
         "CK":   ("INPUT",  "CLOCK"),
         "RSTB": ("INPUT",  "SIGNAL"),
@@ -113,6 +113,15 @@ PIN_META = {
         **_PWR,
     },
     "BUF_X1":   _gate_meta("A"),
+    # BUFTH: hysteresis (Schmitt-trigger) buffer added this session by the
+    # user directly in TR-1um_STDCELL.gds. Same single-input/single-output
+    # pin shape as BUF_X1 (A in, Y out, plus VDD/GND) -- GDS confirms one
+    # M2PIN each for A (x=6.4-9.8) and Y (x=28.0-31.4) at the same Y band
+    # as every other combinational cell's signal pins, and the usual
+    # split VDD/GND M1 rail pins. Physically wider than BUF_X1 (32.4um vs
+    # 16.2um, prBoundary-derived) for the extra hysteresis transistors --
+    # SIZE is read from the GDS directly, no manual entry needed here.
+    "BUFTH":    _gate_meta("A"),
     # TAP2/TAP3 (section 35.3/35.9): dedicated power-tap filler cells, no
     # signal pins at all -- just VDD/GND, each with an M1 rail port plus
     # M2 strap-endcap ports at top and bottom (see the PIN-grouping note

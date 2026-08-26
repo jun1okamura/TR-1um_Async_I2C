@@ -1,0 +1,53 @@
+puts("Starting TR-1um LVS net_rename_test")
+
+# ---- step 1: rename schematic top circuit to match layout (proven fix) ----
+sc_top = schematic.circuit_by_name("I2C_SLAVE_ASYNC_NROW_FM")
+if sc_top
+  puts("Found schematic top circuit: #{sc_top.name} -> renaming to i2c_slave_async_nrow_fm")
+  sc_top.name = "i2c_slave_async_nrow_fm"
+else
+  puts("WARNING: schematic top circuit I2C_SLAVE_ASYNC_NROW_FM not found!")
+end
+
+# ---- step 2: rename LAYOUT nets directly (object mutation, not a hint) ----
+# Same principle as the circuit rename above: same_nets()/same_circuits()
+# DSL hints were confirmed to have zero effect on these specific nets even
+# after the circuit-name fix, but direct object renaming demonstrably works.
+# Renaming the layout-side net to the exact schematic net name should let
+# ordinary name-based matching resolve these without needing any hint API.
+
+top = netlist.circuit_by_name("i2c_slave_async_nrow_fm")
+
+if top
+  RENAMES = {
+    "$17"  => "_071_",
+    "$621" => "SCL_ROW3",
+    "$28"  => "RSTB1",
+    "$633" => "_018_",
+    "$639" => "_017_",
+    "$637" => "_016_",
+    "$635" => "_015_",
+    "$498" => "_014_",
+    "$504" => "_013_",
+    "$503" => "_012_",
+    "$645" => "_031_",
+    "$672" => "SDA_IN_ROW3",
+    "$719" => "SHREG[4]",
+    "$718" => "SHREG[1]",
+    "$502" => "SHREG[0]",
+    "$501" => "SHREG[6]",
+    "$638" => "SHREG[3]",
+  }
+
+  RENAMES.each do |layout_name, sch_name|
+    n = top.net_by_name(layout_name)
+    if n
+      puts("renaming layout net #{layout_name} -> #{sch_name}")
+      n.name = sch_name
+    else
+      puts("WARNING: layout net #{layout_name} not found in top circuit")
+    end
+  end
+else
+  puts("WARNING: layout top circuit i2c_slave_async_nrow_fm not found!")
+end

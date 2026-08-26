@@ -1,0 +1,38 @@
+puts("Starting TR-1um LVS rename_test")
+
+# ---- rename schematic top circuit to match layout's name literally ----
+sc_top = schematic.circuit_by_name("I2C_SLAVE_ASYNC_NROW_FM")
+if sc_top
+  puts("Found schematic top circuit: #{sc_top.name} -> renaming to i2c_slave_async_nrow_fm")
+  sc_top.name = "i2c_slave_async_nrow_fm"
+else
+  puts("WARNING: schematic top circuit I2C_SLAVE_ASYNC_NROW_FM not found!")
+end
+
+CIRCUIT = "i2c_slave_async_nrow_fm"
+
+# ---- shared control nets (case-corrected) ----
+same_nets(CIRCUIT, "$17",  "_071_")
+same_nets(CIRCUIT, "$621", "SCL_ROW3")
+same_nets(CIRCUIT, "$28",  "RSTB1")
+
+# ---- MUX2.Y / DFFR.D per bit ----
+same_nets(CIRCUIT, "$633", "_018_")   # bit 0
+same_nets(CIRCUIT, "$639", "_017_")   # bit 1
+same_nets(CIRCUIT, "$637", "_016_")   # bit 2
+same_nets(CIRCUIT, "$635", "_015_")   # bit 3
+same_nets(CIRCUIT, "$498", "_014_")   # bit 4
+same_nets(CIRCUIT, "$504", "_013_")   # bit 5
+same_nets(CIRCUIT, "$503", "_012_")   # bit 6
+same_nets(CIRCUIT, "$645", "_031_")   # bit 7
+
+# ---- MUX2.A per bit ----
+same_nets(CIRCUIT, "$672", "SDA_IN_ROW3")  # bit 0
+same_nets(CIRCUIT, "$719", "SHREG[4]")     # bit 1
+same_nets(CIRCUIT, "$718", "SHREG[1]")     # bit 2
+same_nets(CIRCUIT, "$502", "SHREG[0]")     # bit 4
+same_nets(CIRCUIT, "$501", "SHREG[6]")     # bit 5
+same_nets(CIRCUIT, "$638", "SHREG[3]")     # bit 7
+
+same_nets!(CIRCUIT, "VDD")
+same_nets!(CIRCUIT, "VSS", "GND")

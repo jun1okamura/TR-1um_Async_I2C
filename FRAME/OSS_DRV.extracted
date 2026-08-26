@@ -1,0 +1,46 @@
+* Created by KLayout
+*** My special header ***
+
+* cell OSS_DRV
+* pin GND,gnd
+* pin HIZ
+* pin OUT
+* pin vdd
+.SUBCKT OSS_DRV GND|gnd HIZ OUT vdd
+* device instance $1 r0 *1 34.6,-0.5 PMOS
+XM$1 \$6 HIZ vdd vdd PMOS L=1u W=5.2u AS=14.56p AD=7.8p PS=16u PD=8.2u
+* device instance $2 r0 *1 34.6,3.5 PMOS
+XM$2 vdd \$6 \$10 vdd PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $3 r0 *1 34.6,7.5 PMOS
+XM$3 \$10 OUT vdd vdd PMOS L=1u W=5.2u AS=7.8p AD=34.84p PS=8.2u PD=25.8u
+* device instance $4 r0 *1 42.4,13.5 PMOS
+XM$4 vdd \$10 \$14 vdd PMOS L=1u W=20.8u AS=34.84p AD=58.24p PS=25.8u PD=47.2u
+* device instance $5 r0 *1 -37.2,5.3 PMOS
+XM$5 \$9 HIZ \$12 vdd PMOS L=1u W=10.4u AS=29.12p AD=6.24p PS=26.4u PD=11.6u
+* device instance $6 r0 *1 -37.2,7.5 PMOS
+XM$6 \$12 OUT vdd vdd PMOS L=1u W=10.4u AS=6.24p AD=40.56p PS=11.6u PD=25.8u
+* device instance $7 r0 *1 -42.4,13.5 PMOS
+XM$7 vdd \$9 \$13 vdd PMOS L=1u W=20.8u AS=40.56p AD=58.24p PS=25.8u PD=47.2u
+* device instance $8 r0 *1 -13.3,3.5 NMOS
+XM$8 GND|gnd HIZ \$9 GND|gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $9 r0 *1 -13.3,7.5 NMOS
+XM$9 \$9 OUT GND|gnd GND|gnd NMOS L=1u W=3.4u AS=5.1p AD=13.26p PS=6.4u PD=11.8u
+* device instance $10 r0 *1 -11.6,13.5 NMOS
+XM$10 GND|gnd \$9 \$13 GND|gnd NMOS L=1u W=6.8u AS=13.26p AD=19.04p PS=11.8u
++ PD=19.2u
+* device instance $11 r0 *1 13.3,5.3 NMOS
+XM$11 \$10 \$6 \$11 GND|gnd NMOS L=1u W=3.4u AS=9.52p AD=2.04p PS=12.4u PD=4.6u
+* device instance $12 r0 *1 13.3,7.5 NMOS
+XM$12 \$11 OUT GND|gnd GND|gnd NMOS L=1u W=3.4u AS=2.04p AD=13.26p PS=4.6u
++ PD=11.8u
+* device instance $13 r0 *1 11.6,13.5 NMOS
+XM$13 GND|gnd \$10 \$14 GND|gnd NMOS L=1u W=6.8u AS=13.26p AD=19.04p PS=11.8u
++ PD=19.2u
+* device instance $14 r0 *1 8.5,-0.5 NMOS
+XM$14 \$6 HIZ GND|gnd GND|gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u
++ PD=12.4u
+* device instance $15 r0 *1 -48.7,0.5 DP
+D$15 OUT vdd DP A=12.96p P=14.4u
+* device instance $16 r0 *1 -10.7,-6.2 DN
+D$16 GND|gnd HIZ DN A=12.96p P=14.4u
+.ENDS OSS_DRV

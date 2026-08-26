@@ -1,0 +1,53 @@
+# same_nets hints for the MUX2+DFFR "rx_data_r hold/load" 8-stage block
+# (design_notes.md sec.72/74 -- the topologically-repetitive structure that
+# confuses KLayout's netlist comparator's backtracking).
+#
+# Derived by anchoring on the ALREADY-matched top-level pins rx_data[0..7]
+# (confirmed Match in error4.lvsdb) and reading each DFFR/MUX2 instance's
+# actual pin->net connections directly from error4.lvsdb's own layout
+# netlist (lvsdb.netlist()), cross-checked against the schematic instance
+# names read from src/i2c_slave_async_net_v7.v. This is NOT a guess -- every
+# row below was traced via the unambiguous rx_data[N] top pin, so the
+# layout/schematic net names ARE the same physical net.
+#
+# Insert into 05_Compare.lvs BEFORE the `compare` call (use the non-"!"
+# form so a wrong guess is only a hint, not a hard error -- switch to
+# same_nets! only after re-running and confirming these all come back
+# clean).
+
+CIRCUIT = "i2c_slave_async_nrow_fm"
+
+# ---- shared control nets (all 8 MUX2 / all 8 DFFR in this cluster) ----
+same_nets(CIRCUIT, "$17",  "_071_")     # MUX2 S (hold/load select)
+same_nets(CIRCUIT, "$621", "scl_row3")  # DFFR CK
+same_nets(CIRCUIT, "$28",  "RSTB1")     # DFFR RSTB
+
+# ---- per-bit: MUX2.Y == DFFR.D (internal net between the two gates) ----
+same_nets(CIRCUIT, "$633", "_018_")   # bit 0
+same_nets(CIRCUIT, "$639", "_017_")   # bit 1
+same_nets(CIRCUIT, "$637", "_016_")   # bit 2
+same_nets(CIRCUIT, "$635", "_015_")   # bit 3
+same_nets(CIRCUIT, "$498", "_014_")   # bit 4
+same_nets(CIRCUIT, "$504", "_013_")   # bit 5
+same_nets(CIRCUIT, "$503", "_012_")   # bit 6
+same_nets(CIRCUIT, "$645", "_031_")   # bit 7
+
+# ---- per-bit: MUX2.A (upstream "new bit" source -- raw shreg / sda_in_row3) ----
+# Useful too: these nets bridge into the OTHER ambiguous cluster (the raw
+# shreg comparator chain, design_notes sec.72 (b)), so pinning them here
+# may help that cluster resolve as a side effect.
+same_nets(CIRCUIT, "$672", "sda_in_row3")  # bit 0 (freshest incoming bit, no shreg[] name)
+same_nets(CIRCUIT, "$719", "shreg[0]")     # bit 1
+same_nets(CIRCUIT, "$718", "shreg[1]")     # bit 2
+same_nets(CIRCUIT, "$516", "shreg[2]")     # bit 3
+same_nets(CIRCUIT, "$502", "shreg[3]")     # bit 4
+same_nets(CIRCUIT, "$501", "shreg[4]")     # bit 5
+same_nets(CIRCUIT, "$495", "shreg[5]")     # bit 6
+same_nets(CIRCUIT, "$638", "shreg[6]")     # bit 7
+
+# ---- NOT included: QB nets (_111_/_115_.._121_ <-> $I11xx) ----
+# These are DFFR.QB, unused by the design (Yosys "unused_bits") -- single
+# pin, no sink, likely purged on the layout side by netlist.purge_nets
+# (confirmed harmless in design_notes.md sec.72 (a)). Adding same_nets for
+# a net that doesn't exist on one side will error with the "!" form and is
+# pointless with the hint form, so they're left out.

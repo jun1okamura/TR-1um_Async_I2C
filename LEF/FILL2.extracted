@@ -1,0 +1,12 @@
+* Created by KLayout
+*** My special header ***
+
+* cell FILL2
+* pin gnd
+* pin vdd
+.SUBCKT FILL2 gnd vdd
+* device instance $1 r0 *1 5.4,47.7 PMOS
+XM$1 vdd gnd vdd vdd PMOS L=3.2u W=21.2u AS=59.36p AD=59.36p PS=48u PD=48u
+* device instance $2 r0 *1 5.4,13.05 NMOS
+XM$2 gnd vdd gnd gnd NMOS L=3.2u W=13.1u AS=36.68p AD=36.68p PS=31.8u PD=31.8u
+.ENDS FILL2

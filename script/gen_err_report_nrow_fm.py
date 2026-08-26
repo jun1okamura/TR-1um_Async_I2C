@@ -76,26 +76,115 @@ M1_TRUNK_HALF = 1.8 / 2.0
 
 
 def top_level_ports(net_file=NET_FILE):
+    """v34 (design_notes, this session, user question re: sda_oe_r
+    mislabeled OPEN): a net whose only real connection is a top-level
+    OUTPUT port is, for stub-classification purposes, exactly like the
+    9 nets that already get the "PORT:" label -- its "other pin" is the
+    chip's off-chip I/O pad, outside this layout's scope, not a routing
+    defect. But Yosys emits `assign <port> = <internal_wire>;` for a
+    registered output (the DFF drives an internal wire, e.g.
+    `sda_oe_r`, and the port itself is just an alias) -- the LAYOUT's
+    net names are the internal wire names, which never literally match
+    the bare port name this function used to look for, so those nets
+    were falling through to the generic "OPEN:" (suspicious) bucket
+    even though they're structurally identical to a real port net.
+    Confirmed via netlist audit: `sda_oe_r` appears exactly where an
+    `assign sda_oe = sda_oe_r;` connects it straight to the `output
+    sda_oe` port declared above, with no other reader/driver.
+
+    Fix: also collect every plain `wire` declaration (name -> bit
+    width), then scan for simple (non-concatenation) `assign LHS =
+    RHS;` statements. If LHS resolves to a port (scalar or vector,
+    matching bit-for-bit), RHS is added to `ports` too -- scalar-to-
+    scalar directly, vector-to-vector bit-by-bit (assuming equal
+    width, which is what Yosys always emits for a straight passthrough
+    assign). Concatenation/bit-slice assigns (braces or explicit `[..]`
+    on either side) are deliberately left alone -- those aren't a
+    simple 1:1 port alias and are out of scope here."""
     src = open(net_file).read()
+
+    def collect_widths(kind):
+        widths = {}
+        for m in re.finditer(r'^\s*' + kind + r'\s*(\[(\d+):(\d+)\])?\s*(\w+)\s*;', src, re.M):
+            _, msb, lsb, name = m.groups()
+            widths[name] = (int(lsb), int(msb)) if msb else None
+        return widths
+
+    port_widths = collect_widths('(?:input|output)')
+    wire_widths = collect_widths('wire')
+
     ports = set()
-    for m in re.finditer(r'^\s*(input|output)\s*(\[(\d+):(\d+)\])?\s*(\w+)\s*;', src, re.M):
-        _kind, _, msb, lsb, name = m.groups()
-        if msb:
-            for i in range(int(lsb), int(msb) + 1):
-                ports.add(f"{name}[{i}]")
-        else:
+    for name, span in port_widths.items():
+        if span is None:
             ports.add(name)
+        else:
+            lsb, msb = span
+            for i in range(lsb, msb + 1):
+                ports.add(f"{name}[{i}]")
+
+    def width_of(name):
+        if name in port_widths:
+            return port_widths[name]
+        if name in wire_widths:
+            return wire_widths[name]
+        return None  # not declared here (e.g. VDD/GND, or unknown) -- skip
+
+    all_widths = dict(wire_widths)
+    all_widths.update(port_widths)
+    for m in re.finditer(r'^\s*assign\s+(\w+)\s*=\s*(\w+)\s*;\s*$', src, re.M):
+        lhs, rhs = m.groups()
+        if lhs not in port_widths:
+            continue  # only care about assigns that alias a real port
+        rhs_span = width_of(rhs)
+        lhs_span = port_widths[lhs]
+        if lhs_span is None:
+            ports.add(rhs)
+        elif rhs_span is not None and rhs_span[1] - rhs_span[0] == lhs_span[1] - lhs_span[0]:
+            lsb, msb = lhs_span
+            rlsb, _ = rhs_span
+            for i in range(lsb, msb + 1):
+                ports.add(f"{rhs}[{i - lsb + rlsb}]")
     return ports
 
 
-def rebuild_net_pins(placement_json=PLACEMENT_JSON):
-    """Same construction as route_channels_nrow_fm.py's net_pins dict."""
+def rebuild_net_pins(placement_json=PLACEMENT_JSON, ch_heights=None):
+    """Same construction as route_channels_nrow_fm.py's net_pins dict.
+
+    v35 (design_notes, this session, user report: (253,2) stub-pin
+    markers landing inside a CHANNEL instead of a row): `ch_heights`
+    used to be a value hardcoded INSIDE this function
+    ([90.0, 260.0, 240.0, 224.0, 100.0], a leftover from the design's
+    original TRACK_PITCH=4.0 CH_HEIGHTS, pre-dating this session's
+    TRACK_PITCH=4.0->5.4 change and the resulting CH_HEIGHTS_TARGET
+    resnap). `main()` already accepted a `ch_heights` argument and
+    assigned it to a module-level `global CH_HEIGHTS` specifically so
+    callers (like run_route_v7_from_scratch.py) could keep this in
+    sync with whatever heights the actual routing run used -- but this
+    function never read that global at all, since its own hardcoded
+    local variable of the SAME NAME silently shadowed it. Every row's
+    computed Y offset (`row_y0`) was therefore built from stale,
+    pre-resnap channel heights no matter what was passed to `main()`,
+    silently mis-locating every stub-net pin marker this whole session
+    (confirmed via audit: tx_data[0]'s reported y=444.4 falls inside
+    channel 1's real range [196.4,657.4], not inside its actual row --
+    row1 is really at [657.4,722.2] under the current CH_HEIGHTS,
+    but was computed as [414.8,479.6] under the stale hardcoded ones).
+    Routed-net markers were NOT affected (`net_pin_locs`, used for the
+    (253,1) implicated-net-pin highlight, comes from `pin_map` -- the
+    router's own already-correct final positions -- not from this
+    function); only (253,2) unconnected/stub-pin markers (nets with
+    <2 pins, which `pin_map` never contains at all) used this stale
+    path. Now `ch_heights` is a real parameter with no shadowing, and
+    `main()` passes its own `ch_heights` straight through instead of
+    routing it through an unused module-level global."""
     placement = json.load(open(placement_json))
     rows = placement["rows"]
     row_h = placement["row_height"]
     n_rows = len(rows)
-    # CH_HEIGHTS must match route_channels_nrow_fm.py / gen_placement_gds_nrow_fm.py
-    CH_HEIGHTS = [90.0, 260.0, 240.0, 224.0, 100.0]
+    if ch_heights is None:
+        # CH_HEIGHTS must match route_channels_nrow_fm.py / gen_placement_gds_nrow_fm.py
+        ch_heights = [90.0, 260.0, 240.0, 224.0, 100.0]
+    CH_HEIGHTS = ch_heights
     assert len(CH_HEIGHTS) == n_rows + 1
     row_y0 = []
     y = 0.0
@@ -162,10 +251,7 @@ def net_region(net, pin_map, pin_center, um, net_shapes_log=None):
 def main(placement_json=PLACEMENT_JSON, pin_map_json=PIN_MAP_JSON, net_shapes_json=NET_SHAPES_JSON,
          force_jog_events_json=FORCE_JOG_EVENTS_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
          net_file=NET_FILE, ch_heights=None, txt_path=None):
-    global CH_HEIGHTS
-    if ch_heights is not None:
-        CH_HEIGHTS = ch_heights
-    net_pins = rebuild_net_pins(placement_json)
+    net_pins = rebuild_net_pins(placement_json, ch_heights=ch_heights)
     pin_center = {}  # (net,instname,pinname) -> (x,y), pin's own placement coordinate
     for net, pads in net_pins.items():
         for r, instname, pname, cx, cy in pads:

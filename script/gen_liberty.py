@@ -118,6 +118,15 @@ def ff_cell(name, area, rst_pin, rst_attr, active_low=False):
 COMB_CELLS = [
     ("INV_X1",  1,   ["A"],           "A'",                 "negative_unate", "0.06"),
     ("BUF_X1",  1.5, ["A"],           "A",                  "positive_unate", "0.08"),
+    # BUFTH: hysteresis (Schmitt-trigger) buffer, added directly in
+    # TR-1um_STDCELL.gds this session. Same A->Y function as BUF_X1 but
+    # physically 2x wider (32.4um vs 16.2um, see LEF/gen_lef.py PIN_META
+    # comment) for the extra hysteresis transistors -- area scaled 2x
+    # from BUF_X1 to match. Delay bumped slightly above BUF_X1 as a
+    # placeholder only (no real characterization); not switching-
+    # threshold-aware since this whole library is a fixed-delay NLDM
+    # stand-in for ABC's parser, not real STA data.
+    ("BUFTH",   3,   ["A"],           "A",                  "positive_unate", "0.1"),
     ("AND2_X1", 2,   ["A", "B"],      "(A*B)",              "positive_unate", "0.12"),
     ("AND3_X1", 3,   ["A", "B", "C"], "(A*B*C)",            "positive_unate", "0.16"),
     ("AND4_X1", 4,   ["A", "B", "C", "D"], "(A*B*C*D)",     "positive_unate", "0.2"),
@@ -144,7 +153,7 @@ COMB_CELLS = [
 # TR-1um_STDCELL.gds (dropped from the remade library), kept here only so
 # the generator doesn't error if it's reintroduced later; polarity unverified.
 FF_CELLS = [
-    ("DFFR", 8, "RSTB", "clear",  True),
+    ("DFFRB", 8, "RSTB", "clear",  True),
     ("DFFS", 8, "SET",  "preset", False),
 ]
 

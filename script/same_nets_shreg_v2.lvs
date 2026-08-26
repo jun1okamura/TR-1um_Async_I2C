@@ -1,0 +1,66 @@
+# same_nets hints, ROUND 2 -- corrected using error5.lvsdb's own results.
+#
+# What round 1 (same_nets_shreg.lvs) got right vs wrong, verified by
+# reading error5.lvsdb back:
+#
+#   CONFIRMED MATCH (keep as-is):
+#     $17  <-> _071_        (MUX2 S, shared)
+#     $621 <-> scl_row3     (DFFR CK, shared)
+#     $28  <-> RSTB1        (DFFR RSTB, shared)
+#     $633 <-> _018_        (bit0 MUX2.Y/DFFR.D)
+#     $637 <-> _016_        (bit2 MUX2.Y/DFFR.D)
+#     $672 <-> sda_in_row3  (bit0 MUX2.A)
+#     $718 <-> shreg[1]     (bit2 MUX2.A -- my original guess was right here)
+#
+#   WRONG in round 1 (my assumption that MUX2.A's bit-index in the
+#   Verilog literally equals the LAYOUT shreg[] bit index was incorrect
+#   for bits 1/4/5/7 -- the raw shreg register's own physical bit
+#   ordering doesn't line up 1:1 with my guess). error5.lvsdb shows what
+#   the comparator actually resolved instead once bit0/bit2 were pinned
+#   down as scaffolding -- these are HIGH CONFIDENCE (Match status):
+#     $719 <-> SHREG[4]   (NOT shreg[0] as round 1 guessed)
+#     $502 <-> SHREG[0]   (NOT shreg[3] as round 1 guessed)
+#     $501 <-> SHREG[6]   (NOT shreg[4] as round 1 guessed)
+#     $638 <-> SHREG[3]   (NOT shreg[6] as round 1 guessed)
+#
+#   Side effect of the WRONG round-1 hints: they didn't just fail to
+#   match on their own net -- they poisoned instance identification for
+#   the WHOLE MUX2/DFFR pair on bits 1/3/4/5/6/7, which is why their
+#   Y=D net hints (which were themselves correct) ALSO came back
+#   Mismatch in error5.lvsdb. Removing/fixing the A-net hint should let
+#   those recover.
+#
+#   STILL UNKNOWN (dropped, no hint given -- let the algorithm resolve
+#   on its own rather than force a guess):
+#     $516 (bit3 MUX2.A)  -- error5.lvsdb paired it with "_003_", but as
+#                            a Mismatch, i.e. not trustworthy
+#     $495 (bit6 MUX2.A)  -- same, paired with "_002_" as a Mismatch
+
+puts("Starting TR-1um LVS same_net")
+
+CIRCUIT = "i2c_slave_async_nrow_fm"
+
+# ---- shared control nets (confirmed) ----
+same_nets(CIRCUIT, "$17",  "_071_")
+same_nets(CIRCUIT, "$621", "scl_row3")
+same_nets(CIRCUIT, "$28",  "RSTB1")
+
+# ---- MUX2.Y / DFFR.D per bit (all 8, via the confirmed rx_data[N] top-pin anchor) ----
+same_nets(CIRCUIT, "$633", "_018_")   # bit 0
+same_nets(CIRCUIT, "$639", "_017_")   # bit 1
+same_nets(CIRCUIT, "$637", "_016_")   # bit 2
+same_nets(CIRCUIT, "$635", "_015_")   # bit 3
+same_nets(CIRCUIT, "$498", "_014_")   # bit 4
+same_nets(CIRCUIT, "$504", "_013_")   # bit 5
+same_nets(CIRCUIT, "$503", "_012_")   # bit 6
+same_nets(CIRCUIT, "$645", "_031_")   # bit 7
+
+# ---- MUX2.A per bit -- CORRECTED (bit3/bit6 intentionally omitted) ----
+same_nets(CIRCUIT, "$672", "sda_in_row3")  # bit 0 (unchanged, confirmed)
+same_nets(CIRCUIT, "$719", "shreg[4]")     # bit 1 (corrected)
+same_nets(CIRCUIT, "$718", "shreg[1]")     # bit 2 (unchanged, confirmed)
+# bit 3 ($516): no hint -- unresolved, let the comparator work it out
+same_nets(CIRCUIT, "$502", "shreg[0]")     # bit 4 (corrected)
+same_nets(CIRCUIT, "$501", "shreg[6]")     # bit 5 (corrected)
+# bit 6 ($495): no hint -- unresolved, let the comparator work it out
+same_nets(CIRCUIT, "$638", "shreg[3]")     # bit 7 (corrected)

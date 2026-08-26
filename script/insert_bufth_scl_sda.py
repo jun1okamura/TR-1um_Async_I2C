@@ -1,0 +1,227 @@
+"""
+insert_bufth_scl_sda.py
+
+Insert one BUFTH (hysteresis/Schmitt-trigger buffer, LEF/BUFTH.sch --
+see design_notes.md BUFTH section) immediately downstream of the
+top-level scl/sda_in pads, ahead of the existing per-row BUF_X1 fanout
+stage. Per user request:
+
+  "トップの sda_in と scl は一旦 BUFTH を通してから、各ROW毎に BUF_X1
+   でバファーリングしてから優先レーンで配線ください。まずNETを直しま
+   しょう。"
+
+This script does ONLY the netlist ("NET") part; row-buffered/priority-
+lane physical routing is a separate later step.
+
+Method
+------
+scl:    already has per-row BUF_X1 fanout (u_buf_scl_row0..3, from
+        insert_row_buffers.py / v3->v4). Only need to insert BUFTH
+        between the raw top pin `scl` and those existing row buffers:
+        rename every internal (non-declaration/non-port-list) use of
+        the whole word `scl` to `scl_buf`, then add
+        `BUFTH u_bufth_scl (.A(scl), .Y(scl_buf), .VDD(VDD), .GND(GND));`
+        scl_n (INV_X1 u_inv_scl) already derives from scl_row2 (a row
+        buffer output, not raw scl), so it automatically inherits the
+        BUFTH-cleaned signal -- no separate handling needed.
+
+sda_in: has NO row buffering yet (7 direct cell-pin sinks + 1 dead
+        `assign shreg_next = {shreg[6:0], sda_in};` alias -- shreg_next
+        is otherwise unused, so it is left reading whatever sda_in
+        becomes and is NOT part of the row split). First rename raw
+        `sda_in` -> `sda_in_buf` and add
+        `BUFTH u_bufth_sda_in (.A(sda_in), .Y(sda_in_buf), .VDD(VDD), .GND(GND));`,
+        then run the SAME row-partition-based BUF_X1 splitting
+        insert_row_buffers.py used for scl (v3->v4): a reference
+        fm_multiway_partition pass over the (post-BUFTH-insertion,
+        pre-row-split) instance set, group sda_in_buf's real cell-pin
+        sinks by row, one BUF_X1 per touched row
+        (u_buf_sda_in_row{r} -> sda_in_row{r}), redirect each sink.
+
+Input:  src/i2c_slave_async_net_v6.v   (left untouched)
+Output: src/i2c_slave_async_net_v7.v
+Also writes LEF/row_assignment_v7.json (full instance->row reference --
+gen_placement_nrow_fm.py should reuse this instead of re-deriving from
+scratch, same rationale/caveat as row_assignment_v4.json: re-running
+fm_multiway_partition after adding a handful of small instances can
+shift the recursive-bisection cut and relocate unrelated instances,
+see design_notes.md section 40).
+
+Run: python3 script/insert_bufth_scl_sda.py
+"""
+import json
+import re
+import sys
+
+sys.path.insert(0, "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script")
+from lef_parser import parse_lef  # noqa: E402
+from netlist_parser import parse_netlist  # noqa: E402
+from fm_partition import fm_multiway_partition  # noqa: E402
+
+V6_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net_v6.v"
+V7_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net_v7.v"
+TMP_STAGE1_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/.i2c_slave_async_net_v7_stage1_tmp.v"
+ROW_ASSIGNMENT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/row_assignment_v7.json"
+
+N_ROWS = 4
+BUF_CELL = "BUF_X1"
+BUFTH_CELL = "BUFTH"
+
+HEADER_RE = re.compile(r"^\s*module\s+i2c_slave_async\s*\(")
+DECL_LINES = {"input scl;", "wire scl;", "input sda_in;", "wire sda_in;"}
+
+
+def rename_word(text, old, new):
+    """Whole-word rename of `old` -> `new`, skipping the module port-list
+    header line and the top-port input/wire declaration lines (so the
+    top-level port itself keeps its original name -- only internal
+    fanout is redirected)."""
+    word_re = re.compile(r"\b" + re.escape(old) + r"\b")
+    out_lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if HEADER_RE.match(line) or stripped in DECL_LINES:
+            out_lines.append(line)
+        else:
+            out_lines.append(word_re.sub(new, line))
+    return "\n".join(out_lines)
+
+
+def insert_wire_decls(src, wires):
+    decl = "\n".join(f"  wire {w};" for w in wires)
+    first_inst_m = re.search(r"\n  \w+ \w+\s*\(", src)
+    return src[: first_inst_m.start()] + "\n" + decl + src[first_inst_m.start():]
+
+
+def insert_instance_blocks(src, blocks):
+    endmod_idx = src.rindex("endmodule")
+    return src[:endmod_idx] + "\n" + "\n\n".join(blocks) + "\n\n" + src[endmod_idx:]
+
+
+def redirect(src, instname, pinname, new_net):
+    block_re = re.compile(r"(\b" + re.escape(instname) + r"\s*\(.*?\)\s*;)", re.S)
+    bm = block_re.search(src)
+    assert bm, f"could not find instance block for {instname}"
+    block = bm.group(1)
+    pin_re = re.compile(r"(\." + re.escape(pinname) + r"\s*\(\s*)([^()]*?)(\s*\))")
+    new_block, n = pin_re.subn(lambda m2: m2.group(1) + new_net + m2.group(3), block, count=1)
+    assert n == 1, f"could not redirect {instname}.{pinname}"
+    return src[: bm.start()] + new_block + src[bm.end():]
+
+
+def main():
+    src = open(V6_PATH).read()
+
+    # ---- Stage 1: rename raw scl/sda_in fanout to scl_buf/sda_in_buf,
+    # insert the two BUFTH instances. -----------------------------------
+    src = rename_word(src, "scl", "scl_buf")
+    src = rename_word(src, "sda_in", "sda_in_buf")
+
+    src = insert_wire_decls(src, ["scl_buf", "sda_in_buf"])
+    bufth_blocks = [
+        f"  {BUFTH_CELL} u_bufth_scl (\n    .A(scl),\n    .Y(scl_buf),\n"
+        f"    .VDD(VDD),\n    .GND(GND)\n  );",
+        f"  {BUFTH_CELL} u_bufth_sda_in (\n    .A(sda_in),\n    .Y(sda_in_buf),\n"
+        f"    .VDD(VDD),\n    .GND(GND)\n  );",
+    ]
+    src = insert_instance_blocks(src, bufth_blocks)
+
+    n_scl_a = len(re.findall(r"\.A\(scl_buf\)", src))
+    n_sda_pins = len(re.findall(r"\bsda_in_buf\b", src))
+    print(f"stage1: {n_scl_a} scl_buf .A() sinks (expect 4: row0-3 BUF_X1)")
+    print(f"stage1: {n_sda_pins} total sda_in_buf references "
+          f"(expect 9 = 7 cell-pin sinks + 1 dead-assign + BUFTH.Y decl... "
+          f"see report below for exact split)")
+
+    # Sanity: scl_buf's only remaining consumers should be the 4 existing
+    # per-row BUF_X1 buffers (u_buf_scl_row0..3.A). If this count is ever
+    # not 4, the STDCELL/netlist structure changed since v6 and this
+    # script's "no re-split needed for scl" assumption needs revisiting.
+    assert n_scl_a == 4, (
+        f"expected exactly 4 .A(scl_buf) sinks (u_buf_scl_row0..3); got "
+        f"{n_scl_a} -- scl's existing row-buffer structure may have "
+        f"changed, review before proceeding"
+    )
+
+    open(TMP_STAGE1_PATH, "w").write(src)
+
+    # ---- Stage 2: row-partition-based BUF_X1 split for sda_in_buf. -----
+    macros = parse_lef()
+    widths = {name: m["size"][0] for name, m in macros.items()}
+
+    net = parse_netlist(path=TMP_STAGE1_PATH)
+    instances = net["instances"]
+    print(f"\nstage2: parsed {len(instances)} instances (post-BUFTH-insertion)")
+
+    part = fm_multiway_partition(instances, widths, N_ROWS)
+    row_counts = {}
+    for name, r in part.items():
+        row_counts[r] = row_counts.get(r, 0) + 1
+    for r in sorted(row_counts):
+        print(f"  row{r}: {row_counts[r]} instances")
+
+    target_net = "sda_in_buf"
+    sinks = []  # (instname, pinname, row)
+    for typ, name, pins in instances:
+        pin_meta = macros[typ]["pins"]
+        for pname, net_name in pins.items():
+            if net_name != target_net:
+                continue
+            info = pin_meta.get(pname)
+            if info is None or info["direction"] != "INPUT":
+                continue
+            sinks.append((name, pname, part[name]))
+
+    assert sinks, f"net {target_net!r} has no INPUT-direction cell-pin sinks"
+    print(f"\n{target_net}: {len(sinks)} cell-pin sinks found: "
+          + ", ".join(f"{n}.{p}(row{r})" for n, p, r in sinks))
+
+    by_row = {}
+    for instname, pinname, row in sinks:
+        by_row.setdefault(row, []).append((instname, pinname))
+
+    inserted_blocks = []
+    new_wires = []
+    branch_report = []
+    for r in sorted(by_row):
+        group = by_row[r]
+        branch_net = f"sda_in_row{r}"
+        iname = f"u_buf_sda_in_row{r}"
+        for instname, pinname in group:
+            src = redirect(src, instname, pinname, branch_net)
+        inserted_blocks.append(
+            f"  {BUF_CELL} {iname} (\n    .A({target_net}),\n    .Y({branch_net}),\n"
+            f"    .VDD(VDD),\n    .GND(GND)\n  );"
+        )
+        new_wires.append(branch_net)
+        branch_report.append((r, branch_net, len(group)))
+
+    print(f"\nsda_in_buf: {len(by_row)} rows touched -> "
+          + ", ".join(f"row{r}:{bn}({c})" for r, bn, c in branch_report))
+
+    src = insert_wire_decls(src, new_wires)
+    src = insert_instance_blocks(src, inserted_blocks)
+
+    with open(V7_PATH, "w") as f:
+        f.write(src)
+    print(f"\nwrote {V7_PATH}")
+
+    full_part = dict(part)
+    for r, bn, _c in branch_report:
+        full_part[f"u_buf_sda_in_row{r}"] = r
+    with open(ROW_ASSIGNMENT_JSON, "w") as f:
+        json.dump(full_part, f, indent=1)
+    print(f"wrote {ROW_ASSIGNMENT_JSON} ({len(full_part)} instances)")
+
+    print("\n=== summary ===")
+    print("  u_bufth_scl      A=scl        Y=scl_buf      (feeds existing scl_row0-3 buffers)")
+    print("  u_bufth_sda_in   A=sda_in     Y=sda_in_buf")
+    for r, bn, c in branch_report:
+        print(f"  u_buf_sda_in_row{r:<2} A=sda_in_buf Y={bn:<12} FO={c}")
+
+    import os
+    os.remove(TMP_STAGE1_PATH)
+
+
+if __name__ == "__main__":
+    main()

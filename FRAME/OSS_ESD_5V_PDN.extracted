@@ -1,0 +1,52 @@
+* Created by KLayout
+*** My special header ***
+
+* cell OSS_ESD_5V_PDN
+* pin ENB
+* pin IN,PAD
+* pin OUT
+* pin VDD
+* pin VSS
+.SUBCKT OSS_ESD_5V_PDN ENB IN|PAD OUT VDD VSS
+* device instance $1 r90 *1 -130,-65.5 PMOS
+XM$1 IN|PAD VDD VDD VDD PMOS L=2u W=500u AS=3523.04p AD=3523.04p PS=689.36u
++ PD=689.36u
+* device instance $11 m0 *1 34.6,108.3 PMOS
+XM$11 \$I2 ENB VDD VDD PMOS L=1u W=5.2u AS=14.56p AD=7.8p PS=16u PD=8.2u
+* device instance $12 m0 *1 34.6,104.3 PMOS
+XM$12 VDD ENB \$I4 VDD PMOS L=1u W=5.2u AS=7.8p AD=7.8p PS=8.2u PD=8.2u
+* device instance $13 m0 *1 34.6,100.3 PMOS
+XM$13 \$I4 OUT VDD VDD PMOS L=1u W=5.2u AS=7.8p AD=34.84p PS=8.2u PD=25.8u
+* device instance $14 m0 *1 42.4,94.3 PMOS
+XM$14 VDD \$I4 \$9 VDD PMOS L=1u W=20.8u AS=34.84p AD=58.24p PS=25.8u PD=47.2u
+* device instance $15 m0 *1 -37.2,102.5 PMOS
+XM$15 \$I3 \$I2 \$I5 VDD PMOS L=1u W=10.4u AS=29.12p AD=6.24p PS=26.4u PD=11.6u
+* device instance $16 m0 *1 -37.2,100.3 PMOS
+XM$16 \$I5 OUT VDD VDD PMOS L=1u W=10.4u AS=6.24p AD=40.56p PS=11.6u PD=25.8u
+* device instance $17 m0 *1 -42.4,94.3 PMOS
+XM$17 VDD \$I3 \$I7 VDD PMOS L=1u W=20.8u AS=40.56p AD=58.24p PS=25.8u PD=47.2u
+* device instance $18 m0 *1 -13.3,104.3 NMOS
+XM$18 VSS \$I2 \$I3 VSS NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $19 m0 *1 -13.3,100.3 NMOS
+XM$19 \$I3 OUT VSS VSS NMOS L=1u W=3.4u AS=5.1p AD=13.26p PS=6.4u PD=11.8u
+* device instance $20 m0 *1 -11.6,94.3 NMOS
+XM$20 VSS \$I3 \$I7 VSS NMOS L=1u W=6.8u AS=13.26p AD=19.04p PS=11.8u PD=19.2u
+* device instance $21 m0 *1 13.3,102.5 NMOS
+XM$21 \$I4 ENB \$I6 VSS NMOS L=1u W=3.4u AS=9.52p AD=2.04p PS=12.4u PD=4.6u
+* device instance $22 m0 *1 13.3,100.3 NMOS
+XM$22 \$I6 OUT VSS VSS NMOS L=1u W=3.4u AS=2.04p AD=13.26p PS=4.6u PD=11.8u
+* device instance $23 m0 *1 11.6,94.3 NMOS
+XM$23 VSS \$I4 \$9 VSS NMOS L=1u W=6.8u AS=13.26p AD=19.04p PS=11.8u PD=19.2u
+* device instance $24 m0 *1 8.5,108.3 NMOS
+XM$24 \$I2 ENB VSS VSS NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+* device instance $25 m0 *1 -48.7,107.3 DP
+D$25 OUT VDD DP A=12.96p P=14.4u
+* device instance $26 m0 *1 -10.7,114 DN
+D$26 VSS ENB DN A=12.96p P=14.4u
+* device instance $27 r90 *1 130,-65.5 NMOSE
+XM$27 IN|PAD VSS VSS VSS NMOSE L=2u W=300u AS=2223.04p AD=1950p PS=437.36u
++ PD=378u
+* device instance $33 r90 *1 130,24.5 NMOSE
+XM$33 IN|PAD \$9 VSS VSS NMOSE L=2u W=200u AS=1300p AD=1573.04p PS=252u
++ PD=311.36u
+.ENDS OSS_ESD_5V_PDN

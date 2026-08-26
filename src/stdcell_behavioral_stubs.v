@@ -119,6 +119,17 @@ module BUF_X1 (input A, output Y, input VDD, input GND);
     assign #1 Y = A;
 endmodule
 
+// BUFTH: hysteresis (Schmitt-trigger) buffer, added to TR-1um_STDCELL.gds
+// this session (see LEF/BUFTH.sch/.sym). Two inverting stages (input
+// Schmitt-trigger stage -> plain inverter stage), net non-inverting,
+// same A->Y function as BUF_X1 -- functional-sim stub deliberately
+// ignores the hysteresis threshold behavior (not modelable at this
+// placeholder level) and just buffers, same #1 nominal delay as every
+// other stub in this file.
+module BUFTH (input A, output Y, input VDD, input GND);
+    assign #1 Y = A;
+endmodule
+
 // BUF_X2/X4/X8/X16: added for the SCL/SDA-input and rst_scl_domain (net
 // _126_) staged buffer-chain insertion (design_notes.md section 18). Same
 // placeholder #1 nominal delay as every other stub in this file -- these

@@ -1,0 +1,36 @@
+* Created by KLayout
+*** My special header ***
+
+* cell MUX2
+* pin A
+* pin B
+* pin S
+* pin Y
+* pin gnd
+* pin vdd
+.SUBCKT MUX2 A B S Y gnd vdd
+* device instance $1 r0 *1 5.1,54.9 PMOS
+XM$1 vdd S \$3 vdd PMOS L=1u W=6.8u AS=19.04p AD=19.04p PS=19.2u PD=19.2u
+* device instance $2 r0 *1 27.3,42.2 PMOS
+XM$2 vdd \$5 Y vdd PMOS L=1u W=11.2u AS=31.36p AD=31.36p PS=28u PD=28u
+* device instance $3 r0 *1 5.1,40 PMOS
+XM$3 vdd A \$4 vdd PMOS L=1u W=6.8u AS=19.04p AD=10.2p PS=19.2u PD=9.8u
+* device instance $4 r0 *1 9.1,40 PMOS
+XM$4 \$4 S \$5 vdd PMOS L=1u W=6.8u AS=10.2p AD=10.2p PS=9.8u PD=9.8u
+* device instance $5 r0 *1 13.1,40 PMOS
+XM$5 \$5 \$3 \$6 vdd PMOS L=1u W=6.8u AS=10.2p AD=10.2p PS=9.8u PD=9.8u
+* device instance $6 r0 *1 17.1,40 PMOS
+XM$6 \$6 B vdd vdd PMOS L=1u W=6.8u AS=10.2p AD=20.4p PS=9.8u PD=19.6u
+* device instance $7 r0 *1 27.3,17.9 NMOS
+XM$7 gnd \$5 Y gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+* device instance $8 r0 *1 5.1,17.9 NMOS
+XM$8 gnd A \$4 gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $9 r0 *1 9.1,17.9 NMOS
+XM$9 \$4 \$3 \$5 gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $10 r0 *1 13.1,17.9 NMOS
+XM$10 \$5 S \$6 gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $11 r0 *1 17.1,17.9 NMOS
+XM$11 \$6 B gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=9.52p PS=6.4u PD=12.4u
+* device instance $12 r0 *1 11.5,8.2 NMOS
+XM$12 gnd S \$3 gnd NMOS L=1u W=3.4u AS=10.2p AD=9.52p PS=12.8u PD=12.4u
+.ENDS MUX2

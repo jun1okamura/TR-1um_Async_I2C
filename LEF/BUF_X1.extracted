@@ -1,0 +1,18 @@
+* Created by KLayout
+*** My special header ***
+
+* cell BUF_X1
+* pin A
+* pin Y
+* pin gnd
+* pin vdd
+.SUBCKT BUF_X1 A Y gnd vdd
+* device instance $1 r0 *1 4,53.2 PMOS
+XM$1 \$1 A vdd vdd PMOS L=1u W=10.2u AS=28.56p AD=15.3p PS=26u PD=13.2u
+* device instance $2 r0 *1 8,53.2 PMOS
+XM$2 vdd \$1 Y vdd PMOS L=1u W=10.2u AS=15.3p AD=28.56p PS=13.2u PD=26u
+* device instance $3 r0 *1 5.4,8.2 NMOS
+XM$3 \$1 A gnd gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $4 r0 *1 9.4,8.2 NMOS
+XM$4 gnd \$1 Y gnd NMOS L=1u W=3.4u AS=5.1p AD=9.52p PS=6.4u PD=12.4u
+.ENDS BUF_X1

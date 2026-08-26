@@ -117,6 +117,13 @@ TAP_WIDTH_UM = 10.8  # TAP2's own width
 TAP_INTERVAL_TRACKS = round((TARGET_ROW_WIDTH_UM - (N_GAPS + 1) * TAP_WIDTH_UM) / N_GAPS / TRACK_UM)
 assert abs(3 * TAP_WIDTH_UM + N_GAPS * TAP_INTERVAL_TRACKS * TRACK_UM - TARGET_ROW_WIDTH_UM) < 1e-6
 
+# Priority M2 corridor width (user request, this session -- see the
+# pack_row_distributed module comment below for the full rationale):
+# one FILL2 (2 tracks) reserved at BOTH edges of every gap, in every
+# row, unconditionally. _gaps_needed's dry-run budget is reduced by
+# the same amount so its "does N_GAPS suffice" check stays honest.
+PRIORITY_FILL_TRACKS = 2  # FILL2 = 10.8um = 2 tracks
+
 
 
 def _gaps_needed(cell_queue, widths):
@@ -127,7 +134,7 @@ def _gaps_needed(cell_queue, widths):
     q = deque(cell_queue)
     n_gaps = 0
     while q:
-        gap_tracks_left = TAP_INTERVAL_TRACKS
+        gap_tracks_left = TAP_INTERVAL_TRACKS - 2 * PRIORITY_FILL_TRACKS
         seg = []
         while q:
             typ, name, pins = q[0]
@@ -171,7 +178,36 @@ def split_fill_evenly(total_tracks, n_parts):
     return parts
 
 
-def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
+# Priority M2 corridor (user request, this session): a FILL2-only
+# (no real-cell M1/M2 obstruction) vertical strip immediately touching
+# every TAP column, present in EVERY row at an X position fixed by the
+# TAP grid alone (independent of row content/anchor) -- so a straight
+# M2 wire can cross ALL n_rows+1 channels through this X without ever
+# passing through a real standard cell.
+#
+# Per row, there are n_gaps+1 TAP columns: TAP_0 (row's left edge),
+# TAP_1..TAP_(n_gaps-1) (interior), TAP_n_gaps (row's right edge). At
+# each TAP's "inside" neighbor(s) (the side(s) that have gap content
+# next to them -- an edge TAP only has one, an interior TAP has two,
+# i.e. "真ん中は両隣、端は内側に") we unconditionally reserve one
+# FILL2 (PRIORITY_FILL_TRACKS tracks) BEFORE doing the normal
+# anchor-based real-cell/slack-FILL packing for the rest of that gap.
+# This costs 2*PRIORITY_FILL_TRACKS tracks off every gap's budget
+# (one reserved FILL2 at the gap's leading edge, right after the
+# left TAP; one at its trailing edge, right before the right TAP),
+# same in every row, so it doesn't disturb the TAP grid itself.
+#
+# FILL2 is 10.8um (2 tracks) wide; with n_gaps=2 there are 4 such
+# reserved corridors per row (TAP_0-right, TAP_1-left, TAP_1-right,
+# TAP_2-left) -- each wide enough for ~2 side-by-side M2 wires at the
+# router's track pitch, giving 8 total straight-through M2 lanes
+# (user's target), reserved for the scl_buf/sda_in_buf per-row-local
+# spine nets that need to cross every channel without deviation.
+PRIORITY_FILL_CELL = "FILL2"
+
+
+def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
+                          priority_fill_tracks=0, priority_fill_cell=PRIORITY_FILL_CELL):
     """Pack a row's cells into n_gaps TAP-bounded gaps of fixed size
     (TAP_INTERVAL_TRACKS each, so TAP column X positions are identical
     for every row regardless of content -- required for the TAP power
@@ -185,11 +221,19 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
 
     Calling this with anchor="left" for even rows and anchor="right"
     for odd rows (see main()) is this module's v3 case-2 mitigation --
-    see the module docstring, point 4, for the full rationale."""
+    see the module docstring, point 4, for the full rationale.
+
+    priority_fill_tracks: if >0, reserve this many tracks of
+    `priority_fill_cell` at BOTH the leading and trailing edge of
+    EVERY gap (see module comment above the function) -- placed before
+    the anchor-based real-cell/slack-FILL packing, and NOT part of
+    that packing's own slack-FILL budget (i.e. real cells only ever
+    compete for the tracks left over after this reservation)."""
     placed = []
     x = 0.0
     tap_idx = 0
     fill_idx = 0
+    pri_idx = 0
 
     def place(typ, name, w, pins=None):
         nonlocal x
@@ -207,6 +251,17 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
             place(fill_typ, f"FILL_{fill_idx}", widths[fill_typ])
             fill_idx += 1
 
+    def place_priority_fill():
+        nonlocal pri_idx
+        if priority_fill_tracks <= 0:
+            return
+        w = widths[priority_fill_cell]
+        assert round(w / TRACK_UM) == priority_fill_tracks, (
+            f"{priority_fill_cell} width {w}um is {round(w / TRACK_UM)} tracks, "
+            f"not the requested priority_fill_tracks={priority_fill_tracks}")
+        place(priority_fill_cell, f"FILLPRI_{pri_idx}", w)
+        pri_idx += 1
+
     # Consume the cell queue gap-by-gap, but in an order that fills the
     # anchor-preferred END OF THE WHOLE ROW first: left anchor consumes
     # gap 0, 1, ... (as before); right anchor consumes the LAST gap
@@ -218,11 +273,15 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
     # separation this is meant to provide (measured: this bug made the
     # first version of this function barely move the needle -- see
     # design_notes 38.7).
+    gap_budget = TAP_INTERVAL_TRACKS - 2 * priority_fill_tracks
+    assert gap_budget > 0, (
+        f"priority_fill_tracks={priority_fill_tracks} (x2, both gap edges) leaves no "
+        f"budget out of TAP_INTERVAL_TRACKS={TAP_INTERVAL_TRACKS} for real cells")
     gap_order = list(range(n_gaps)) if anchor == "left" else list(reversed(range(n_gaps)))
     gap_segs = {}
     gap_slack = {}
     for gap_i in gap_order:
-        gap_tracks_left = TAP_INTERVAL_TRACKS
+        gap_tracks_left = gap_budget
         seg = []
         while cell_queue:
             typ, name, pins = cell_queue[0]
@@ -246,6 +305,7 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
     for gap_i in range(n_gaps):
         place(TAP_CELL, f"TAP_{tap_idx}", widths[TAP_CELL])
         tap_idx += 1
+        place_priority_fill()  # reserved corridor, gap's leading edge
 
         seg = gap_segs[gap_i]
         slack = gap_slack[gap_i]
@@ -255,6 +315,8 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left"):
             place(typ, name, widths[typ], pins)
         if anchor == "left" and slack > 0:
             place_fill_combo(slack)
+
+        place_priority_fill()  # reserved corridor, gap's trailing edge
 
     place(TAP_CELL, f"TAP_{tap_idx}", widths[TAP_CELL])
     assert not cell_queue, f"{len(cell_queue)} cells left over -- n_gaps too small for this row"
@@ -313,7 +375,8 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
     widths_out = []
     for r, cells in enumerate(rows_cells):
         anchor = "left" if r % 2 == 0 else "right"
-        placed, w = pack_row_distributed(deque(cells), widths, N_GAPS, anchor=anchor)
+        placed, w = pack_row_distributed(deque(cells), widths, N_GAPS, anchor=anchor,
+                                          priority_fill_tracks=PRIORITY_FILL_TRACKS)
         placed_rows.append(placed)
         widths_out.append(w)
     for r, w in enumerate(widths_out):
@@ -335,7 +398,7 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
     # despite 0 DRC / 0 shorts (the connectivity checker only checks pins
     # present in pin_map, so an entirely-missing pin was never examined,
     # not correctly verified).
-    PIN_NAME_ALIASES = {"DFFR": {"RB": "RSTB"}}
+    PIN_NAME_ALIASES = {"DFFRB": {"RB": "RSTB"}}
 
     def attach_pins(placed_list, cell_list):
         by_name = {name: pins for _typ, name, pins in cell_list}

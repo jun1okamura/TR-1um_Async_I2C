@@ -1,0 +1,639 @@
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/schematic/tr_1um_i2c_slave_async.sch
+.subckt tr_1um_i2c_slave_async
+
+x2 RSTN SCL SDA IN0 IN1 IN2 IN3 IN4 IN5 IN6 IN7 net1 net2 net3 net4 net5 net6 net7 net8 net9 net10 net11 net12 net13 net14 net15
++ i2c_slave_async_nrow_fm
+x1 IN5 VDD SCL RSTN IN7 IN6 IN4 SDA IN2 IN0 IN3 IN1 net16 DIS net17 VSS DIS VDD VSS VSS DIS DIS DIS DIS DIS DIS SDA_O DIS VDD VDD
++ OUT5 net18 net19 net20 OUT6 OUT4 OUT1 OUT2 OUT0 OUT3 VSS OUT7 net21 net22 OSS_FRAME_GIO
+.ends
+
+* expanding   symbol:  schematic/i2c_slave_async_nrow_fm.sym # of pins=26
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/schematic/i2c_slave_async_nrow_fm.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/schematic/i2c_slave_async_nrow_fm.sch
+.subckt i2c_slave_async_nrow_fm rst_n scl sda_in tx_data[0] tx_data[1] tx_data[2] tx_data[3] tx_data[4] tx_data[5] tx_data[6]
++ tx_data[7] sda_oe rx_data[0] rx_data[1] rx_data[2] rx_data[3] rx_data[4] rx_data[5] rx_data[6] rx_data[7] rx_valid addr_match rw busy VDD
++ GND
+*.PININFO rst_n:I scl:I sda_in:I tx_data[0]:I tx_data[1]:I tx_data[2]:I tx_data[3]:I tx_data[4]:I tx_data[5]:I tx_data[6]:I
+*+ tx_data[7]:I sda_oe:O rx_data[0]:O rx_data[1]:O rx_data[2]:O rx_data[3]:O rx_data[4]:O rx_data[5]:O rx_data[6]:O rx_data[7]:O rx_valid:O
+*+ addr_match:O rw:O busy:O VDD:B GND:B
+x_135_ VDD bit_cnt[0] _034_ GND INV_X1
+x_136_ VDD bit_cnt[1] _035_ GND INV_X1
+x_137_ VDD bit_cnt[2] _036_ GND INV_X1
+x_138_ VDD _134_[3] _037_ GND INV_X1
+x_139_ VDD _006_ _038_ GND INV_X1
+x_140_ VDD rw _039_ GND INV_X1
+x_141_ VDD rst_n _040_ GND INV_X1
+x_142_ VDD sda_d _041_ GND INV_X1
+x_143_ VDD _042_ scl_row2 sda_d GND NAND2
+x_144_ VDD start_pulse sda_in_row3 _042_ GND NOR2
+x_145_ VDD RSTB1 _040_ start_pulse GND NOR2
+x_146_ VDD RSTB2 busy rst_n GND AND2_X1
+x_147_ VDD _043_ phase[2] _004_ GND OR2
+x_148_ VDD rx_valid _001_ _043_ GND NOR2
+x_149_ VDD _044_ bit_cnt[0] bit_cnt[1] GND AND2_X1
+x_150_ VDD _045_ bit_cnt[2] _044_ GND NAND2
+x_151_ VDD _046_ phase[1] phase[0] GND OR2
+x_152_ VDD _047_ _005_ _046_ GND NOR2
+x_153_ VDD _047_ _048_ GND INV_X1
+x_154_ VDD _049_ phase[2] _046_ GND NOR2
+x_155_ VDD _050_ phase[0] _043_ GND NOR2
+x_156_ _049_ _050_ VDD _051_ _047_ GND NOR3
+x_157_ _050_ VDD _052_ _047_ _049_ GND OR3
+x_158_ bit_cnt[3] _133_[0] _133_[2] _133_[1] VDD _053_ GND NOR4
+x_159_ VDD _054_ _051_ _053_ GND OR2
+x_160_ VDD _055_ _048_ _054_ GND AND2_X1
+x_161_ VDD _056_ _048_ _054_ GND NAND2
+x_162_ VDD _057_ _045_ _056_ GND NAND2
+x_163_ VDD _058_ _001_ phase[1] GND OR2
+x_164_ VDD _059_ _005_ _058_ GND NOR2
+x_165_ VDD _060_ phase[2] _058_ GND NOR2
+x_166_ rx_valid _052_ _059_ _060_ VDD _061_ GND NOR4
+x_167_ VDD _061_ _062_ GND INV_X1
+x_168_ VDD _063_ _057_ _062_ GND NAND2
+x_169_ VDD _064_ _044_ _056_ GND NAND2
+x_170_ VDD _065_ _036_ _064_ GND NAND2
+x_171_ VDD _009_ _063_ _065_ GND AND2_X1
+x_172_ VDD _066_ bit_cnt[1] _061_ GND NAND2
+x_173_ VDD _067_ bit_cnt[0] bit_cnt[1] GND NOR2
+x_174_ _067_ VDD _068_ _044_ _055_ GND OR3
+x_175_ VDD _010_ _066_ _068_ GND NAND2
+x_176_ VDD _069_ bit_cnt[0] _061_ GND NAND2
+x_177_ VDD _070_ _133_[0] _052_ GND NAND2
+x_178_ VDD _011_ _069_ _070_ GND NAND2
+x_179_ VDD _071_ _050_ _053_ GND NAND2
+x_180_ shreg[5] rx_data[6] _071_ VDD _012_ GND MUX2
+x_181_ shreg[4] rx_data[5] _071_ VDD _013_ GND MUX2
+x_182_ shreg[3] rx_data[4] _071_ VDD _014_ GND MUX2
+x_183_ shreg[2] rx_data[3] _071_ VDD _015_ GND MUX2
+x_184_ shreg[1] rx_data[2] _071_ VDD _016_ GND MUX2
+x_185_ shreg[0] rx_data[1] _071_ VDD _017_ GND MUX2
+x_186_ sda_in_row3 rx_data[0] _071_ VDD _018_ GND MUX2
+x_187_ VDD _072_ bit_cnt[3] bit_cnt[2] GND NOR2
+x_188_ VDD _073_ _067_ _072_ GND NAND2
+x_189_ VDD _074_ _048_ _073_ GND OR2
+x_190_ tx_data[6] txreg[6] _074_ VDD _019_ GND MUX2
+x_191_ tx_data[5] txreg[5] _074_ VDD _020_ GND MUX2
+x_192_ tx_data[4] txreg[4] _074_ VDD _021_ GND MUX2
+x_193_ tx_data[3] txreg[3] _074_ VDD _022_ GND MUX2
+x_194_ tx_data[2] txreg[2] _074_ VDD _023_ GND MUX2
+x_195_ tx_data[1] txreg[1] _074_ VDD _024_ GND MUX2
+x_196_ tx_data[0] txreg[0] _074_ VDD _025_ GND MUX2
+x_197_ VDD _075_ addr_match _038_ GND NAND2
+x_198_ VDD _076_ _060_ _075_ GND AND2_X1
+x_199_ VDD _077_ sda_in_row0 _059_ GND NAND2
+x_200_ VDD _078_ _071_ _077_ GND NAND2
+x_201_ VDD _079_ _054_ _062_ GND NAND2
+x_202_ rx_valid _076_ _078_ _079_ VDD _080_ GND NOR4
+x_203_ VDD _081_ phase[1] _054_ GND NOR2
+x_204_ VDD _026_ _080_ _081_ GND NOR2
+x_205_ VDD _027_ _052_ _053_ GND AND2_X1
+x_206_ VDD _082_ phase[2] _054_ GND NOR2
+x_207_ VDD _083_ addr_match _039_ GND NAND2
+x_208_ VDD _084_ _060_ _083_ GND AND2_X1
+x_209_ _047_ _059_ _079_ _084_ VDD _085_ GND NOR4
+x_210_ VDD _028_ _082_ _085_ GND NOR2
+x_211_ VDD _086_ _049_ _053_ GND NAND2
+x_212_ sda_in_row0 rw _086_ VDD _029_ GND MUX2
+x_213_ VDD _087_ tx_data[7] _074_ GND NOR2
+x_214_ tx_data[7] txreg[7] _074_ VDD _030_ GND MUX2
+x_215_ shreg[6] rx_data[7] _071_ VDD _031_ GND MUX2
+x_216_ txreg[6] VDD _088_ bit_cnt[0] _035_ GND NAND3
+x_217_ VDD _089_ txreg[7] _067_ GND NAND2
+x_218_ VDD _090_ txreg[4] _044_ GND NAND2
+x_219_ txreg[5] VDD _091_ _034_ bit_cnt[1] GND NAND3
+x_220_ _088_ _089_ _091_ _090_ VDD _092_ GND NAND4
+x_221_ VDD _093_ _133_[2] _092_ GND NAND2
+x_222_ VDD _094_ _036_ _093_ GND NAND2
+x_223_ VDD _095_ txreg[3] _067_ GND NAND2
+x_224_ txreg[2] VDD _096_ bit_cnt[0] _035_ GND NAND3
+x_225_ txreg[1] VDD _097_ _034_ bit_cnt[1] GND NAND3
+x_226_ VDD _098_ txreg[0] _044_ GND NAND2
+x_227_ _095_ _096_ _098_ _097_ VDD _099_ GND NAND4
+x_228_ VDD _100_ _036_ _099_ GND NOR2
+x_229_ _037_ _100_ VDD _101_ bit_cnt[3] GND NOR3
+x_230_ VDD _102_ _094_ _101_ GND NAND2
+x_231_ _102_ VDD _103_ _047_ _073_ GND NAND3
+x_232_ VDD _104_ addr_match _060_ GND AND2_X1
+x_233_ _087_ _104_ VDD _105_ rx_valid GND NOR3
+x_234_ VDD _000_ _103_ _105_ GND NAND2
+x_235_ VDD _106_ _045_ _055_ GND NOR2
+x_236_ _106_ _063_ bit_cnt[3] VDD _032_ GND MUX2
+x_237_ _041_ VDD _107_ sda_in_row3 scl_row2 GND NAND3
+x_238_ VDD busy_clr rst_n _107_ GND NAND2
+x_239_ _002_ _003_ shreg[5] shreg[2] VDD _108_ GND OR4
+x_240_ shreg[3] shreg[0] shreg[1] _108_ VDD _109_ GND NOR4
+x_241_ _109_ addr_match _086_ VDD _033_ GND MUX2
+x_242_ VDD _001_ _027_ phase[0] RSTB1 GND scl_row0 DFFRB
+x_243_ VDD _004_ _026_ phase[1] RSTB1 GND scl_row0 DFFRB
+x_244_ VDD _005_ _028_ phase[2] RSTB1 GND scl_row0 DFFRB
+x_245_ VDD _006_ _029_ rw RSTB1 GND scl_row0 DFFRB
+x_246_ VDD _128_ _025_ txreg[0] RSTB2 GND scl_n_row2 DFFRB
+x_247_ VDD _127_ _024_ txreg[1] RSTB2 GND scl_n_row2 DFFRB
+x_248_ VDD _126_ _023_ txreg[2] RSTB2 GND scl_n_row2 DFFRB
+x_249_ VDD _125_ _022_ txreg[3] RSTB2 GND scl_n_row2 DFFRB
+x_250_ VDD _124_ _021_ txreg[4] RSTB2 GND scl_n_row2 DFFRB
+x_251_ VDD _123_ _020_ txreg[5] RSTB2 GND scl_n_row2 DFFRB
+x_252_ VDD _122_ _019_ txreg[6] RSTB2 GND scl_n_row1 DFFRB
+x_253_ VDD _112_ _030_ txreg[7] RSTB2 GND scl_n_row1 DFFRB
+x_254_ VDD _121_ _018_ rx_data[0] RSTB1 GND scl_row3 DFFRB
+x_255_ VDD _120_ _017_ rx_data[1] RSTB1 GND scl_row3 DFFRB
+x_256_ VDD _119_ _016_ rx_data[2] RSTB1 GND scl_row3 DFFRB
+x_257_ VDD _118_ _015_ rx_data[3] RSTB1 GND scl_row3 DFFRB
+x_258_ VDD _117_ _014_ rx_data[4] RSTB1 GND scl_row3 DFFRB
+x_259_ VDD _116_ _013_ rx_data[5] RSTB1 GND scl_row3 DFFRB
+x_260_ VDD _115_ _012_ rx_data[6] RSTB1 GND scl_row3 DFFRB
+x_261_ VDD _111_ _031_ rx_data[7] RSTB1 GND scl_row3 DFFRB
+x_262_ VDD _133_[0] _011_ bit_cnt[0] RSTB1 GND scl_row0 DFFRB
+x_263_ VDD _133_[1] _010_ bit_cnt[1] RSTB1 GND scl_row1 DFFRB
+x_264_ VDD _133_[2] _009_ bit_cnt[2] RSTB1 GND scl_row1 DFFRB
+x_265_ VDD _134_[3] _032_ bit_cnt[3] RSTB1 GND scl_row1 DFFRB
+x_266_ VDD _132_ _033_ addr_match RSTB1 GND scl_row3 DFFRB
+x_267_ VDD _130_ _000_ sda_oe RSTB2 GND scl_n_row1 DFFRB
+x_268_ VDD _131_ sda_in_row3 shreg[0] RSTB1 GND scl_row2 DFFRB
+x_269_ VDD _110_ shreg[0] shreg[1] RSTB1 GND scl_row2 DFFRB
+x_270_ VDD _129_ shreg[1] shreg[2] RSTB1 GND scl_row2 DFFRB
+x_271_ VDD _113_ shreg[2] shreg[3] RSTB1 GND scl_row2 DFFRB
+x_272_ VDD _003_ shreg[3] shreg[4] RSTB1 GND scl_row3 DFFRB
+x_273_ VDD _114_ shreg[4] shreg[5] RSTB1 GND scl_row3 DFFRB
+x_274_ VDD _002_ shreg[5] shreg[6] RSTB1 GND scl_row3 DFFRB
+xu_del_sda VDD sda_in_row3 sda_d GND DEL1
+xu_inv_scl VDD scl_row2 scl_n GND INV_X1
+xu_lat_q VDD busy busy_clr qn GND NOR2
+xu_lat_qn VDD qn start_pulse busy GND NOR2
+xu_buf_scl_row0 VDD scl_buf scl_row0 GND BUF_X1
+xu_buf_scl_row1 VDD scl_buf scl_row1 GND BUF_X1
+xu_buf_scl_row2 VDD scl_buf scl_row2 GND BUF_X1
+xu_buf_scl_row3 VDD scl_buf scl_row3 GND BUF_X1
+xu_buf_scl_n_row1 VDD scl_n scl_n_row1 GND BUF_X1
+xu_buf_scl_n_row2 VDD scl_n scl_n_row2 GND BUF_X1
+xu_bufth_scl VDD scl scl_buf GND BUFTH
+xu_bufth_sda_in VDD sda_in sda_in_buf GND BUFTH
+xu_buf_sda_in_row0 VDD sda_in_buf sda_in_row0 GND BUF_X1
+xu_buf_sda_in_row3 VDD sda_in_buf sda_in_row3 GND BUF_X1
+xFILLPRI_0_0 VDD GND FILL2
+xFILL_0_1 VDD GND FILL2
+xFILLPRI_1_2 VDD GND FILL2
+xFILLPRI_2_3 VDD GND FILL2
+xFILL_1_4 VDD GND FILL3
+xFILL_2_5 VDD GND FILL3
+xFILL_3_6 VDD GND FILL3
+xFILL_4_7 VDD GND FILL3
+xFILL_5_8 VDD GND FILL3
+xFILL_6_9 VDD GND FILL3
+xFILL_7_10 VDD GND FILL3
+xFILL_8_11 VDD GND FILL3
+xFILL_9_12 VDD GND FILL3
+xFILL_10_13 VDD GND FILL3
+xFILL_11_14 VDD GND FILL3
+xFILL_12_15 VDD GND FILL3
+xFILL_13_16 VDD GND FILL3
+xFILL_14_17 VDD GND FILL3
+xFILL_15_18 VDD GND FILL3
+xFILL_16_19 VDD GND FILL3
+xFILL_17_20 VDD GND FILL3
+xFILL_18_21 VDD GND FILL3
+xFILL_19_22 VDD GND FILL3
+xFILL_20_23 VDD GND FILL3
+xFILL_21_24 VDD GND FILL3
+xFILL_22_25 VDD GND FILL3
+xFILL_23_26 VDD GND FILL3
+xFILL_24_27 VDD GND FILL2
+xFILL_25_28 VDD GND FILL2
+xFILLPRI_3_29 VDD GND FILL2
+xFILLPRI_0_30 VDD GND FILL2
+xFILL_0_31 VDD GND FILL3
+xFILL_1_32 VDD GND FILL3
+xFILL_2_33 VDD GND FILL3
+xFILL_3_34 VDD GND FILL3
+xFILL_4_35 VDD GND FILL3
+xFILL_5_36 VDD GND FILL3
+xFILL_6_37 VDD GND FILL3
+xFILL_7_38 VDD GND FILL3
+xFILL_8_39 VDD GND FILL3
+xFILL_9_40 VDD GND FILL3
+xFILL_10_41 VDD GND FILL3
+xFILL_11_42 VDD GND FILL3
+xFILL_12_43 VDD GND FILL3
+xFILL_13_44 VDD GND FILL3
+xFILL_14_45 VDD GND FILL3
+xFILL_15_46 VDD GND FILL3
+xFILL_16_47 VDD GND FILL3
+xFILL_17_48 VDD GND FILL2
+xFILLPRI_1_49 VDD GND FILL2
+xFILLPRI_2_50 VDD GND FILL2
+xFILL_18_51 VDD GND FILL3
+xFILL_19_52 VDD GND FILL2
+xFILLPRI_3_53 VDD GND FILL2
+xFILLPRI_0_54 VDD GND FILL2
+xFILLPRI_1_55 VDD GND FILL2
+xFILLPRI_2_56 VDD GND FILL2
+xFILL_0_57 VDD GND FILL3
+xFILL_1_58 VDD GND FILL3
+xFILL_2_59 VDD GND FILL3
+xFILL_3_60 VDD GND FILL3
+xFILL_4_61 VDD GND FILL3
+xFILL_5_62 VDD GND FILL3
+xFILL_6_63 VDD GND FILL3
+xFILL_7_64 VDD GND FILL3
+xFILL_8_65 VDD GND FILL3
+xFILL_9_66 VDD GND FILL3
+xFILL_10_67 VDD GND FILL3
+xFILL_11_68 VDD GND FILL3
+xFILL_12_69 VDD GND FILL3
+xFILL_13_70 VDD GND FILL3
+xFILL_14_71 VDD GND FILL3
+xFILL_15_72 VDD GND FILL3
+xFILL_16_73 VDD GND FILL3
+xFILL_17_74 VDD GND FILL3
+xFILL_18_75 VDD GND FILL3
+xFILL_19_76 VDD GND FILL3
+xFILL_20_77 VDD GND FILL3
+xFILL_21_78 VDD GND FILL3
+xFILL_22_79 VDD GND FILL3
+xFILL_23_80 VDD GND FILL2
+xFILLPRI_3_81 VDD GND FILL2
+xFILLPRI_0_82 VDD GND FILL2
+xFILL_0_83 VDD GND FILL3
+xFILL_1_84 VDD GND FILL3
+xFILL_2_85 VDD GND FILL3
+xFILL_3_86 VDD GND FILL3
+xFILL_4_87 VDD GND FILL3
+xFILL_5_88 VDD GND FILL3
+xFILL_6_89 VDD GND FILL3
+xFILL_7_90 VDD GND FILL3
+xFILL_8_91 VDD GND FILL3
+xFILL_9_92 VDD GND FILL3
+xFILL_10_93 VDD GND FILL3
+xFILL_11_94 VDD GND FILL3
+xFILL_12_95 VDD GND FILL3
+xFILL_13_96 VDD GND FILL3
+xFILL_14_97 VDD GND FILL3
+xFILL_15_98 VDD GND FILL3
+xFILL_16_99 VDD GND FILL3
+xFILL_17_100 VDD GND FILL3
+xFILL_18_101 VDD GND FILL3
+xFILL_19_102 VDD GND FILL3
+xFILL_20_103 VDD GND FILL3
+xFILL_21_104 VDD GND FILL3
+xFILL_22_105 VDD GND FILL3
+xFILL_23_106 VDD GND FILL3
+xFILLPRI_1_107 VDD GND FILL2
+xFILLPRI_2_108 VDD GND FILL2
+xFILL_24_109 VDD GND FILL3
+xFILL_25_110 VDD GND FILL3
+xFILL_26_111 VDD GND FILL3
+xFILL_27_112 VDD GND FILL2
+xFILLPRI_3_113 VDD GND FILL2
+.ends
+
+
+* expanding   symbol:  OSS_FRAME_GIO.sym # of pins=44
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_FRAME_GIO.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_FRAME_GIO.sch
+.subckt OSS_FRAME_GIO P1 VDD P2 P15 P14 P3 P4 P13 P5 P12 P6 P11 P10 P7 P9 VSS HIZ1 HIZ2 HIZ9 HIZ10 HIZ3 HIZ4 HIZ11 HIZ5 HIZ12 HIZ6
++ HIZ13 HIZ14 HIZ7 HIZ15 OUT1 OUT2 OUT9 OUT10 OUT3 OUT4 OUT11 OUT5 OUT12 OUT6 OUT13 OUT14 OUT7 OUT15
+*.PININFO P1:B P2:B P3:B P4:B P5:B P6:B P7:B VSS:B VDD:B P15:B P14:B P13:B P12:B P11:B P10:B P9:B HIZ1:I OUT1:I HIZ2:I OUT2:I
+*+ HIZ3:I OUT3:I HIZ4:I OUT4:I HIZ5:I OUT5:I HIZ6:I OUT6:I HIZ7:I OUT7:I HIZ15:I OUT15:I HIZ14:I OUT14:I HIZ13:I OUT13:I HIZ12:I OUT12:I
+*+ HIZ11:I OUT11:I HIZ10:I OUT10:I HIZ9:I OUT9:I
+x1 VDD P1 VSS HIZ1 OUT1 OSS_ESD_5V_DIO
+x2 VDD VSS OSS_ESD_5V_VDD
+x3 VDD VSS OSS_ESD_5V_VSS
+x4 VDD P2 VSS HIZ2 OUT2 OSS_ESD_5V_DIO
+x5 VDD P3 VSS HIZ3 OUT3 OSS_ESD_5V_DIO
+x6 VDD P4 VSS HIZ4 OUT4 OSS_ESD_5V_DIO
+x7 VDD P5 VSS HIZ5 OUT5 OSS_ESD_5V_DIO
+x8 VDD P6 VSS HIZ6 OUT6 OSS_ESD_5V_DIO
+x9 VDD P7 VSS HIZ7 OUT7 OSS_ESD_5V_DIO
+x10 VDD P15 VSS HIZ15 OUT15 OSS_ESD_5V_DIO
+x11 VDD P14 VSS HIZ14 OUT14 OSS_ESD_5V_DIO
+x12 VDD P13 VSS HIZ13 OUT13 OSS_ESD_5V_DIO
+x13 VDD P12 VSS HIZ12 OUT12 OSS_ESD_5V_DIO
+x14 VDD P11 VSS HIZ11 OUT11 OSS_ESD_5V_DIO
+x15 VDD P10 VSS HIZ10 OUT10 OSS_ESD_5V_DIO
+x16 VDD P9 VSS HIZ9 OUT9 OSS_ESD_5V_DIO
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/INV_X1.sym # of pins=4
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/INV_X1.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/INV_X1.sch
+.subckt INV_X1 VDD A Y GND
+*.PININFO A:I Y:O GND:B VDD:B
+MM7 Y A VDD VDD PMOS w=10.2u l=1u
+MM2 Y A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND2.sym # of pins=5
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND2.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND2.sch
+.subckt NAND2 VDD Y A B GND
+*.PININFO B:I A:I Y:O GND:B VDD:B
+MM7 Y A VDD VDD PMOS w=10.2u l=1u
+MM1 Y B VDD VDD PMOS w=10.2u l=1u
+MM2 Y B net1 GND NMOS w=3.4u l=1u
+MM3 net1 A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR2.sym # of pins=5
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR2.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR2.sch
+.subckt NOR2 VDD Y A B GND
+*.PININFO A:I B:I Y:O VDD:B GND:B
+MM7 net1 A VDD VDD PMOS w=10.2u l=1u
+MM1 Y B net1 VDD PMOS w=10.2u l=1u
+MM2 Y A GND GND NMOS w=3.4u l=1u
+MM3 Y B GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/AND2_X1.sym # of pins=5
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/AND2_X1.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/AND2_X1.sch
+.subckt AND2_X1 VDD Y A B GND
+*.PININFO Y:O A:I B:I VDD:B GND:B
+MM7 net1 B VDD VDD PMOS w=10.2u l=1u
+MM1 net1 A VDD VDD PMOS w=10.2u l=1u
+MM2 Y net1 VDD VDD PMOS w=10.2u l=1u
+MM3 Y net1 GND GND NMOS w=3.4u l=1u
+MM4 net1 A net2 GND NMOS w=3.4u l=1u
+MM5 net2 B GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR2.sym # of pins=5
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR2.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR2.sch
+.subckt OR2 VDD Y A B GND
+*.PININFO A:I B:I Y:O VDD:B GND:B
+MM7 net2 B VDD VDD PMOS w=10.2u l=1u
+MM2 net1 A net2 VDD PMOS w=10.2u l=1u
+MM4 Y net1 VDD VDD PMOS w=10.2u l=1u
+MM1 net1 B GND GND NMOS w=3.4u l=1u
+MM3 net1 A GND GND NMOS w=3.4u l=1u
+MM5 Y net1 GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR3.sym # of pins=6
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR3.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR3.sch
+.subckt NOR3 B C VDD Y A GND
+*.PININFO A:I B:I Y:O VDD:B GND:B C:I
+MM7 net1 B VDD VDD PMOS w=10.2u l=1u
+MM2 net2 A net1 VDD PMOS w=10.2u l=1u
+MM3 Y C net2 VDD PMOS w=10.2u l=1u
+MM1 Y B GND GND NMOS w=3.4u l=1u
+MM4 Y C GND GND NMOS w=3.4u l=1u
+MM5 Y A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR3.sym # of pins=6
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR3.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR3.sch
+.subckt OR3 C VDD Y A B GND
+*.PININFO A:I B:I Y:O VDD:B GND:B C:I
+MM8 net1 B VDD VDD PMOS w=10.2u l=1u
+MM2 net2 A net1 VDD PMOS w=10.2u l=1u
+MM3 net3 C net2 VDD PMOS w=10.2u l=1u
+MM7 Y net3 VDD VDD PMOS w=10.2u l=1u
+MM9 Y net3 GND GND NMOS w=3.4u l=1u
+MM1 net3 C GND GND NMOS w=3.4u l=1u
+MM4 net3 A GND GND NMOS w=3.4u l=1u
+MM5 net3 B GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR4.sym # of pins=7
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR4.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NOR4.sch
+.subckt NOR4 A B C D VDD Y GND
+*.PININFO A:I B:I Y:O VDD:B GND:B C:I D:I
+MM8 net1 B VDD VDD PMOS w=10.2u l=1u
+MM2 net2 A net1 VDD PMOS w=10.2u l=1u
+MM3 net3 C net2 VDD PMOS w=10.2u l=1u
+MM6 Y D net3 VDD PMOS w=10.2u l=1u
+MM9 Y D GND GND NMOS w=3.4u l=1u
+MM1 Y B GND GND NMOS w=3.4u l=1u
+MM4 Y C GND GND NMOS w=3.4u l=1u
+MM5 Y A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/MUX2.sym # of pins=6
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/MUX2.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/MUX2.sch
+.subckt MUX2 A B S VDD Y GND
+*.PININFO S:I Y:O VDD:B GND:B B:I A:I
+MM13 SB S VDD VDD PMOS w=6.8u l=1u
+MM8 net2 S net3 VDD PMOS w=6.8u l=1u
+MM12 SB S GND GND NMOS w=3.4u l=1u
+MM6 net2 SB net3 GND NMOS w=3.4u l=1u
+MM11 net1 B VDD VDD PMOS w=6.8u l=1u
+MM14 net1 B GND GND NMOS w=3.4u l=1u
+MM15 net2 A VDD VDD PMOS w=6.8u l=1u
+MM16 net2 A GND GND NMOS w=3.4u l=1u
+MM3 net1 SB net3 VDD PMOS w=6.8u l=1u
+MM5 net1 S net3 GND NMOS w=3.4u l=1u
+MM1 Y net3 VDD VDD PMOS w=11.2u l=1u
+MM2 Y net3 GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND3.sym # of pins=6
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND3.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND3.sch
+.subckt NAND3 C VDD Y A B GND
+*.PININFO B:I A:I Y:O GND:B VDD:B C:I
+MM1 Y A VDD VDD PMOS w=10.2u l=1u
+MM4 Y B VDD VDD PMOS w=10.2u l=1u
+MM6 Y C VDD VDD PMOS w=10.2u l=1u
+MM7 Y C net1 GND NMOS w=3.4u l=1u
+MM2 net1 B net2 GND NMOS w=3.4u l=1u
+MM3 net2 A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND4.sym # of pins=7
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND4.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/NAND4.sch
+.subckt NAND4 A B D C VDD Y GND
+*.PININFO B:I A:I Y:O GND:B VDD:B D:I C:I
+MM4 Y A VDD VDD PMOS w=10.2u l=1u
+MM6 Y C VDD VDD PMOS w=10.2u l=1u
+MM7 Y D VDD VDD PMOS w=10.2u l=1u
+MM8 Y B VDD VDD PMOS w=10.2u l=1u
+MM1 Y D net3 GND NMOS w=3.4u l=1u
+MM2 net2 B net1 GND NMOS w=3.4u l=1u
+MM3 net3 C net2 GND NMOS w=3.4u l=1u
+MM5 net1 A GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR4.sym # of pins=7
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR4.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/OR4.sch
+.subckt OR4 A B C D VDD Y GND
+*.PININFO B:I A:I Y:O VDD:B GND:B C:I D:I
+MM10 net1 B VDD VDD PMOS w=10.2u l=1u
+MM2 net2 A net1 VDD PMOS w=10.2u l=1u
+MM3 net4 C net2 VDD PMOS w=10.2u l=1u
+MM7 Y net3 VDD VDD PMOS w=10.2u l=1u
+MM9 net4 D net3 VDD PMOS w=10.2u l=1u
+MM11 net3 A GND GND NMOS w=3.4u l=1u
+MM1 net3 B GND GND NMOS w=3.4u l=1u
+MM4 net3 C GND GND NMOS w=3.4u l=1u
+MM5 net3 D GND GND NMOS w=3.4u l=1u
+MM6 Y net3 GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/DFFRB.sym # of pins=7
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/DFFRB.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/DFFRB.sch
+.subckt DFFRB VDD QB D Q RSTB GND CK
+*.PININFO VDD:B GND:B D:I QB:O CK:I Q:O RSTB:I
+MM2 net1 D VDD VDD PMOS w=5.2u l=1u
+MM1 net2 CKP net1 VDD PMOS w=5.2u l=1u
+MM7 net2 CKB net3 GND NMOS w=3.4u l=1u
+MM8 net3 D GND GND NMOS w=3.4u l=1u
+MM10 QM net2 VDD VDD PMOS w=5.2u l=1u
+MM11 QM net2 GND GND NMOS w=3.4u l=1u
+MM13 net4 QM GND GND NMOS w=3.4u l=1u
+MM15 net4 CKP net2 GND NMOS w=3.4u l=1u
+MM22 QB QS VDD VDD PMOS w=10.4u l=1u
+MM3 net4 QM VDD VDD PMOS w=5.2u l=1u
+MM4 net2 CKB net4 VDD PMOS w=5.2u l=1u
+MM5 QS CKP QM GND NMOS w=3.4u l=1u
+MM6 QM CKB QS VDD PMOS w=5.2u l=1u
+MM9 net5 QB GND GND NMOS w=3.4u l=1u
+MM12 net5 QB VDD VDD PMOS w=5.2u l=1u
+MM14 net5 CKB QS GND NMOS w=3.4u l=1u
+MM16 QS CKP net5 VDD PMOS w=5.2u l=1u
+MM17 QB RSTB net6 GND NMOS w=3.4u l=1u
+MM18 Q QB VDD VDD PMOS w=10.4u l=1u
+MM19 Q QB GND GND NMOS w=3.4u l=1u
+MM20 CKB CK VDD VDD PMOS w=10.4u l=1u
+MM21 CKB CK GND GND NMOS w=3.4u l=1u
+MM23 CKP CKB VDD VDD PMOS w=10.4u l=1u
+MM24 CKP CKB GND GND NMOS w=3.4u l=1u
+MM25 net6 QS GND GND NMOS w=3.4u l=1u
+MM26 QB RSTB VDD VDD PMOS w=10.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/DEL1.sym # of pins=4
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/DEL1.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/DEL1.sch
+.subckt DEL1 VDD A Y GND
+*.PININFO A:I Y:O VDD:B GND:B
+MM9 net3 A VDD VDD PMOS w=10.2u l=1u
+MM2 Y net1 VDD VDD PMOS w=10.2u l=1u m=2
+MM8 net3 A GND GND NMOS w=3.4u l=1u
+MM1 Y net1 GND GND NMOS w=3.4u l=1u m=2
+MM4 net2 net3 VDD VDD PMOS w=10.2u l=2u
+MM6 net1 net2 VDD VDD PMOS w=10.2u l=2u
+MM7 net2 net3 GND GND NMOS w=3.4u l=2u
+MM3 net1 net2 GND GND NMOS w=3.4u l=2u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/BUF_X1.sym # of pins=4
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/BUF_X1.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_5_stdcell/BUF_X1.sch
+.subckt BUF_X1 VDD A Y GND
+*.PININFO A:I Y:O VDD:B GND:B
+MM7 net1 A VDD VDD PMOS w=10.2u l=1u
+MM1 Y net1 VDD VDD PMOS w=10.2u l=1u
+MM3 net1 A GND GND NMOS w=3.4u l=1u
+MM2 Y net1 GND GND NMOS w=3.4u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/BUFTH.sym # of pins=4
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/BUFTH.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/BUFTH.sch
+.subckt BUFTH VDD A Y GND
+*.PININFO A:I Y:O VDD:B GND:B
+MM9 MID A net1 VDD PMOS w=5.1u l=1u
+MM2 Y MID VDD VDD PMOS w=10.2u l=1u
+MM8 MID A net2 GND NMOS w=3.4u l=1u
+MM1 Y MID GND GND NMOS w=3.4u l=1u
+MM6 GND MID net1 VDD PMOS w=10.2u l=1u
+MM3 VDD MID net2 GND NMOS w=6.8u l=1u
+MM5 net2 A GND GND NMOS w=3.4u l=1u
+MM4 net1 A VDD VDD PMOS w=5.1u l=1u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL2.sym # of pins=2
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL2.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL2.sch
+.subckt FILL2 VDD GND
+*.PININFO GND:B VDD:B
+MM7 VDD GND VDD VDD PMOS w=21.2u l=3.2u
+MM2 GND VDD GND GND NMOS w=13.1u l=3.2u
+.ends
+
+
+* expanding   symbol:  /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL3.sym # of pins=2
+** sym_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL3.sym
+** sch_path: /Users/okamura/Dropbox/98_LSI_Design/TR-1um_Async_I2C/LEF/FILL3.sch
+.subckt FILL3 VDD GND
+*.PININFO GND:B VDD:B
+MM7 VDD GND VDD VDD PMOS w=21.2u l=8.6u
+MM2 GND VDD GND GND NMOS w=13.1u l=8.6u
+.ends
+
+
+* expanding   symbol:  OSS_ESD_5V_DIO.sym # of pins=6
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_DIO.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_DIO.sch
+.subckt OSS_ESD_5V_DIO VDD PAD VSS HIZ OUT
+*.PININFO PAD:B VDD:B VSS:B HIZ:I OUT:I
+MXM1 PAD PG VDD VDD PMOS w=300u l=2u
+MXM2 PAD NG VSS VSS NMOSE w=150u l=2u
+MXM3 PG PGG VDD VDD PMOS w=20.8u l=1u
+MXM4 PG PGG VSS VSS NMOS w=6.8u l=1u
+MXM5 PAD VDD VDD VDD PMOS w=200u l=2u
+MXM6 PAD VSS VSS VSS NMOSE w=350u l=2u
+MXM7 NG NGG VDD VDD PMOS w=20.8u l=1u
+MXM8 NG NGG VSS VSS NMOS w=6.8u l=1u
+MXM9 PGG HIZ net2 VDD PMOS w=10.4u l=1u
+MXM10 net2 net1 VDD VDD PMOS w=10.4u l=1u
+MXM11 PGG net1 VSS VSS NMOS w=3.4u l=1u
+MXM12 PGG HIZ VSS VSS NMOS w=3.4u l=1u
+MXM13 NGG net1 VDD VDD PMOS w=5.2u l=1u
+MXM14 NGG ENB VDD VDD PMOS w=5.2u l=1u
+MXM15 NGG ENB net3 VSS NMOS w=3.4u l=1u
+MXM16 net3 net1 VSS VSS NMOS w=3.4u l=1u
+MXM17 ENB HIZ VDD VDD PMOS w=5.2u l=1u
+MXM18 ENB HIZ VSS VSS NMOS w=3.4u l=1u
+DD1 VSS HIZ DN A=12.96p P=14.4u
+MXM19 net1 OUT VDD VDD PMOS w=5.2u l=1u
+MXM20 net1 OUT VSS VSS NMOS w=3.4u l=1u
+DD2 VSS OUT DN A=12.96p P=14.4u
+.ends
+
+
+* expanding   symbol:  OSS_ESD_5V_VDD.sym # of pins=3
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_VDD.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_VDD.sch
+.subckt OSS_ESD_5V_VDD VDD VSS
+*.PININFO VSS:B VDD:B VDD:B
+MXM5 VSS VDD VDD VDD PMOS w=500u l=2u
+MXM6 VDD VSS VSS VSS NMOSE w=500u l=2u
+.ends
+
+
+* expanding   symbol:  OSS_ESD_5V_VSS.sym # of pins=3
+** sym_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_VSS.sym
+** sch_path: /Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/xschem/TR-1um_frame/OSS_ESD_5V_VSS.sch
+.subckt OSS_ESD_5V_VSS VDD VSS
+*.PININFO VSS:B VDD:B VSS:B
+MXM3 VSS VDD VDD VDD PMOS w=500u l=2u
+MXM4 VDD VSS VSS VSS NMOSE w=500u l=2u
+.ends
+

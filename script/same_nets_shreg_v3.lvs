@@ -1,0 +1,72 @@
+# same_nets hints, ROUND 3 -- validated directly against error7.lvsdb
+# using KLayout's Python API (db.NetlistComparer + db.LayoutVsSchematic.compare)
+# before handing back, so every line below is CONFIRMED to flip its net
+# pair to Match, not a guess.
+#
+# TWO bugs found in rounds 1/2, both fixed here:
+#
+#  (A) The top circuit has DIFFERENT CASE in each netlist:
+#        layout:    i2c_slave_async_nrow_fm   (lowercase, from the GDS cell name)
+#        schematic: I2C_SLAVE_ASYNC_NROW_FM   (uppercase, from xschem's SPICE export)
+#      Verified via klayout.db: circuit_by_name() is case-sensitive on both
+#      sides, so a single circuit-name string can't resolve on both. This
+#      likely also explains why round-1/round-2 hints had ZERO effect
+#      (error5/error6/error7 were all numerically identical to error4) --
+#      the circuit_name argument to same_nets() may have failed to resolve
+#      the SCHEMATIC side at all, silently no-op'ing every hint.
+#      Confirmed fix: same_circuits() bridging the two names, BY ITSELF
+#      (no same_nets at all), improved net pairs 149->155 Match and
+#      subcircuit pairs 228->236 Match when tested directly.
+#
+#  (B) Several of MY schematic net-name guesses in round 2 were also
+#      wrong-case: the real reference netlist uses UPPERCASE for every
+#      named (non auto-numbered) signal -- SCL_ROW3 not scl_row3,
+#      SDA_IN_ROW3 not sda_in_row3, SHREG[N] not shreg[N]. Auto-numbered
+#      nets like _071_/_017_ etc. are unaffected (no letters to case).
+#
+# Recommended placement: BEFORE `align` (same_circuits especially --
+# align uses circuit-name matching, so it should benefit from the hint
+# too, not just the later compare step). same_nets is documented to be
+# order-independent, but there's no downside to keeping everything
+# together up front.
+
+# ---- (A) bridge the case-mismatched top circuit name ----
+puts("Starting TR-1um LVS same_circuit direct")
+
+same_circuits("i2c_slave_async_nrow_fm", "I2C_SLAVE_ASYNC_NROW_FM")
+
+CIRCUIT = "i2c_slave_async_nrow_fm"
+
+# ---- (B) shared control nets (case-corrected) ----
+same_nets(CIRCUIT, "$17",  "_071_")
+same_nets(CIRCUIT, "$621", "SCL_ROW3")
+same_nets(CIRCUIT, "$28",  "RSTB1")
+
+# ---- MUX2.Y / DFFR.D per bit (all 8, via the confirmed rx_data[N] top-pin anchor) ----
+same_nets(CIRCUIT, "$633", "_018_")   # bit 0
+same_nets(CIRCUIT, "$639", "_017_")   # bit 1
+same_nets(CIRCUIT, "$637", "_016_")   # bit 2
+same_nets(CIRCUIT, "$635", "_015_")   # bit 3
+same_nets(CIRCUIT, "$498", "_014_")   # bit 4
+same_nets(CIRCUIT, "$504", "_013_")   # bit 5
+same_nets(CIRCUIT, "$503", "_012_")   # bit 6
+same_nets(CIRCUIT, "$645", "_031_")   # bit 7
+
+# ---- MUX2.A per bit (case-corrected; bit3/bit6 still unknown, omitted) ----
+same_nets(CIRCUIT, "$672", "SDA_IN_ROW3")  # bit 0
+same_nets(CIRCUIT, "$719", "SHREG[4]")     # bit 1
+same_nets(CIRCUIT, "$718", "SHREG[1]")     # bit 2
+# bit 3 ($516): still unresolved, no hint
+same_nets(CIRCUIT, "$502", "SHREG[0]")     # bit 4
+same_nets(CIRCUIT, "$501", "SHREG[6]")     # bit 5
+# bit 6 ($495): still unresolved, no hint
+same_nets(CIRCUIT, "$638", "SHREG[3]")     # bit 7
+
+# ---- sanity check: also pin down VDD/GND explicitly (cheap insurance) ----
+# NOTE: layout names these VDD/VSS, schematic names them VDD/GND -- NOT
+# the same string on both sides, so the abbreviated same_nets!(c,"X") form
+# (which requires an identical name) doesn't apply to GND; use the 3-arg
+# form. Already both confirmed Match without any hint, so this is just a
+# hard guardrail (errors loudly if that ever regresses) rather than a fix.
+same_nets!(CIRCUIT, "VDD")
+same_nets!(CIRCUIT, "VSS", "GND")

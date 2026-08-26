@@ -1,0 +1,26 @@
+* Created by KLayout
+*** My special header ***
+
+* cell BUFTH
+* pin A
+* pin Y
+* pin gnd
+* pin vdd
+.SUBCKT BUFTH A Y gnd vdd
+* device instance $1 r0 *1 10.8,53.95 PMOS
+XM$1 gnd \$6 \$7 vdd PMOS L=1u W=10.2u AS=21.93p AD=21.93p PS=23.9u PD=23.9u
+* device instance $3 r0 *1 10.8,42.45 PMOS
+XM$3 \$6 A \$7 vdd PMOS L=1u W=5.1u AS=14.28p AD=7.65p PS=15.8u PD=8.1u
+* device instance $4 r0 *1 14.8,42.45 PMOS
+XM$4 \$7 A vdd vdd PMOS L=1u W=5.1u AS=7.65p AD=14.28p PS=8.1u PD=15.8u
+* device instance $5 r0 *1 26,45 PMOS
+XM$5 vdd \$6 Y vdd PMOS L=1u W=10.2u AS=28.56p AD=28.56p PS=26u PD=26u
+* device instance $6 r0 *1 26,17.9 NMOS
+XM$6 gnd \$6 Y gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+* device instance $7 r0 *1 10.8,17.9 NMOS
+XM$7 \$6 A \$3 gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $8 r0 *1 14.8,17.9 NMOS
+XM$8 \$3 A gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=9.52p PS=6.4u PD=12.4u
+* device instance $9 r0 *1 10.8,10 NMOS
+XM$9 vdd \$6 \$3 gnd NMOS L=1u W=6.8u AS=14.62p AD=14.62p PS=18.8u PD=18.8u
+.ENDS BUFTH
