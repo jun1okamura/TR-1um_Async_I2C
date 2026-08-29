@@ -1,28 +1,34 @@
 # IRSIM チップレベル動作検証
 
-**⚠️ 2026-08-30更新（design_notes.md §87）**: `tr_1um_i2c_slave_async.sim`は
-チップレベルDRC/LVSクリーン確認済みの`schematic/
-tr_1um_i2c_slave_async_v9_lvs.spice`から
-[`script/gen_irsim_sim_v9.py`](../script/gen_irsim_sim_v9.py)（新規、
-旧`gen_irsim_sim.py`を置き換え）で再生成済み。ノード名が大きく変わって
-いる（下記「ノード名の注意」以降・信号対応表は**旧`.sim`基準のまま**、
-参考用に残してある）。**`irsim_test_main.cmd`等の`.cmd`ファイルも
-[`script/gen_irsim_cmd_v9.py`](../script/gen_irsim_cmd_v9.py)（新規、旧
-`gen_irsim_cmd.py`を置き換え）で新ノード名に対応済み**（design_notes.md
-§88）。DFFRBの33インスタンスのリセットグループ構成（24＋9、4本の行
-クロックnet）は新ネットリスト上でも旧設計と完全に同じ構造であることを
-直接確認済み。`.cmd`が参照する全63ノードが実際に`.sim`に存在すること
-も突き合わせ済み。ただし実機IRSIM実行（`@ irsim_test_main.cmd`等）は
-まだ行っていない——旧`.sim`で対処が必要だった各問題（DFFRBコールド
-スタート、SDA極性、DEL1セトリング等）が新RTL上でも同様に必要かは
-未確認。新`.sim`のトップレベル信号名は§87.4参照：
+**✅ 2026-08-30更新（design_notes.md §87-97、v9世代）**:
+`tr_1um_i2c_slave_async.sim`はチップレベルDRC/LVSクリーン確認済みの
+`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`から
+[`script/gen_irsim_sim_v9.py`](../script/gen_irsim_sim_v9.py)で生成。
+`.cmd`群は[`script/gen_irsim_cmd_v9.py`](../script/gen_irsim_cmd_v9.py)
+で生成（両方とも旧v7世代の`gen_irsim_sim.py`/`gen_irsim_cmd.py`を
+置き換え）。**実機IRSIM 9.7.121で`irsim_test_main.cmd`
+（WRITE 0xA5 → READ 0x3C）をエンドツーエンドで実行し、START/ADDR+ACK/
+DATA+ACK/rx_data一致/STOP/busy解除まで全チェックが正しいことを確認
+済み**（design_notes.md §97）。`irsim_test_negative.cmd`（不一致
+アドレスNACK）も確認済み（§90.1）。
+
+新`.sim`のトップレベル信号名（§87.4）：
 `rst_n`=`P15`、`scl`=`P2`、`sda_in`=`P13`、`sda_oe`=`SDA_O`、`DIS`=`P7`、
 `tx_data[0..7]`=`P12 P11 P5 P6 P4 P1 P3 P14`、`rx_data[0..7]`=
 `NET_0..NET_7`、`busy`/`rw`/`addr_match`/`rx_valid`=
 `NC_CORE_busy`/`NC_CORE_rw`/`NC_CORE_addr_match`/`NC_CORE_rx_valid`
-（電源/GNDは従来通り`Vdd`/`Gnd`）。
+（電源/GNDは従来通り`Vdd`/`Gnd`）。33個の`DFFRB`インスタンスの
+リセットグループ構成（24＋9、4本の行クロックnet）は旧設計と完全に
+同じ構造。
 
-**旧版の到達点（このセクション以降は旧`.sim`ベースの記録）**:
+`start()`の非初回呼び出し（2回目以降のSTART）で使う`QM`/`QS`両方の
+force/release、およびクロックnetを**HIGH**（LOWではない）で強制する
+必要があることが分かった経緯は§89-96参照——`QM`（マスタ側記憶ノード）
+はCK=0の間`D`に対して常時透過（ラッチされない）ため、CK=0のまま
+フォースしても無意味で、CK=1でフォースする必要があった。
+
+**旧版（v7世代）の到達点（このセクション以降は旧`.sim`ベースの記録、
+参考用に残してある）**:
 `script/test_i2c_slave_async.py`と同じ
 シナリオ（WRITE 0xA5 → READ 0x3C）が`irsim_test_main.cmd`でチップレベルの
 ゲートレベルネットリスト上、実機IRSIM実行で**エンドツーエンドに完全成功**
@@ -95,10 +101,9 @@ irsim> @ irsim_test_negative.cmd
 ```
 
 **バッチ（非対話）実行**: `-@`フラグではなく、上と同じ`@ file`コマンド列を
-**stdinリダイレクト**で流し込む方法なら、手入力と同じくIRSIMのプロンプトが
-そのままstdinを読むだけなので同様に動くはず（このセッションではirsim実行
-環境が無く未検証——`irsim/run_batch.sh`として用意したので、まずこちらで
-一度試してほしい）:
+**stdinリダイレクト**で流し込む方法。実機で動作確認済み（末尾の`quit`
+コマンドだけこのirsimビルドでは未対応と分かったため`run_batch.sh`からは
+削除済み——それ以外は正常動作）:
 
 ```sh
 cd irsim
