@@ -94,6 +94,24 @@ irsim> @ irsim_test_main.cmd
 irsim> @ irsim_test_negative.cmd
 ```
 
+**バッチ（非対話）実行**: `-@`フラグではなく、上と同じ`@ file`コマンド列を
+**stdinリダイレクト**で流し込む方法なら、手入力と同じくIRSIMのプロンプトが
+そのままstdinを読むだけなので同様に動くはず（このセッションではirsim実行
+環境が無く未検証——`irsim/run_batch.sh`として用意したので、まずこちらで
+一度試してほしい）:
+
+```sh
+cd irsim
+./run_batch.sh [prm-file]     # 省略時 TR-1um.prm
+# irsim_batch_run.log に全出力が残る
+```
+
+中身は`irsim <prm> tr_1um_i2c_slave_async.sim`をstdinヒアドキュメントで
+`@ irsim_reset_check.cmd` → `@ irsim_test_main.cmd` →
+`@ irsim_test_negative.cmd` → `quit`と流すだけ。もしこれも`-@`と同様に
+うまく解釈されない場合は、従来通りインタラクティブ起動＋手入力にフォール
+バックすること。
+
 `irsim_reset_check.cmd`はリセットのみを100/500/1000/3000/8000ns時点で
 チェックポイントdumpする軽量診断スクリプト。`sda_oe`/`busy`/`rw`/
 `addr_match`がXのまま収束しない場合、トランザクションテストを実行しても
