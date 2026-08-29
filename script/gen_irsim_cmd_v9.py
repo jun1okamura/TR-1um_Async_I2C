@@ -234,6 +234,21 @@ class CmdGen:
         self.s()
         for n in nodes:
             self.x(n)
+        self.s()
+        # EXPERIMENT (design_notes.md 92.x): a real run on this netlist
+        # found bit_cnt[0] specifically (a self-referential toggle bit,
+        # D=NOT(Q)) ends up back at 1 instead of 0 right after this
+        # function returns, while its sibling Group-A registers (rw,
+        # addr_match, bit_cnt[1:2], all of shreg) correctly land on 0 --
+        # even though all of them share the exact same row-clock net.
+        # The original code released QS and the clock nets in the SAME
+        # instant (no settle between the two release loops), so a
+        # self-reinforcing QS<->net5 value that hasn't fully settled yet
+        # could get exposed to the clock's real dynamics before it's
+        # actually stable. Inserting a settle HERE, between releasing QS
+        # (clock still held low) and releasing the clock nets, gives QS
+        # time to finish settling to its self-reinforced value while
+        # still isolated, before the clock is allowed to move again.
         for g in gate_nets:
             self.x(g)
         self.s()
