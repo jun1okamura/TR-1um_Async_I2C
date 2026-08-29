@@ -301,7 +301,26 @@ class CmdGen:
         self.raw("")
 
     # ---- bus-functional primitives, 1:1 with test_i2c_slave_async.py ----
-    def start(self, first=False):
+    def start(self, first=False, group_a_mode="gated"):
+        """group_a_mode controls how the non-first-START branch handles
+        Group-A's QS reset (ignored when first=True, which always uses a
+        plain one-time force_release() -- see design_notes.md 89.1's
+        finding that this design doesn't seem to need forcing at all, an
+        open question only for the REPEAT-START case so far):
+          "gated" (default) -- force_release_gated() as before: force QS
+            AND the group's own row-clock nets low together. This is
+            what irsim_test_main.cmd uses, and a real run found it left
+            addr_match/rw stuck for the 2nd (read) transaction's address
+            byte (design_notes.md 89.3).
+          "plain" -- force_release() on QS only, no clock-net forcing
+            (the OLD design's technique that a real run on THIS netlist
+            has not yet been tried).
+          "none" -- skip the force/release step entirely and let the
+            circuit's own dynamics settle on their own, per the
+            hypothesis (design_notes.md 89.1) that v9's re-synthesized
+            netlist may not have the cold-X QM/QS deadlock the old
+            design did at all, given irsim_reset_check.cmd resolved
+            cleanly on this .sim WITHOUT ever forcing anything."""
         self.note("---- START ----")
         self.h(SCL)
         self.x(SDA)  # already released since preamble() -- explicit here for clarity
@@ -348,6 +367,22 @@ class CmdGen:
             self.note("same as preamble()'s cold-start fix -- plain force_release() is")
             self.note("valid here.")
             self.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
+        elif group_a_mode == "none":
+            self.note("NOT the first START, group_a_mode=\"none\" (EXPERIMENT,")
+            self.note("design_notes.md 89.6): skipping Group-A QS force/release")
+            self.note("entirely here, testing the hypothesis that this")
+            self.note("re-synthesized netlist doesn't have the old design's cold-X")
+            self.note("QM/QS deadlock at all (irsim_reset_check.cmd resolved cleanly")
+            self.note("with zero forcing anywhere -- 89.1). If addr_match/rw now")
+            self.note("assert correctly for this 2nd START where the \"gated\" mode")
+            self.note("previously did not (89.3), that confirms force_release_gated()")
+            self.note("was unnecessary (or actively harmful) on this netlist, not")
+            self.note("that the design itself has a bug.")
+        elif group_a_mode == "plain":
+            self.note("NOT the first START, group_a_mode=\"plain\" (EXPERIMENT):")
+            self.note("force_release() on QS only, no clock-net forcing -- the OLD")
+            self.note("design's pre-76.41 technique, not yet tried on this netlist.")
+            self.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
         else:
             self.note("NOT the first START: real SCL clocking has already happened")
             self.note("in an earlier transaction, so Group-A's own row-clock nets")
@@ -362,6 +397,11 @@ class CmdGen:
             self.note("same window, so QS is genuinely isolated (not just nominally X)")
             self.note("while we reset it, and the whole group settles together before")
             self.note("the clock nets are released back to real values.")
+            self.note("A real run on THIS netlist (design_notes.md 89.3) found this")
+            self.note("mode leaves addr_match/rw stuck for the 2nd (read) transaction's")
+            self.note("address byte -- see irsim_test_main_noforce.cmd for the")
+            self.note("group_a_mode=\"none\" experiment testing whether this forcing")
+            self.note("is even still necessary on v9's re-synthesized netlist.")
             self.force_release_gated(
                 [dffrb_qs(i) for i in DFFRB_28_INSTANCES],
                 DFFRB_28_CLOCK_NETS, value=0)
@@ -444,10 +484,13 @@ class CmdGen:
         self.d(BUSY)
 
 
-def gen_main():
+def gen_main(group_a_mode="gated", label="irsim_test_main.cmd"):
     g = CmdGen()
-    g.note("irsim_test_main.cmd -- write 0xA5 then read 0x3C, mirrors")
+    g.note(f"{label} -- write 0xA5 then read 0x3C, mirrors")
     g.note("script/test_i2c_slave_async.py exactly (SLAVE_ADDR=0x50).")
+    if group_a_mode != "gated":
+        g.note(f"** EXPERIMENT VARIANT: 2nd START uses group_a_mode=\"{group_a_mode}\" **")
+        g.note("(design_notes.md 89.6 -- see start()'s docstring in gen_irsim_cmd_v9.py)")
     g.preamble()
 
     g.note("watch the whole transaction")
@@ -479,7 +522,7 @@ def gen_main():
         (g.h if bit else g.l)(TX[i])
     g.s(2 * T)
 
-    g.start()
+    g.start(group_a_mode=group_a_mode)
     addr_byte = (SLAVE_ADDR << 1) | 1
     g.note(f"ADDR+R = 0x{addr_byte:02X}")
     g.send_byte(addr_byte)
@@ -494,7 +537,7 @@ def gen_main():
     g.stop("after final STOP")
 
     g.raw("")
-    g.note("end of irsim_test_main.cmd")
+    g.note(f"end of {label}")
     return "\n".join(g.lines) + "\n"
 
 
@@ -607,6 +650,12 @@ if __name__ == "__main__":
     main_txt = gen_main()
     neg_txt = gen_negative()
     reset_txt = gen_reset_check()
+    # EXPERIMENT (design_notes.md 89.6): 2nd START skips Group-A QS
+    # force/release entirely, testing whether v9's re-synthesized
+    # netlist needs it at all -- see start()'s docstring. Written to a
+    # SEPARATE file so the validated baseline irsim_test_main.cmd (WRITE
+    # transaction end-to-end confirmed correct, 89.2) is untouched.
+    noforce_txt = gen_main(group_a_mode="none", label="irsim_test_main_noforce.cmd")
     # run from within script/ (matches this project's other generator scripts)
     with open("../irsim/irsim_test_main.cmd", "w") as f:
         f.write(main_txt)
@@ -614,6 +663,9 @@ if __name__ == "__main__":
         f.write(neg_txt)
     with open("../irsim/irsim_reset_check.cmd", "w") as f:
         f.write(reset_txt)
+    with open("../irsim/irsim_test_main_noforce.cmd", "w") as f:
+        f.write(noforce_txt)
     print("wrote irsim_test_main.cmd:", len(main_txt.splitlines()), "lines")
     print("wrote irsim_test_negative.cmd:", len(neg_txt.splitlines()), "lines")
     print("wrote irsim_reset_check.cmd:", len(reset_txt.splitlines()), "lines")
+    print("wrote irsim_test_main_noforce.cmd:", len(noforce_txt.splitlines()), "lines")

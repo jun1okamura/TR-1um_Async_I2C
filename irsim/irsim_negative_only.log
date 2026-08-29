@@ -1,0 +1,69 @@
+*** IRSIM 9.7.121 *** @ Wed Aug 26 17:33:39 JST 2026
+Unexpected first line: 
+
+Using default name "Vdd" for power net.
+Using default name "Gnd" for ground net.
+
+Read tr_1um_i2c_slave_async.sim lambda:1.00u format:MIT
+845 nodes; transistors: n-channel=1038 p-channel=1039 shorted=256
+parallel txtors: n-channel=2 p-channel=2
+irsim> time = 3000.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 3000.000ns
+time = 3020.000ns; there are 24 pending events
+time = 3040.000ns
+time = 3060.000ns; there are 24 pending events
+time = 3160.000ns; there are 69 pending events
+SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 3160.000ns; there are 69 pending events
+P2=1 P13=1 SDA_O=1 NC_CORE_addr_match=0 NC_CORE_busy=0 
+time = 3160.000ns; there are 69 pending events
+time = 3180.000ns; there are 69 pending events
+time = 3220.000ns; there are 71 pending events
+NC_CORE_busy=1 
+time = 3220.000ns; there are 71 pending events
+time = 3240.000ns; there are 71 pending events
+time = 3260.000ns; there are 58 pending events
+SDA_O=1 
+time = 3260.000ns; there are 58 pending events
+time = 3280.000ns
+time = 3300.000ns; there are 24 pending events
+NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 3300.000ns; there are 24 pending events
+time = 3320.000ns; there are 24 pending events
+time = 3820.000ns
+time = 3860.000ns
+time = 3880.000ns
+time = 4380.000ns
+time = 4420.000ns
+time = 4440.000ns
+time = 4940.000ns
+time = 4980.000ns
+time = 5000.000ns
+time = 5500.000ns
+time = 5540.000ns
+time = 5560.000ns
+time = 6060.000ns
+time = 6100.000ns
+time = 6120.000ns
+time = 6620.000ns
+time = 6660.000ns
+time = 6680.000ns
+time = 7180.000ns
+time = 7220.000ns
+time = 7240.000ns
+time = 7740.000ns
+time = 7780.000ns
+time = 8280.000ns
+time = 8300.000ns
+P13=1 
+time = 8300.000ns
+NC_CORE_addr_match=0 
+time = 8300.000ns
+time = 8320.000ns
+time = 8820.000ns
+time = 16820.000ns
+time = 17320.000ns
+NC_CORE_busy=0 
+time = 17320.000ns
+irsim> 

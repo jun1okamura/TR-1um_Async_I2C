@@ -15034,3 +15034,51 @@ SETTLE_NS`=500ns）が**この1箇所だけ未適用のまま**（旧`gen_irsim_
   `force_release_gated()`の要否・妥当性を再検証する実験が必要
   （ユーザーの判断待ち）。
 - test_negative修正版の再実行待ち（89.4の仮説が正しいか確認）。
+
+## 90. irsim_test_main_noforce.cmd（Group-A force/release省略の実験版）
+
+ユーザー指示：「まず何も強制せず自然な回路動作に任せる（force/release
+自体を省略する）版から試します」——89.6の実験候補のうち、まずは
+`start(first=False)`でGroup-A（24個DFFRB）の`QS`force/releaseを一切
+行わない版を試すことにした。
+
+### 90.1 89.4のnegative test修正の確認
+
+先に89.4で修正した`irsim_test_negative.cmd`単体（`irsim_negative_
+only.log`）をユーザーが実機で再実行、結果を確認：`P13=1`（正しく
+NACK）・`NC_CORE_addr_match=0`（正しく不一致）・STOP後`NC_CORE_busy=0`
+——全て期待通り。89.4の「プローブタイミングが早すぎただけ」という
+仮説が正しかったことが確認できた。
+
+### 90.2 script/gen_irsim_cmd_v9.py の変更
+
+`CmdGen.start()`に`group_a_mode`引数を追加（`"gated"`＝既存の
+`force_release_gated()`、`"plain"`＝クロックnet強制なしの単純
+`force_release()`、`"none"`＝force/release自体を省略）。`first=True`
+の分岐は変更なし（常に単純force_release、89.1の知見と整合）。
+
+`gen_main()`にも`group_a_mode`/`label`引数を追加し、既存呼び出し
+（引数無し＝`"gated"`）では出力が実質変わらないことを確認（diffで
+コメント5行の追記以外は完全一致——2回目の`start()`のコマンド列自体は
+無変更）。
+
+新規`irsim_test_main_noforce.cmd`（597行）を追加生成：2回目の
+`start()`のみ`group_a_mode="none"`（Group-Aの`QS`/クロックnet両方とも
+一切forceしない）。バス機能モデルの他の部分（WRITE transaction、
+ACK確認、STOP等）はbaseline版と同一。
+
+検証：新規ファイル含む全4個の`.cmd`が参照する63ノードは変わらず
+`tr_1um_i2c_slave_async.sim`に全て実在（未定義0件）。
+
+### 90.3 実行方法（ユーザーへ依頼）
+
+```sh
+cd irsim
+irsim TR-1um.prm tr_1um_i2c_slave_async.sim > irsim_noforce.log 2>&1 << 'EOF'
+@ irsim_test_main_noforce.cmd
+EOF
+```
+
+READトランザクションのADDR+R(`0xA1`)送信後のACK確認（`P13`）と
+`NC_CORE_rw`が、89.3の`gated`版（`P13=1`＝ACK無し、`rw=0`＝期待外れ）
+から改善するか（`P13=0`＝ACK、`rw=1`）を確認する。
