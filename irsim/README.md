@@ -6,9 +6,16 @@ tr_1um_i2c_slave_async_v9_lvs.spice`から
 [`script/gen_irsim_sim_v9.py`](../script/gen_irsim_sim_v9.py)（新規、
 旧`gen_irsim_sim.py`を置き換え）で再生成済み。ノード名が大きく変わって
 いる（下記「ノード名の注意」以降・信号対応表は**旧`.sim`基準のまま**、
-参考用に残してある）。**`irsim_test_main.cmd`等の`.cmd`ファイルは
-まだ旧ノード名のままで、新`.sim`に対しては使えない**（`gen_irsim_cmd.py`
-の再調査待ち、§87.5）。新`.sim`のトップレベル信号名は§87.4参照：
+参考用に残してある）。**`irsim_test_main.cmd`等の`.cmd`ファイルも
+[`script/gen_irsim_cmd_v9.py`](../script/gen_irsim_cmd_v9.py)（新規、旧
+`gen_irsim_cmd.py`を置き換え）で新ノード名に対応済み**（design_notes.md
+§88）。DFFRBの33インスタンスのリセットグループ構成（24＋9、4本の行
+クロックnet）は新ネットリスト上でも旧設計と完全に同じ構造であることを
+直接確認済み。`.cmd`が参照する全63ノードが実際に`.sim`に存在すること
+も突き合わせ済み。ただし実機IRSIM実行（`@ irsim_test_main.cmd`等）は
+まだ行っていない——旧`.sim`で対処が必要だった各問題（DFFRBコールド
+スタート、SDA極性、DEL1セトリング等）が新RTL上でも同様に必要かは
+未確認。新`.sim`のトップレベル信号名は§87.4参照：
 `rst_n`=`P15`、`scl`=`P2`、`sda_in`=`P13`、`sda_oe`=`SDA_O`、`DIS`=`P7`、
 `tx_data[0..7]`=`P12 P11 P5 P6 P4 P1 P3 P14`、`rx_data[0..7]`=
 `NET_0..NET_7`、`busy`/`rw`/`addr_match`/`rx_valid`=

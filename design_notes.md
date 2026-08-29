@@ -14858,3 +14858,89 @@ busy/rw/addr_match/rx_validが新ソースでは`i2c_slave_async_nrow_fm`の
 階層・合成後ネット名に対して**再調査が必要**（旧76.10-76.42相当の
 深い実機トレース作業に匹敵する規模）。ユーザーへ報告の上、続行するか
 どうかの判断を仰ぐ。
+
+## 88. IRSIM再検証：gen_irsim_cmd.pyの新ノード名対応（gen_irsim_cmd_v9.py）
+
+### 88.1 DFFRBインスタンスのリセット構造再調査
+
+`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`の`i2c_slave_async_
+nrow_fm`本体から、`... DFFRB`で終わるインスタンス行を全数grep（33個、
+`x_269_`〜`x_301_`）。`DFFRB`の仮引数順（`VDD QB D Q RSTB GND CK`）は
+固定なので、各行の5番目（RSTB）・7番目（CK）フィールドを直接読むだけ
+で（推測なし）以下を確認：
+
+- RSTBネットは2種類のみ：`_008_`（24個）／`_009_`（9個、`sda_oe_r`
+  含む）——個数が旧設計の`$28`グループ（24個）／`$227`グループ（9個）
+  と完全一致。
+- 駆動源も直接確認：`_008_` = `NOR2(NOT(rst_n), start_pulse)`（旧
+  `$28`と同じ「rst_n解放で即座に解放」構造）、`_009_` =
+  `AND2_X1(busy, rst_n)`（旧`$227`と同じ「busyが初めて1になるまで
+  解放しない」構造）。
+- `_008_`グループのCKフィールドは`scl_row0`/`scl_row1`/`scl_row2`/
+  `scl_row3`のちょうど4種類——旧設計の「4本の派生クロックnet」構造と
+  個数一致。
+
+各DFFRBインスタンス自身の`QS`ノード（サブサーキット内部の実ノード名、
+旧設計と同じく`QS`のまま）は、フラット化後`x2.<インスタンス名>.QS`
+という予測可能な形になる（`x2`＝トップでのコアインスタンス名）。
+
+### 88.2 script/gen_irsim_cmd_v9.py（新規作成）
+
+旧`gen_irsim_cmd.py`のバス機能モデルロジック（`CmdGen`クラス全体、
+`force_release()`/`force_release_gated()`の手法自体）はMyHDLテスト
+ベンチの機械的翻訳であり、ノード名に依存しないIRSIM側の一般的な制約
+（トランスミッションゲート構造、RC充電時間等）への対処なので**無変更
+で流用**。変更したのは定数のみ：
+
+- トップレベル信号（87.4節の表通り）：`RST_N=P15`、`SCL=P2`、
+  `SDA=P13`、`SDA_OE=SDA_O`、`DIS=P7`、`TX=[P12,P11,P5,P6,P4,P1,P3,
+  P14]`、`RX=[NET_0..NET_7]`、`BUSY=NC_CORE_busy`、`RW=NC_CORE_rw`、
+  `ADDR_MATCH=NC_CORE_addr_match`。
+- `DFFRB_28_INSTANCES`（24個）／`DFFRB_227_INSTANCES`（9個）：88.1で
+  特定した`x2.x_NNN_`形式のインスタンスパスに更新。
+- `DFFRB_28_CLOCK_NETS`：`["x2.scl_row0", "x2.scl_row1",
+  "x2.scl_row2", "x2.scl_row3"]`に更新。
+- コメント中の旧ノード名（`N697`/`N704`/`$813`/`$695`/`$696`等）への
+  具体的言及は、対応する新ノードが未特定のまま古い数値だけ残ると誤解
+  を招くため、一般化した記述に置き換え（技術的な結論・手法自体は
+  変更なし）。
+
+### 88.3 検証
+
+生成した3つの`.cmd`ファイル（`irsim_test_main.cmd`656行、
+`irsim_test_negative.cmd`319行、`irsim_reset_check.cmd`114行）から
+`h`/`l`/`x`/`d`/`ana`コマンドが参照する全ノード名（63個、重複除去後）
+を抽出し、`tr_1um_i2c_slave_async.sim`の実際のノード集合（844個）と
+突き合わせ。**63個全てが実在確認（未定義ノード0件）**。
+
+### 88.4 実行結果（ユーザー実機、irsim 9.7.121）
+
+`irsim TR-1um.prm tr_1um_i2c_slave_async.sim`のロード結果:
+```
+Using default name "Vdd" for power net.
+Using default name "Gnd" for ground net.
+Read tr_1um_i2c_slave_async.sim lambda:1.00u format:MIT
+845 nodes; transistors: n-channel=1038 p-channel=1039 shorted=256
+parallel txtors: n-channel=2 p-channel=2
+```
+Pythonでの集計（n=1038, p=1039, 合計2077トランジスタ）と完全一致。
+「Unexpected first line:」警告は旧`.sim`と同一のヘッダー1行目文言
+（`| units: 100 tech: scmos`）によるもので、旧セッション（§76.27で
+エンドツーエンド成功済み）でも同様に出ていた既知の無害な警告と判断。
+845ノードは自分の集計（844）と1個差だが実害なし（IRSIM内部の予約
+ノード分と推定）。`shorted=256`はFILL2/FILL3デコップリング容量セル
+（drain=source=VDD構成）由来、`parallel txtors`はDFFRBの並列バイアス
+トランジスタ由来で、いずれも異常ではない。
+
+BUFTH→BUF_X1置換も`.sim`内で直接確認（`x2.xu_bufth_scl.*`/
+`x2.xu_bufth_sda_in.*`が各4トランジスタのBUF_X1構造になっており、
+BUFTH本来の8トランジスタ帰還構造ではないことをgrepで確認）。
+
+### 88.5 残課題
+
+`irsim_test_main.cmd`等の実機実行はまだ行っていない（ユーザー側で
+`irsim TR-1um.prm tr_1um_i2c_slave_async.sim`起動後`@ irsim_reset_
+check.cmd`から順に実行予定）。旧`.sim`で発見・対処済みの各種問題
+（DFFRBコールドスタート、SDA極性、DEL1セトリング等）が、v9の再合成
+RTL・新ネットリスト上でも同様に必要か（あるいは既に解消しているか）
+は、実行結果を見るまで未確定。
