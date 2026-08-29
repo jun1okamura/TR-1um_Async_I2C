@@ -15082,3 +15082,65 @@ EOF
 READトランザクションのADDR+R(`0xA1`)送信後のACK確認（`P13`）と
 `NC_CORE_rw`が、89.3の`gated`版（`P13=1`＝ACK無し、`rw=0`＝期待外れ）
 から改善するか（`P13=0`＝ACK、`rw=1`）を確認する。
+
+## 91. irsim_test_main_noforce.cmd実行結果：force/release仮説は反証
+
+### 91.1 結果
+
+`irsim_noforce.log`を解析（`.cmd`の24個の`d`コマンドと順番通り突き
+合わせ）。WRITEトランザクション（1回目START、`group_a_mode`の影響を
+受けない`first=True`分岐）は`noforce`版でも**引き続き完全正常**
+（ACK×2、`addr_match=1`/`rw=0`、`rx_data=0xA5`一致、busy解除）。
+
+しかしREADトランザクション（2回目START、`group_a_mode="none"`＝
+force/release完全省略）は、**89.3の`gated`版と全く同じ失敗**：
+アドレス`0xA1`送信後`P13=1`（ACK無し）、`NC_CORE_rw=0`（期待1のまま）。
+
+興味深い追加観察：2回目のSTART直後（アドレスビット送信前）の
+`NC_CORE_addr_match`が**`1`のまま**（89.2のWRITEトランザクションで
+一致した際の値がforce無しなので単に保持されている——これ自体は
+`none`モードで想定通りの副作用）。それでも実際のアドレスビット
+送信後は正しい判定に更新されず、ACKも出ない。
+
+### 91.2 結論：DFFRB force/release手法自体は原因ではない
+
+`gated`（クロックnet強制あり）・`none`（force完全省略）の両方で
+**同一の失敗モード**が再現したことから、89.3で疑っていた
+「`force_release_gated()`のクロックnet強制が回路を壊している」
+という仮説は**反証された**。原因はDFFRBの`QS`強制手法そのものでは
+なく、他の要因（例えば旧設計でも実証済み・IRSIMのターナリソルバー
+の原理的限界と判明していた「STARTごとに`start_pulse`がパルスしない」
+問題、design_notes.md 76.22-76.24と同種の構造的制約）である可能性が
+高い。v9のネットリストにも`_008_ = NOR2(NOT(rst_n), start_pulse)`
+という全く同じ構造の`start_pulse`ベースのリセット機構が実在する
+（88.1）ため、同じ限界が再現していても不思議ではない。
+
+### 91.3 script/gen_irsim_debug_read_addr.py（新規、一回限りの診断用）
+
+原因箇所を特定するため、`gen_irsim_cmd_v9.py`の`CmdGen`/定数を再利用
+した専用診断スクリプトを作成。WRITEトランザクション（正常動作の
+リファレンス）から READ トランザクションの2回目STARTまで実行し、
+2回目STARTのアドレスバイト送信中、**1ビットごとに**以下の内部
+レジスタをダンプ：
+
+- `bit_cnt[0..2]`（3ビットカウンタ、`x2.bit_cnt[0..2]`）
+- `phase[0..2]`（`x2.phase[0..2]`）
+- `shreg[0..6]`（アドレス/データのシフトレジスタ、`x2.shreg[0..6]`）
+- `_008_`（Group-Aのゲートレベルリセットnet自体、`x2._008_`）
+- `start_pulse`（`x2.start_pulse`、`_008_`を駆動するNOR2の入力の一つ）
+- `addr_match`/`rw`/`busy`
+
+出力：`irsim_debug_read_addr.cmd`（639行）。参照する全78ノード
+（新規追加分含む）が`.sim`に実在することを確認済み（未定義0件）——
+`bit_cnt[0..2]`等の内部信号名の位置合わせ導出（88.1と同じ手法）が
+正しいことも同時に検証できた。
+
+### 91.4 次のステップ
+
+ユーザーに`irsim_debug_read_addr.cmd`の実行を依頼し、1回目STARTの
+アドレスビット送信時と2回目STARTのアドレスビット送信時で`bit_cnt`/
+`shreg`/`_008_`/`start_pulse`の推移がどう違うかを比較する。特に
+2回目STARTの「Group-Aリセット直後」時点で`bit_cnt`/`shreg`が本当に
+0クリアされているか（`gated`モードのforce/releaseが実際に機能して
+いるか）、そして`_008_`/`start_pulse`自体が2回目STARTで正しく動作
+しているかを直接確認する。
