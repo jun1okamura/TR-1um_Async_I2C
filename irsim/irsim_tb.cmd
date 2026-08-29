@@ -176,6 +176,7 @@ d SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 
 d P2 P13 SDA_O P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 ana P2 P13 SDA_O P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+ana x2.txreg[7] x2.txreg[6] x2.txreg[5] x2.txreg[4] x2.txreg[3] x2.txreg[2] x2.txreg[1] x2.txreg[0] 
 
 | ==================== Scenario 1: write 0xA5 ====================
 | ---- START ----

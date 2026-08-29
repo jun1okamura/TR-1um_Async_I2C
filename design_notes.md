@@ -15608,3 +15608,109 @@ cd irsim
 含めない——`irsim_tb.cmd`自身が`preamble()`でコールドスタート
 リセットを行うため単独で完結する）、生ログを`irsim_tb_run.log`に
 保存した上で`script/check_irsim_tb_log.py`を自動呼び出しする。
+
+## 101. ドキュメント・スクリプトの整理（v7→v9のドリフト解消）
+
+ユーザー依頼「`logic_cells_mapping.md`をアップデート。`LVS_clean_guide.md`
+は要りません。それ以外にも`SCRIPTS.md`等、必要なファイルをアップデート、
+要らない、もしくは古い情報やファイルは整理してください。」への対応。
+
+### 101.1 `LVS_clean_guide.md`削除
+
+v7時代（`i2c_slave_async_nrow_fm`コアセル単体、KLayout LVSのambiguous
+match切り分け）の作業ガイドで、v9でチップレベルDRC/LVSクリーンが確定した
+現在は用済み。ユーザー指示通り削除。他ファイルからの参照無し（削除前に
+grepで確認済み）。
+
+### 101.2 `logic_cells_mapping.md`をv9基準に全面更新
+
+- 参照ネットリストを`i2c_slave_async_net_v7.v`（154インスタンス）から
+  `i2c_slave_async_net_v9_rowbuf.v`（135インスタンス、`gen_lvs_spice_v9.py`
+  が実際に読むファイル）に更新。
+- セル一覧：LEFの実際のMACRO数を数え直し、23→**29マクロ**に更新
+  （`AND3_X1`/`AND4_X1`/`XOR2`/`XNOR2`/`DFFS`が、旧版で「Liberty上のみの
+  プレースホルダ」だったところから物理LEF/GDSまで作成済みに進んでいた
+  ことを`grep "^MACRO"`で確認・反映。ただしいずれも現行ネットリストでは
+  未使用のまま）。Liberty専用プレースホルダは`DEL2`/`DEL4`のみに縮小。
+- セル使用数表を実際に`i2c_slave_async_net_v9_rowbuf.v`をgrepして再集計
+  （DFFRB33/MUX2 24/NAND2 22/NOR2 15/NOR3 8/BUF_X1 8/INV_X1 6/OR2 5/
+  NAND3 3/OR4 2/NOR4 2/BUFTH 2/AND2_X1 2/OR3 1/DEL1 1/AND4_X1 1、
+  合計135）。DFFRBの24+9リセットグループ構成もこのセッション前半で
+  確認済みの構造と一致することを明記。
+- **BUFTHの実態を正確に記載**：実レイアウト/LVSネットリストには本物の
+  BUFTHが2個存在し続けている（削除・置換されたわけではない）。
+  「BUFTHは動かないのでBUF_X1に置き換え」たのは**IRSIMの`.sim`生成時
+  限定**（`gen_irsim_sim_v9.py`の`substitute_bufth_with_buf_x1()`、
+  IRSIMのternaryスイッチレベルソルバが帰還ループを解けない恒久的制限
+  のため）であり、実シリコンの欠陥ではないことを明記——旧版はこの
+  区別が無く誤解を招く記述だった。
+- DFFRBのQM/QS非対称構造（本セッション§89-96で確立した知見）への
+  参照を追加。
+
+### 101.3 `SCRIPTS.md`を52本構成に全面更新
+
+現行`script/`は52本（101.4の削除後）。旧版は30本時点の記述のまま
+固まっていた。v8/v9で追加されたが未文書化だったスクリプト19本
+（`add_hiz_vss_ties_v9.py`, `add_power_pins_nrow_fm.py`,
+`add_top_pins_gio_v9.py`, `analyze_dffrb_reset_tb.py`,
+`assemble_top_v9.py`, `build_tr1um_prm.py`, `check_irsim_tb_log.py`,
+`dedup_gates.py`, `fix_v9_remaining_shorts.py`, `gen_dffrb_reset_tb.py`,
+`gen_irsim_cmd_v9.py`, `gen_irsim_sim_v9.py`,
+`gen_irsim_verilog_equiv_tb.py`, `gen_lvs_spice_top_v9.py`,
+`gen_lvs_spice_v9.py`, `gen_prm_characterize.py`, `route_gio_core_v9.py`,
+`run_v9_step7_squeeze_step6_toppins.py`, `set_top_pin_text_size.py`）を
+新規セクション追加または既存表への追記で文書化。v7版のみ現役参照される
+もの（`gen_schematic_v7.py`は`verify_schematic_v7.py`が動的importで
+直接依存しているため現役）と、歴史的経緯として残すもの（`route_gio_core.py`
+等）を区別して明記。
+
+### 101.4 一回限りデバッグ・実験スクリプト、対応する生成物一式を削除
+
+git履歴には残るため、SCRIPTS.mdの既存の削除ポリシー（52本を過去に
+まとめて削除済み）と同じ基準で追加削除:
+
+- v7時代のIRSIM `.sim`/`.cmd`生成器: `gen_irsim_sim.py`, `gen_irsim_cmd.py`
+  （v9対応の`_v9`版に置換済み）
+- v7時代のIRSIM READ/SDA/BUFTHバグ調査の一回限り診断スクリプト15本
+  （`gen_irsim_debug_{addrmatch,addrmatch2,bitcnt,dffrb2,n123n235,n23,
+  n697,phase,rstb,rw2,rwmargin,sdaoe,shreg,shregclk,stop}.py`）と、
+  対応する生成物`irsim_debug_*.cmd`一式（同名＋`busy_chain`/`dffrb`/
+  `pad_internal`/`rw_addrmatch`/`sda_pad`/`start`/`stop_v2`など、
+  対応スクリプトが既に無い手打ち一回限り`.cmd`も含む）
+- v9のREADバグ調査で使った`gen_irsim_debug_read_addr.py`と、対応する
+  `irsim_debug_read_addr.cmd`/`.log`〜`.log`5（根本原因はQM/QS force/release
+  手法の確立で解消済み、経緯は§89-96に記録済み）
+- BUFTH単体切り分け用`bufth_isolated*.cmd/.sim`、`sanity_check.sim`
+  （使い捨ての動作確認用一回限り成果物）
+- v9配置配線パラメータ探索の実現可能性プローブ5本
+  （`test_fixed1620_route.py`, `test_ngaps2_placement.py`,
+  `test_ngaps2_route.py`, `test_nrows5_route.py`,
+  `test_v4_1620_route.py`）——採用パラメータは§77.x系列に記録済みで、
+  現行`gen_placement_nrow_fm.py`等への引数として反映済み
+- v7時代の中間デバッグログ4本（`irsim_batch_run.log`,
+  `irsim_negative_only.log`, `irsim_noforce.log`,
+  `irsim_test_main_v2.log`）——いずれも自己検証型テストベンチ
+  `irsim_tb.cmd`/`irsim_tb.log`に内容として統合済み
+
+削除前に全対象をgrepし、現行パイプラインのスクリプトから一切import
+されていないことを確認済み（`verify_schematic_v7.py`が`gen_schematic_v7.py`
+を動的importしている等の依存関係は事前に洗い出し、削除対象から除外）。
+
+### 101.5 `README.md`のv9反映
+
+ステータス表に「IRSIMチップレベル動作検証（V9最終チップnetlist）」行を
+新規追加し、全14チェックPASSEDの実機確認結果を明記。v7時点で「V8で
+修正予定」としていた既知の問題2件（READアドレス取り込みの同一エッジ
+レース、`sda_oe`極性）を「修正済み・v9 IRSIM実機検証で無事故確認」に
+書き換え。ファイル構成節の`script/`説明をv9スクリプト（`gen_irsim_sim_v9.py`
+等）基準に更新し、スクリプト本数を30→52に修正。design_notes節数を
+86→100に修正し、§87-100の区切りを参考節リストに追記。「実行方法」に
+IRSIM実機実行（`run_tb.sh`）の節を新規追加。
+
+### 101.6 `irsim/README.md`の軽微な修正
+
+`sanity_check.sim`を「まず試すと良い」と推奨していた記述が、101.4の
+削除で参照切れになったため、使い捨て成果物として既に削除済みである旨
+に書き換え（IRSIM公式チュートリアル例を必要なら手元で再作成する形に
+変更）。それ以外の部分（v9移行済みの記述、旧v7セクションの扱い）は
+既に最新化されており修正不要だった。

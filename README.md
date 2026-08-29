@@ -26,6 +26,7 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 | IRSIMチップレベル動作検証（実`TR-1um.prm`下） | WRITEトランザクション（START〜STOP）完全動作確認済み。READトランザクションで`rw`/`addr_match`取り込みの同一エッジレース、および`sda_oe`⇔パッド`HIZ13`間の極性不一致を発見——**V8**でRTLレベルの根本修正へ（design_notes §76.29〜76.48, §77） |
 | **V8**（RTL根本修正: ウォーキングワン化 + sda_oe極性反転） | Verilog検証（iverilog+MyHDL）・NET合成 完了。**DFFSなし版**（`i2c_slave_async_net_v8.v`系、186インスタンス、DFFRB×37/DFFS×0）を正式版として採用。配置配線STEP1〜3完了＋残り短絡3件を手動修正し`v8_step_4_manual_short_fix.gds`でDRC 0・短絡0を達成（design_notes §77.16）。STEP6（トップピン引き出し）・STEP7（チャネル圧縮、圧縮スクリプト自体の3件のバグを根本修正）も完了、`layout/step8/v8_step_8_squeezed_top_pins_routed.gds`でDRC 0・短絡0・コア高さ-41.8%（2288.8→1333.0um）（design_notes §77.17〜77.18）。VDD/VSSトップピン追加（TAPセルM2/M1のBBOX端、5列20個のM2ピン＋左右列16個のM1ピン）も完了、**`layout/step8/v8_step_9_power_pins_added.gds`でDRC 0・信号短絡0・電源net（VDD/GND各1連結成分、共有0）を確認**（design_notes §77.20）。DFFS許可版（行幅2538um、短絡5件）は保留。 |
 | **V9**（DFFS許可・コア再配置配線、GIO再結線） | コアの配置配線をやり直し（`route_gio_core_v9.py`によるGIO⇔コア結線・電源メッシュ再構築）。DRC 0違反を達成した最終物理設計を`src/tr_1um_i2c_slave_async.gds`に確定（design_notes §79）。チップレベルLVS用SPICE生成（GIO実SPICE＋コアLVSクリーンSPICE＋`gio_connections.json`から機械生成、design_notes §80〜82）を経て、以下3つの実バグを発見・修正: (1) スキーマティック・レイアウト双方でチップTOP PIN（P1〜P7/VSS/P9〜P15/VDD、16本）が未宣言だった問題（design_notes §82〜83）、(2) `route_gio_core_v9.py`の電源配線書き直しでHIZ2/HIZ7/HIZ9/HIZ10/HIZ15/OUT13のVDD/VSS固定タイ結線が丸ごと欠落していた問題（design_notes §84）、(3) `gio_connections.json`のP11記載ミス（実際はcore.tx_data[1]に接続済みなのに誤って未接続と記載）でLVS参照ネットリストが実レイアウトと食い違っていた問題（design_notes §85）。**これら全ての修正後、ユーザー実機KLayoutでのチップレベルDRC/LVS確認で最終的にクリーンを達成**（design_notes §85.6, §86）。 |
+| **IRSIMチップレベル動作検証（V9最終チップnetlist）** | DRC/LVSクリーン済みの`tr_1um_i2c_slave_async.extracted`をトランジスタレベルまでフラット化（2077トランジスタ・845ノード、design_notes §87）。`DFFRB`のQM（マスタ）/QS（スレーブ）両記憶ノードをクロックHIGH時に強制する実行時リセット手法を確立し、READトランザクションの不具合を根本解決（design_notes §89〜96）。`src/i2c_slave_async_tb.v`と1対1対応する自己検証型IRSIMテストベンチ（WRITE 0xA5／READ 0x3C／誤アドレスNACKの3シナリオ・14チェック）を実チップ上で実行し、**Verilog版と完全一致する`All 14 checks PASSED`を実機IRSIMで確認**（design_notes §97〜100）。実行は`irsim/run_tb.sh`一発で完結（詳細は[`irsim/README.md`](./irsim/README.md)）。 |
 
 **最終レイアウト成果物（V9、トップレベル・チップ全体）**:
 [`src/tr_1um_i2c_slave_async.gds`](./src/tr_1um_i2c_slave_async.gds)
@@ -76,21 +77,26 @@ schematic/
 FRAME/
   TR-1um_frame_25x25.gds     チップフレーム（IOパッド・ESD・GIOセル等）のGDS
 script/
-  route_gio_core.py          GIO⇔コア間の結線ルータ（20信号+VDD/VSS、再現可能）
-  reassemble_top.py           FRAME GDS変更を反映してトップGDSのGIOセルを差し替え
-  gen_irsim_sim.py            チップ全体をトランジスタレベルまで再帰フラット化し
-                              IRSIM用`.sim`を生成（design_notes §76）
-  gen_irsim_cmd.py            既存MyHDLテストベンチと同一シナリオをIRSIM刺激
-                              スクリプト（`.cmd`）へ機械的に翻訳
-  他、配置配線・DRC/接続性検証・LVS準備スクリプト一式（全30本、詳細は
-  [`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複スクリプトは削除済み。
-irsim/                        IRSIMチップレベル動作検証一式（`.sim`/`.cmd`、詳細は
+  route_gio_core_v9.py        v9版GIO⇔コア間の結線ルータ（24信号+VDD/VSS、再現可能）
+  assemble_top_v9.py          v9トップレベルGDSの骨格構築（GIO+コア+PTECT配置）
+  gen_irsim_sim_v9.py         DRC/LVSクリーン済みチップ全体をトランジスタレベルまで
+                              再帰フラット化しIRSIM用`.sim`を生成（design_notes §87）
+  gen_irsim_cmd_v9.py         IRSIM刺激スクリプト生成の共通基盤（force/release手法含む）
+  gen_irsim_verilog_equiv_tb.py
+                              Verilog版テストベンチと1対1対応する自己検証型IRSIM
+                              テストベンチを生成（design_notes §98）
+  他、配置配線・DRC/接続性検証・LVS準備・IRSIM検証スクリプト一式（全52本、
+  詳細は[`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複・解消済み
+  バグの一回限りデバッグスクリプトは削除済み（v7版のGDS/GIOルータ等、
+  一部は現行v9パイプラインの前例・依存として残置）。
+irsim/                        IRSIMチップレベル動作検証一式（`.sim`/`.cmd`、自己検証型
+                              テストベンチ`irsim_tb.cmd`＋一発実行`run_tb.sh`、詳細は
                               [`irsim/README.md`](./irsim/README.md)）
 references/                  UM10204仕様書、DRCサマリ資料
 TR1um_5_stdcell.lib          Yosys用Liberty（タイミング未特性化のプレースホルダ）
-logic_cells_mapping.md       RTL論理→スタンダードセル対応表
-design_notes.md              設計ノート本体（RTL設計からIRSIMチップレベル検証・V8計画まで
-                              全77節、詳細記録）
+logic_cells_mapping.md       RTL論理→スタンダードセル対応表（v9現行ネットリスト基準）
+design_notes.md              設計ノート本体（RTL設計からv9チップレベルIRSIM動作検証
+                              完了まで全100節、詳細記録）
 ```
 
 ## 特徴 / 既知の制限（RTL）
@@ -100,14 +106,16 @@ design_notes.md              設計ノート本体（RTL設計からIRSIMチッ�
 - 7bitアドレッシングのみ（10bit未対応）
 - クロックストレッチ未対応（本スレーブはSCLを駆動しない）
 - 受信データは常にACKする設計（アプリ側NACKは未実装、拡張ポイントとして記載）
-- **既知の問題（V8で修正予定、design_notes §77）**:
+- **v7時点で発見され、V8/V9で修正済みの問題**（design_notes §77）:
   - READアドレスバイト取り込み時、`bit_cnt`の自己リセットと`rw`/
     `addr_match`の取り込みが同一SCLエッジ・同一組み合わせパスを共有する
-    同一エッジレースあり（実測`TR-1um.prm`下のIRSIM検証で発見、
-    §76.43〜76.47）。ウォーキングワン方式への置き換えで根本解消予定。
-  - コアの`sda_oe`出力とSDAパッド`HIZ13`入力の間で極性が逆（§76.17〜
-    76.18）。実シリコンのままではアイドル/リセット時にSDAを能動的に
-    LOW駆動し続けてしまう。RTL側での出力極性反転で修正予定。
+    同一エッジレースがあった（実測`TR-1um.prm`下のIRSIM検証で発見、
+    §76.43〜76.47）。ウォーキングワン方式への置き換えで根本解消。
+  - コアの`sda_oe`出力とSDAパッド`HIZ13`入力の間で極性が逆だった
+    （§76.17〜76.18）。RTL側での出力極性反転で修正済み。
+  - V9チップレベルのIRSIM実機検証（design_notes §87〜100）で、
+    WRITE/READ/誤アドレスNACKの3シナリオ・14チェック全てが
+    Verilog版と一致することを確認済み。現時点で既知の未解決バグは無い。
 
 ## 物理設計（配置配線）の概要
 
@@ -238,11 +246,26 @@ python3 gen_schematic_v7.py       # v7ネットリスト → schematic/i2c_slave
 python3 verify_schematic_v7.py    # 幾何学的接続検証（xschem不要）
 ```
 
+### IRSIMチップレベル動作検証（v9、実機実行）
+
+DRC/LVSクリーン済みチップ全体netlistをそのままトランジスタレベルで
+IRSIM実行し、Verilog版テストベンチと同じ3シナリオ・14チェックを
+自動判定できる。実行環境（IRSIM本体）が必要なため、`.sim`/`.cmd`は
+事前生成済みのものを使い、実行そのものはローカルで行う:
+
+```sh
+cd irsim
+./run_tb.sh              # 実行＋自動PASS/FAIL判定を1コマンドで
+```
+
+詳細・波形（アナライザ）の見方は[`irsim/README.md`](./irsim/README.md)参照。
+
 ## 参考
 
 - 設計・実装の全記録（RTLのステートマシン設計、UM10204各節との対応、
-  論理合成、配置配線の全試行錯誤、DRC/LVSクリア化、トップレベル統合まで）は
-  [`design_notes.md`](./design_notes.md)（全86節）を参照。主な区切り:
+  論理合成、配置配線の全試行錯誤、DRC/LVSクリア化、トップレベル統合、
+  v9チップレベルIRSIM動作検証完了まで）は
+  [`design_notes.md`](./design_notes.md)（全100節）を参照。主な区切り:
   - §1〜11: RTL設計・検証・xschem回路図
   - §12〜38: 物理実装環境の構築、配置配線の試行錯誤（複数世代）
   - §39〜46: セル再構築、バッファ挿入、DRC/短絡の系統的解消
@@ -270,4 +293,15 @@ python3 verify_schematic_v7.py    # 幾何学的接続検証（xschem不要）
     に接続済みなのに誤って未接続と記載）の発見・修正、**チップレベル
     DRC/LVSクリーン達成**
   - §86: TOP PINラベルのテキストサイズ調整
-- 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)
+  - §87〜88: v9チップレベルIRSIM再検証（新`.sim`/`.cmd`生成、ノード名
+    再導出）
+  - §89〜96: READトランザクション不具合の根本原因調査・修正——
+    `DFFRB`のQM（マスタ）/QS（スレーブ）両記憶ノードをクロックHIGH時に
+    強制する実行時リセット手法の確立
+  - §97: WRITE(0xA5)＋READ(0x3C)＋誤アドレスNACKのフルトランザクション
+    end-to-end成功
+  - §98〜99: `src/i2c_slave_async_tb.v`と1対1対応する自己検証型IRSIM
+    テストベンチの構築・実機確認（`All 14 checks PASSED`）
+  - §100: 検証結果表示のVerilog版書式統一、一発実行`run_tb.sh`追加
+- 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)（v9
+  現行ネットリスト基準に更新済み）
