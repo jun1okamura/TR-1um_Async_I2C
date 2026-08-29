@@ -15531,3 +15531,21 @@ EOF
 `script/check_irsim_tb_log.py irsim/irsim_tb.log irsim/
 irsim_tb_expected.json`を実行し、Verilog版と同じ形式のPASS/FAIL
 サマリを直接報告する（毎回手動でログを読み解く必要がなくなった）。
+
+## 99. irsim_tb.cmd 実機実行：Verilog版と同等の14チェック全PASS
+
+`irsim/irsim_tb.log`（実機IRSIM 9.7.121での`irsim_tb.cmd`実行結果）を
+`script/check_irsim_tb_log.py`で自動照合：
+
+```
+All 14 checks PASSED
+```
+
+`src/i2c_slave_async_tb.v`／`i2c_slave_async_net_tb.v`が検証する
+WRITE(0xA5)／READ(0x3C)／誤アドレスNACKの3シナリオ・14チェック全てが、
+v9チップレベルnetlist（`tr_1um_i2c_slave_async.sim`、2077トランジスタ・
+845ノード）のIRSIMスイッチレベルシミュレーション上でも、Verilog RTL/
+ゲートレベルシミュレーションと同じ結果になることを実機確認した。
+87節から続いたIRSIM再検証（新.sim生成→新.cmd生成→READトランザクション
+不具合の原因調査・修正→Verilog版相当の自己検証テストベンチ整備）が
+完了。
