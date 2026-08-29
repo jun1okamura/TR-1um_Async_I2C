@@ -89,6 +89,30 @@ l x2.x_298_.QS
 l x2.x_299_.QS
 l x2.x_300_.QS
 l x2.x_301_.QS
+l x2.x_269_.QM
+l x2.x_270_.QM
+l x2.x_271_.QM
+l x2.x_272_.QM
+l x2.x_273_.QM
+l x2.x_274_.QM
+l x2.x_275_.QM
+l x2.x_276_.QM
+l x2.x_285_.QM
+l x2.x_286_.QM
+l x2.x_287_.QM
+l x2.x_288_.QM
+l x2.x_289_.QM
+l x2.x_290_.QM
+l x2.x_291_.QM
+l x2.x_292_.QM
+l x2.x_294_.QM
+l x2.x_295_.QM
+l x2.x_296_.QM
+l x2.x_297_.QM
+l x2.x_298_.QM
+l x2.x_299_.QM
+l x2.x_300_.QM
+l x2.x_301_.QM
 s
 x x2.x_269_.QS
 x x2.x_270_.QS
@@ -114,6 +138,30 @@ x x2.x_298_.QS
 x x2.x_299_.QS
 x x2.x_300_.QS
 x x2.x_301_.QS
+x x2.x_269_.QM
+x x2.x_270_.QM
+x x2.x_271_.QM
+x x2.x_272_.QM
+x x2.x_273_.QM
+x x2.x_274_.QM
+x x2.x_275_.QM
+x x2.x_276_.QM
+x x2.x_285_.QM
+x x2.x_286_.QM
+x x2.x_287_.QM
+x x2.x_288_.QM
+x x2.x_289_.QM
+x x2.x_290_.QM
+x x2.x_291_.QM
+x x2.x_292_.QM
+x x2.x_294_.QM
+x x2.x_295_.QM
+x x2.x_296_.QM
+x x2.x_297_.QM
+x x2.x_298_.QM
+x x2.x_299_.QM
+x x2.x_300_.QM
+x x2.x_301_.QM
 s
 s 100
 | check: still defined immediately after release
@@ -146,6 +194,15 @@ l x2.x_282_.QS
 l x2.x_283_.QS
 l x2.x_284_.QS
 l x2.x_293_.QS
+l x2.x_277_.QM
+l x2.x_278_.QM
+l x2.x_279_.QM
+l x2.x_280_.QM
+l x2.x_281_.QM
+l x2.x_282_.QM
+l x2.x_283_.QM
+l x2.x_284_.QM
+l x2.x_293_.QM
 s
 x x2.x_277_.QS
 x x2.x_278_.QS
@@ -156,6 +213,15 @@ x x2.x_282_.QS
 x x2.x_283_.QS
 x x2.x_284_.QS
 x x2.x_293_.QS
+x x2.x_277_.QM
+x x2.x_278_.QM
+x x2.x_279_.QM
+x x2.x_280_.QM
+x x2.x_281_.QM
+x x2.x_282_.QM
+x x2.x_283_.QM
+x x2.x_284_.QM
+x x2.x_293_.QM
 s
 | check: sda_oe now holds a defined value instead of X
 d SDA_O
@@ -209,6 +275,30 @@ l x2.x_298_.QS
 l x2.x_299_.QS
 l x2.x_300_.QS
 l x2.x_301_.QS
+l x2.x_269_.QM
+l x2.x_270_.QM
+l x2.x_271_.QM
+l x2.x_272_.QM
+l x2.x_273_.QM
+l x2.x_274_.QM
+l x2.x_275_.QM
+l x2.x_276_.QM
+l x2.x_285_.QM
+l x2.x_286_.QM
+l x2.x_287_.QM
+l x2.x_288_.QM
+l x2.x_289_.QM
+l x2.x_290_.QM
+l x2.x_291_.QM
+l x2.x_292_.QM
+l x2.x_294_.QM
+l x2.x_295_.QM
+l x2.x_296_.QM
+l x2.x_297_.QM
+l x2.x_298_.QM
+l x2.x_299_.QM
+l x2.x_300_.QM
+l x2.x_301_.QM
 s
 x x2.x_269_.QS
 x x2.x_270_.QS
@@ -234,6 +324,30 @@ x x2.x_298_.QS
 x x2.x_299_.QS
 x x2.x_300_.QS
 x x2.x_301_.QS
+x x2.x_269_.QM
+x x2.x_270_.QM
+x x2.x_271_.QM
+x x2.x_272_.QM
+x x2.x_273_.QM
+x x2.x_274_.QM
+x x2.x_275_.QM
+x x2.x_276_.QM
+x x2.x_285_.QM
+x x2.x_286_.QM
+x x2.x_287_.QM
+x x2.x_288_.QM
+x x2.x_289_.QM
+x x2.x_290_.QM
+x x2.x_291_.QM
+x x2.x_292_.QM
+x x2.x_294_.QM
+x x2.x_295_.QM
+x x2.x_296_.QM
+x x2.x_297_.QM
+x x2.x_298_.QM
+x x2.x_299_.QM
+x x2.x_300_.QM
+x x2.x_301_.QM
 s
 | check: phase/bit_cnt-owning registers cleared (rw/addr_match are
 | in this same Group-A, so also visible here)
@@ -242,7 +356,7 @@ d NC_CORE_rw NC_CORE_addr_match
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 | ADDR+W = 0xA0
 s
 l P2
@@ -254,7 +368,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -265,7 +379,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 x P13
@@ -276,7 +390,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -287,7 +401,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -298,7 +412,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -309,7 +423,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -320,7 +434,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -331,7 +445,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 l P2
 x P13
 s 500
@@ -345,7 +459,7 @@ l P2
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 x P13
@@ -430,7 +544,7 @@ d NC_CORE_busy
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 | ==================== READ TRANSACTION (broken) ====================
 l P12
 l P11
@@ -515,9 +629,33 @@ l x2.x_298_.QS
 l x2.x_299_.QS
 l x2.x_300_.QS
 l x2.x_301_.QS
+l x2.x_269_.QM
+l x2.x_270_.QM
+l x2.x_271_.QM
+l x2.x_272_.QM
+l x2.x_273_.QM
+l x2.x_274_.QM
+l x2.x_275_.QM
+l x2.x_276_.QM
+l x2.x_285_.QM
+l x2.x_286_.QM
+l x2.x_287_.QM
+l x2.x_288_.QM
+l x2.x_289_.QM
+l x2.x_290_.QM
+l x2.x_291_.QM
+l x2.x_292_.QM
+l x2.x_294_.QM
+l x2.x_295_.QM
+l x2.x_296_.QM
+l x2.x_297_.QM
+l x2.x_298_.QM
+l x2.x_299_.QM
+l x2.x_300_.QM
+l x2.x_301_.QM
 s
 | probe: QS nodes right after forcing (clock still forced low)
-d x2.x_270_.QS x2._147_[0] x2.bit_cnt[0]
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 x x2.x_269_.QS
 x x2.x_270_.QS
 x x2.x_271_.QS
@@ -542,16 +680,40 @@ x x2.x_298_.QS
 x x2.x_299_.QS
 x x2.x_300_.QS
 x x2.x_301_.QS
+x x2.x_269_.QM
+x x2.x_270_.QM
+x x2.x_271_.QM
+x x2.x_272_.QM
+x x2.x_273_.QM
+x x2.x_274_.QM
+x x2.x_275_.QM
+x x2.x_276_.QM
+x x2.x_285_.QM
+x x2.x_286_.QM
+x x2.x_287_.QM
+x x2.x_288_.QM
+x x2.x_289_.QM
+x x2.x_290_.QM
+x x2.x_291_.QM
+x x2.x_292_.QM
+x x2.x_294_.QM
+x x2.x_295_.QM
+x x2.x_296_.QM
+x x2.x_297_.QM
+x x2.x_298_.QM
+x x2.x_299_.QM
+x x2.x_300_.QM
+x x2.x_301_.QM
 s
 | probe: QS nodes right after releasing QS (clock still forced low)
-d x2.x_270_.QS x2._147_[0] x2.bit_cnt[0]
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 x x2.scl_row0
 x x2.scl_row1
 x x2.scl_row2
 x x2.scl_row3
 s
 | probe: QS nodes right after releasing clock nets too
-d x2.x_270_.QS x2._147_[0] x2.bit_cnt[0]
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 | check: phase/bit_cnt-owning registers cleared (rw/addr_match are
 | in this same Group-A, so also visible here)
 d NC_CORE_rw NC_CORE_addr_match
@@ -559,7 +721,7 @@ d NC_CORE_rw NC_CORE_addr_match
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 | ADDR+R = 0xA1
 s
 l P2
@@ -571,7 +733,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -582,7 +744,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 x P13
@@ -593,7 +755,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -604,7 +766,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -615,7 +777,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -626,7 +788,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 l P13
@@ -637,7 +799,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 x P13
@@ -648,7 +810,7 @@ s 40
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 l P2
 x P13
 s 500
@@ -660,7 +822,7 @@ d P13
 d x2.bit_cnt[0] x2.bit_cnt[1] x2.bit_cnt[2] x2.phase[0] x2.phase[1] x2.phase[2] x2._008_ x2.start_pulse
 d x2.shreg[0] x2.shreg[1] x2.shreg[2] x2.shreg[3] x2.shreg[4] x2.shreg[5] x2.shreg[6]
 d NC_CORE_addr_match NC_CORE_rw NC_CORE_busy
-d x2.x_270_.QS x2._147_[0] x2._058_
+d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2._058_
 s
 l P2
 

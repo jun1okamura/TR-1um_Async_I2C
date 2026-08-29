@@ -123,6 +123,32 @@ def dffrb_qs(inst):
     return f"{inst}.QS"
 
 
+def dffrb_qm(inst):
+    return f"{inst}.QM"
+
+
+def dffrb_state_nodes(insts):
+    """Both master AND slave storage nodes for each instance, flattened
+    to a single list suitable for force_release()/force_release_gated().
+
+    design_notes.md 94.1's QS/QB/D probe found the ROOT CAUSE of the
+    bit_cnt[0] corruption: forcing QS alone is not enough for a mid-run
+    (non-cold-start) reset. A real run showed QS correctly forced to 0,
+    and STILL 0 right after being released (while the clock nets were
+    still held low) -- but the INSTANT the clock nets were released back
+    to the real network, QS flipped straight back to 1. The master
+    latch's own storage node, QM, was never touched by the old code (it
+    only forced QS) -- once the clock returns to a level where the
+    QM<->QS transmission gate is transparent, QM's own STALE
+    pre-reset value overwrites the QS value we just forced, undoing it.
+    bit_cnt[1]/bit_cnt[2]/rw/addr_match were never seen to have this
+    problem simply because their OWN stale QM values already happened to
+    be 0 (the desired reset value) after the preceding WRITE transaction
+    -- not because they're structurally immune. Fix: force/release BOTH
+    QM and QS together everywhere a DFFRB gets reset."""
+    return [dffrb_qs(i) for i in insts] + [dffrb_qm(i) for i in insts]
+
+
 # The Group-A (24-instance) DFFRBs split across 4 distinct derived CK
 # nets (each instance's own CK field, read directly off its instance
 # line -- design_notes.md 88.1): addr_match/rw/phase[0..2] on
@@ -313,7 +339,7 @@ class CmdGen:
         self.note("9 Group-B instances (RSTB=\"_009_\"=busy AND rst_n, incl. sda_oe's)")
         self.note("only release once busy actually goes high, so those get the same")
         self.note("treatment in start(), right after the first START condition.")
-        self.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
+        self.force_release(dffrb_state_nodes(DFFRB_28_INSTANCES), value=0)
         self.s(5 * T)
         self.note("check: still defined immediately after release")
         self.d(SDA_OE, BUSY, RW, ADDR_MATCH)
@@ -355,7 +381,7 @@ class CmdGen:
             self.note("deadlock as Group-A in preamble() -- see 76.13 -- give them")
             self.note("the same one-time force/release now that Group-B has actually")
             self.note("released.")
-            self.force_release([dffrb_qs(i) for i in DFFRB_227_INSTANCES], value=0)
+            self.force_release(dffrb_state_nodes(DFFRB_227_INSTANCES), value=0)
             self.note("check: sda_oe now holds a defined value instead of X")
             self.d(SDA_OE)
         self.note("The core's phase/bit_cnt/shreg/addr_ok/rw_bit register bank is")
@@ -385,7 +411,7 @@ class CmdGen:
             self.note("QS's transmission gates are still X-gated (genuinely floating),")
             self.note("same as preamble()'s cold-start fix -- plain force_release() is")
             self.note("valid here.")
-            self.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
+            self.force_release(dffrb_state_nodes(DFFRB_28_INSTANCES), value=0)
         elif group_a_mode == "none":
             self.note("NOT the first START, group_a_mode=\"none\" (EXPERIMENT,")
             self.note("design_notes.md 89.6): skipping Group-A QS force/release")
@@ -401,7 +427,7 @@ class CmdGen:
             self.note("NOT the first START, group_a_mode=\"plain\" (EXPERIMENT):")
             self.note("force_release() on QS only, no clock-net forcing -- the OLD")
             self.note("design's pre-76.41 technique, not yet tried on this netlist.")
-            self.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
+            self.force_release(dffrb_state_nodes(DFFRB_28_INSTANCES), value=0)
         else:
             self.note("NOT the first START: real SCL clocking has already happened")
             self.note("in an earlier transaction, so Group-A's own row-clock nets")
@@ -422,7 +448,7 @@ class CmdGen:
             self.note("group_a_mode=\"none\" experiment testing whether this forcing")
             self.note("is even still necessary on v9's re-synthesized netlist.")
             self.force_release_gated(
-                [dffrb_qs(i) for i in DFFRB_28_INSTANCES],
+                dffrb_state_nodes(DFFRB_28_INSTANCES),
                 DFFRB_28_CLOCK_NETS, value=0, probe=debug_probe)
         self.note("check: phase/bit_cnt-owning registers cleared (rw/addr_match are")
         self.note("in this same Group-A, so also visible here)")
@@ -652,7 +678,7 @@ def gen_reset_check():
     g.h(RST_N)
     g.s()
     g.note("---- Group-A DFFRBs (24 incl. rw/addr_match) force/release ----")
-    g.force_release([dffrb_qs(i) for i in DFFRB_28_INSTANCES], value=0)
+    g.force_release(dffrb_state_nodes(DFFRB_28_INSTANCES), value=0)
     g.s(5 * T)
     g.note("---- reset released ----")
     g.d(SDA, SDA_OE, BUSY, RW, ADDR_MATCH)

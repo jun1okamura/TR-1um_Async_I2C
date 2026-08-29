@@ -85,6 +85,30 @@ l x2.x_298_.QS
 l x2.x_299_.QS
 l x2.x_300_.QS
 l x2.x_301_.QS
+l x2.x_269_.QM
+l x2.x_270_.QM
+l x2.x_271_.QM
+l x2.x_272_.QM
+l x2.x_273_.QM
+l x2.x_274_.QM
+l x2.x_275_.QM
+l x2.x_276_.QM
+l x2.x_285_.QM
+l x2.x_286_.QM
+l x2.x_287_.QM
+l x2.x_288_.QM
+l x2.x_289_.QM
+l x2.x_290_.QM
+l x2.x_291_.QM
+l x2.x_292_.QM
+l x2.x_294_.QM
+l x2.x_295_.QM
+l x2.x_296_.QM
+l x2.x_297_.QM
+l x2.x_298_.QM
+l x2.x_299_.QM
+l x2.x_300_.QM
+l x2.x_301_.QM
 s
 x x2.x_269_.QS
 x x2.x_270_.QS
@@ -110,6 +134,30 @@ x x2.x_298_.QS
 x x2.x_299_.QS
 x x2.x_300_.QS
 x x2.x_301_.QS
+x x2.x_269_.QM
+x x2.x_270_.QM
+x x2.x_271_.QM
+x x2.x_272_.QM
+x x2.x_273_.QM
+x x2.x_274_.QM
+x x2.x_275_.QM
+x x2.x_276_.QM
+x x2.x_285_.QM
+x x2.x_286_.QM
+x x2.x_287_.QM
+x x2.x_288_.QM
+x x2.x_289_.QM
+x x2.x_290_.QM
+x x2.x_291_.QM
+x x2.x_292_.QM
+x x2.x_294_.QM
+x x2.x_295_.QM
+x x2.x_296_.QM
+x x2.x_297_.QM
+x x2.x_298_.QM
+x x2.x_299_.QM
+x x2.x_300_.QM
+x x2.x_301_.QM
 s
 s 100
 | check: still defined immediately after release
@@ -141,6 +189,15 @@ l x2.x_282_.QS
 l x2.x_283_.QS
 l x2.x_284_.QS
 l x2.x_293_.QS
+l x2.x_277_.QM
+l x2.x_278_.QM
+l x2.x_279_.QM
+l x2.x_280_.QM
+l x2.x_281_.QM
+l x2.x_282_.QM
+l x2.x_283_.QM
+l x2.x_284_.QM
+l x2.x_293_.QM
 s
 x x2.x_277_.QS
 x x2.x_278_.QS
@@ -151,6 +208,15 @@ x x2.x_282_.QS
 x x2.x_283_.QS
 x x2.x_284_.QS
 x x2.x_293_.QS
+x x2.x_277_.QM
+x x2.x_278_.QM
+x x2.x_279_.QM
+x x2.x_280_.QM
+x x2.x_281_.QM
+x x2.x_282_.QM
+x x2.x_283_.QM
+x x2.x_284_.QM
+x x2.x_293_.QM
 s
 | check: sda_oe now holds a defined value instead of X
 d SDA_O
@@ -204,6 +270,30 @@ l x2.x_298_.QS
 l x2.x_299_.QS
 l x2.x_300_.QS
 l x2.x_301_.QS
+l x2.x_269_.QM
+l x2.x_270_.QM
+l x2.x_271_.QM
+l x2.x_272_.QM
+l x2.x_273_.QM
+l x2.x_274_.QM
+l x2.x_275_.QM
+l x2.x_276_.QM
+l x2.x_285_.QM
+l x2.x_286_.QM
+l x2.x_287_.QM
+l x2.x_288_.QM
+l x2.x_289_.QM
+l x2.x_290_.QM
+l x2.x_291_.QM
+l x2.x_292_.QM
+l x2.x_294_.QM
+l x2.x_295_.QM
+l x2.x_296_.QM
+l x2.x_297_.QM
+l x2.x_298_.QM
+l x2.x_299_.QM
+l x2.x_300_.QM
+l x2.x_301_.QM
 s
 x x2.x_269_.QS
 x x2.x_270_.QS
@@ -229,6 +319,30 @@ x x2.x_298_.QS
 x x2.x_299_.QS
 x x2.x_300_.QS
 x x2.x_301_.QS
+x x2.x_269_.QM
+x x2.x_270_.QM
+x x2.x_271_.QM
+x x2.x_272_.QM
+x x2.x_273_.QM
+x x2.x_274_.QM
+x x2.x_275_.QM
+x x2.x_276_.QM
+x x2.x_285_.QM
+x x2.x_286_.QM
+x x2.x_287_.QM
+x x2.x_288_.QM
+x x2.x_289_.QM
+x x2.x_290_.QM
+x x2.x_291_.QM
+x x2.x_292_.QM
+x x2.x_294_.QM
+x x2.x_295_.QM
+x x2.x_296_.QM
+x x2.x_297_.QM
+x x2.x_298_.QM
+x x2.x_299_.QM
+x x2.x_300_.QM
+x x2.x_301_.QM
 s
 | check: phase/bit_cnt-owning registers cleared (rw/addr_match are
 | in this same Group-A, so also visible here)
