@@ -32,6 +32,17 @@ SHREG = [f"x2.shreg[{i}]" for i in range(7)]
 RSTB28_NET = "x2._008_"     # Group-A's own gate-level reset net
 START_PULSE = "x2.start_pulse"
 
+# bit_cnt[0]'s own DFFRB (instance x_270_, design_notes.md 88.1/92.1):
+# QS = its internal storage node (what force_release_gated() forces),
+# QB/D = its own local net names read directly off its instance line
+# ("x_270_ VDD _147_[0] _058_ bit_cnt[0] _008_ GND scl_row1 DFFRB" --
+# DFFRB pin order VDD QB D Q RSTB GND CK). Watching all three (plus Q=
+# bit_cnt[0] itself, already in BIT_CNT) pinpoints whether the force
+# even reaches QS, or reaches QS but gets overridden before Q updates.
+BIT_CNT0_QS = "x2.x_270_.QS"
+BIT_CNT0_QB = "x2._147_[0]"
+BIT_CNT0_D = "x2._058_"
+
 
 def gen():
     g = CmdGen()
@@ -52,6 +63,7 @@ def gen():
         g.d(*BIT_CNT, *PHASE, RSTB28_NET, START_PULSE)
         g.d(*SHREG)
         g.d(ADDR_MATCH, RW, BUSY)
+        g.d(BIT_CNT0_QS, BIT_CNT0_QB, BIT_CNT0_D)
 
     g.note("==================== WRITE TRANSACTION (known-good baseline) ====================")
     g.start(first=True)
@@ -78,7 +90,7 @@ def gen():
         (g.h if bit else g.l)(TX[i])
     g.s(2 * T)
 
-    g.start(group_a_mode="gated")
+    g.start(group_a_mode="gated", debug_probe=[BIT_CNT0_QS, BIT_CNT0_QB, "x2.bit_cnt[0]"])
     dbg("right after 2nd START's Group-A reset (BEFORE any addr bits)")
     addr_byte = (SLAVE_ADDR << 1) | 1
     g.note(f"ADDR+R = 0x{addr_byte:02X}")
