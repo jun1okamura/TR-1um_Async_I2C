@@ -1,0 +1,356 @@
+{
+  "checks": [
+    {
+      "label": null,
+      "nodes": [
+        "P13",
+        "SDA_O",
+        "NC_CORE_busy",
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "SDA_O",
+        "NC_CORE_busy",
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "P2",
+        "P13",
+        "SDA_O",
+        "P15",
+        "NC_CORE_busy",
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "SDA_O"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "busy asserted after START",
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": {
+        "NC_CORE_busy": 1
+      },
+      "group": null
+    },
+    {
+      "label": "slave ACKed matching address (write)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": null
+    },
+    {
+      "label": "addr_match asserted",
+      "nodes": [
+        "NC_CORE_addr_match"
+      ],
+      "expect": {
+        "NC_CORE_addr_match": 1
+      },
+      "group": null
+    },
+    {
+      "label": "rw indicates WRITE",
+      "nodes": [
+        "NC_CORE_rw"
+      ],
+      "expect": {
+        "NC_CORE_rw": 0
+      },
+      "group": null
+    },
+    {
+      "label": "slave ACKed data byte",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": null
+    },
+    {
+      "label": "rx_data == 0xA5",
+      "nodes": [
+        "NET_0",
+        "NET_1",
+        "NET_2",
+        "NET_3",
+        "NET_4",
+        "NET_5",
+        "NET_6",
+        "NET_7"
+      ],
+      "expect": {
+        "NET_0": 1,
+        "NET_1": 0,
+        "NET_2": 1,
+        "NET_3": 0,
+        "NET_4": 0,
+        "NET_5": 1,
+        "NET_6": 0,
+        "NET_7": 1
+      },
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "busy cleared after STOP",
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": {
+        "NC_CORE_busy": 0
+      },
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "slave ACKed matching address (read)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": null
+    },
+    {
+      "label": "rw indicates READ",
+      "nodes": [
+        "NC_CORE_rw"
+      ],
+      "expect": {
+        "NC_CORE_rw": 1
+      },
+      "group": null
+    },
+    {
+      "label": "sample read-data bit 7 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 6 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 5 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 1
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 4 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 1
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 3 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 1
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 2 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 1
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 1 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": "sample read-data bit 0 (MSB first)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 0
+      },
+      "group": "read_byte_0x3C"
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "busy cleared after final STOP",
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": {
+        "NC_CORE_busy": 0
+      },
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "unmatched address -> NACK (no slave ack)",
+      "nodes": [
+        "P13"
+      ],
+      "expect": {
+        "P13": 1
+      },
+      "group": null
+    },
+    {
+      "label": "addr_match not asserted for foreign address",
+      "nodes": [
+        "NC_CORE_addr_match"
+      ],
+      "expect": {
+        "NC_CORE_addr_match": 0
+      },
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": "busy cleared after STOP following NACK",
+      "nodes": [
+        "NC_CORE_busy"
+      ],
+      "expect": {
+        "NC_CORE_busy": 0
+      },
+      "group": null
+    }
+  ],
+  "groups": {
+    "read_byte_0x3C": {
+      "label": "read byte == 0x3C",
+      "target": 60,
+      "bit_order": "msb_first",
+      "node": "P13"
+    }
+  }
+}

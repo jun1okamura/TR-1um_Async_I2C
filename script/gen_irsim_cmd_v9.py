@@ -187,6 +187,18 @@ SLAVE_ADDR = 0x50
 class CmdGen:
     def __init__(self):
         self.lines = []
+        # Ordered, 1:1 with every d()/checked_dump() call in generation
+        # order -- lets check_irsim_tb_log.py line up each block of dump
+        # output in a REAL run's log with what it means, purely by
+        # position (no timestamps or labels needed in the log itself).
+        # Entries from plain d() have expect=None (informational only,
+        # not compared); entries from checked_dump() carry an expected
+        # {node: 0/1} dict compared against the real run automatically --
+        # this is what makes a generated .cmd "self-checking" the way
+        # i2c_slave_async_tb.v's check()/errors/RESULT are, since IRSIM's
+        # own .cmd language has no conditionals/arithmetic to do this
+        # itself (design_notes.md 98.x).
+        self.checks = []
 
     def raw(self, s=""):
         self.lines.append(s)
@@ -208,6 +220,23 @@ class CmdGen:
 
     def d(self, *nodes):
         self.lines.append("d " + " ".join(nodes))
+        self.checks.append({"label": None, "nodes": list(nodes), "expect": None, "group": None})
+
+    def checked_dump(self, label, expect, group=None):
+        """Like d(), but records `label` and the expected {node: 0/1}
+        values so check_irsim_tb_log.py can automatically verify a real
+        run's log against them and print a PASS/FAIL summary -- the
+        IRSIM-side equivalent of i2c_slave_async_tb.v's check() task.
+        `group`, if given, tags several related checked_dump() calls
+        (e.g. the 8 individual bits of a received byte) so the checker
+        can also print one synthesized higher-level check from them, the
+        same way i2c_slave_async_tb.v's read_byte() task samples 8 bits
+        without individually asserting each one, then the testbench
+        checks only the reconstructed byte."""
+        nodes = list(expect.keys())
+        self.note(f"CHECK: {label}")
+        self.lines.append("d " + " ".join(nodes))
+        self.checks.append({"label": label, "nodes": nodes, "expect": expect, "group": group})
 
     def force_release(self, nodes, value=0):
         """One-time symmetry-break for a batch of nodes stuck in a cold-X

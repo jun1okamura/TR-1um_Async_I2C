@@ -15438,3 +15438,96 @@ READトランザクション（95-96節の修正で新たに成功）：
   ため無関係）。
 - `irsim/README.md`のノード対応表・記述を、v9の新しい`.sim`/`.cmd`
   ベースの内容に更新する必要がある（旧`.sim`ベースの記述のまま）。
+
+## 98. Verilog版と同等の自己検証型IRSIMテストベンチ
+
+ユーザー指示：「verilog でのテストベンチと同等のIRSIMのテストベンチを
+作成ください。」——`src/i2c_slave_async_tb.v`（および`src/
+i2c_slave_async_net_tb.v`、シナリオ・チェック内容は同一）を確認：
+1本の`initial`ブロックでWRITE(0xA5)→READ(0x3C)→誤アドレスNACKの3
+シナリオを連続実行し、`check()`タスク（`errors`カウンタ、最終
+`RESULT`行で"All checks PASSED"/"N check(s) FAILED"を表示）で
+自己検証する構造——**14個のチェック**（busy/ACK/addr_match/rw/
+rx_data/busy解除×2/ACK/rw/read byte/busy解除/NACK/addr_match非一致/
+busy解除、の順）。
+
+IRSIM自体の`.cmd`言語には条件分岐・算術演算が無く、Verilogの
+`check()`のような自己集計・PASS/FAIL判定はできない。そこで
+「スティミュラス生成側で期待値を記録し、実行後のログをオフラインで
+自動検証する」という2段構成で「同等」を実現した。
+
+### 98.1 script/gen_irsim_cmd_v9.py の拡張
+
+`CmdGen`に`checks`リスト（生成順で`d()`/`checked_dump()`呼び出し
+1件ごとに1エントリ、位置で対応）を追加。`d()`自体もラベル無し・
+期待値無しのエントリを記録するよう変更（既存の`gen_main()`/
+`gen_negative()`等の出力・動作には影響なし、副作用の追加のみ）。
+新規`checked_dump(label, expect, group=None)`メソッド：`d()`と同じ
+ダンプを出力しつつ、期待値`{ノード: 0/1}`を記録する。
+
+### 98.2 script/gen_irsim_verilog_equiv_tb.py（新規）
+
+`i2c_slave_async_tb.v`と1対1対応する3シナリオ・14チェックを1本の
+`.cmd`にまとめて生成：
+
+- Scenario 1（write 0xA5）：`busy` after START／ACK(addr)／
+  `addr_match`／`rw`==WRITE／ACK(data)／`rx_data`==0xA5／busy解除
+  （7チェック）。
+- Scenario 2（read 0x3C→NACK）：ACK(addr)／`rw`==READ／read byte
+  ==0x3C（8ビットを個別に`checked_dump`で記録しつつ`group=
+  "read_byte_0x3C"`でグループ化、Verilogの`read_byte()`同様
+  「個々のビットは未アサート、再構成したバイトのみ検証」という
+  構造を再現）／busy解除（4チェック＋8個の詳細サンプル）。
+- Scenario 3（誤アドレス）：NACK／`addr_match`非一致／busy解除
+  （3チェック）。
+
+出力：`irsim/irsim_tb.cmd`（1079行）と`irsim/irsim_tb_expected.json`
+（`checks`リスト＋`groups`メタデータ——read byteの目標値・ビット順・
+対象ノードを記録）。
+
+### 98.3 script/check_irsim_tb_log.py（新規）
+
+実行後のログを自動検証するオフライン照合スクリプト。ログ中の
+`d`コマンド出力ブロック（`time = ...`行に挟まれた`node=value`行群、
+複数行に折り返される場合も対応）を出現順に抽出し、
+`irsim_tb_expected.json`の`checks`リストと**位置で1対1対応**させて
+突き合わせる（タイムスタンプやラベルをログ側に埋め込む必要が無い、
+`.cmd`とログが対応していれば良い設計）。
+
+- 期待値付きエントリ：`[OK]`/`[FAIL]`で表示（Verilogの
+  `[t=%0t] OK/FAIL: msg`相当）。
+- `group`付きエントリ（read byteの8ビット）：`[sample]`として詳細
+  表示（個別の合否はカウントに含めない）。
+- 全エントリ処理後、`groups`メタデータから合成チェック（ビット列を
+  MSBファーストで再構成し目標値と比較）を実行、これが14番目の
+  ヘッドラインチェックとしてカウントされる。
+- 最終行：`All N checks PASSED` / `M of N check(s) FAILED`
+  （Verilogの最終`RESULT`行と同じ形式）。終了コードもPASS=0/FAIL=1。
+
+### 98.4 検証
+
+- `irsim_tb.cmd`が参照する全96ノードが`.sim`に実在することを確認
+  （未定義0件）。
+- `checked_dump`呼び出しは21件、うち`group`無しの純粋ヘッドライン
+  チェックは13件＋グループ合成1件＝**合計14件**（Verilog版と個数
+  完全一致）。
+- チェッカースクリプト自体を合成ログ2種でテスト：(1)全て期待値
+  通りの合成ログ→`All 14 checks PASSED`（終了コード0）を確認、
+  (2)`rx_data`の1ビットとread byteの1ビットを意図的に破壊した
+  合成ログ→該当2チェックが正しく`[FAIL]`と判定され
+  `2 of 14 check(s) FAILED`（終了コード1）になることを確認——
+  誤検出・見逃しの両方が無いことを実データで検証済み。
+
+### 98.5 使い方（ユーザーへ）
+
+```sh
+cd irsim
+irsim TR-1um.prm tr_1um_i2c_slave_async.sim > irsim_tb.log 2>&1 << 'EOF'
+@ irsim_tb.cmd
+EOF
+```
+
+その後、ログのパスを伝えてもらえれば、こちらで
+`script/check_irsim_tb_log.py irsim/irsim_tb.log irsim/
+irsim_tb_expected.json`を実行し、Verilog版と同じ形式のPASS/FAIL
+サマリを直接報告する（毎回手動でログを読み解く必要がなくなった）。

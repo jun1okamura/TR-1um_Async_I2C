@@ -27,6 +27,25 @@ force/release、およびクロックnetを**HIGH**（LOWではない）で強�
 はCK=0の間`D`に対して常時透過（ラッチされない）ため、CK=0のまま
 フォースしても無意味で、CK=1でフォースする必要があった。
 
+**Verilog版と同等の自己検証型テストベンチ（§98）**：
+`src/i2c_slave_async_tb.v`と1対1対応する3シナリオ・14チェックを1本の
+`.cmd`にまとめた[`irsim_tb.cmd`](irsim_tb.cmd)（生成:
+[`script/gen_irsim_verilog_equiv_tb.py`](../script/gen_irsim_verilog_equiv_tb.py)）
+と、その期待値`irsim_tb_expected.json`を用意。IRSIM自体の`.cmd`言語は
+条件分岐・算術演算が無くVerilogの`check()`タスクのような自己集計は
+できないため、実行後のログをオフラインで自動照合する
+[`script/check_irsim_tb_log.py`](../script/check_irsim_tb_log.py)を
+追加し、Verilog版と同じ形式（`[OK]`/`[FAIL]`＋最終`RESULT`行）で
+PASS/FAIL判定を出す：
+
+```sh
+cd irsim
+irsim TR-1um.prm tr_1um_i2c_slave_async.sim > irsim_tb.log 2>&1 << 'EOF'
+@ irsim_tb.cmd
+EOF
+python3 ../script/check_irsim_tb_log.py irsim_tb.log irsim_tb_expected.json
+```
+
 **旧版（v7世代）の到達点（このセクション以降は旧`.sim`ベースの記録、
 参考用に残してある）**:
 `script/test_i2c_slave_async.py`と同じ
