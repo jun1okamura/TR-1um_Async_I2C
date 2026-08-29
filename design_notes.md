@@ -14944,3 +14944,93 @@ check.cmd`から順に実行予定）。旧`.sim`で発見・対処済みの各�
 （DFFRBコールドスタート、SDA極性、DEL1セトリング等）が、v9の再合成
 RTL・新ネットリスト上でも同様に必要か（あるいは既に解消しているか）
 は、実行結果を見るまで未確定。
+
+## 89. IRSIM実機バッチ実行結果（v9ネットリスト初回）
+
+`irsim/run_batch.sh`（stdinヒアドキュメント経由、`-@`フラグ回避）で
+`irsim_reset_check.cmd`→`irsim_test_main.cmd`→`irsim_test_negative.cmd`
+を連続実行。ログ（`irsim_batch_run.log`）の全`d`コマンド出力を`.cmd`
+ファイル中の対応する`d`行と順番通り突き合わせて解析。
+
+### 89.1 ロード・reset_check：正常
+
+845ノード、n=1038/p=1039（想定通り）。**驚くべき発見**：`reset_check.cmd`
+は`rst_n`を100ns保持しただけで`SDA`/`sda_oe`/`busy`/`rw`/`addr_match`が
+全て確定値に収束した（旧`.sim`で必要だった33個DFFRBの`QS`強制force/
+release無しで、しかもチェックポイント全て安定）。この後`h(RST_N)`で
+リセット解放＋Group-A（24個）`QS`force/releaseを行っても引き続き
+全て確定値のまま——つまりv9の再合成ネットリストでは、旧設計にあった
+「コールドスタート時のQM/QS未定義デッドロック」問題自体が**そもそも
+再現していない可能性**が高い。
+
+### 89.2 test_main：WRITEトランザクション（1回目のSTART、`first=True`）— 完全成功
+
+- `busy`：STARTで正しく1へ。
+- アドレスバイト`0xA0`（=0x50<<1|0）送信後、ACK確認：`P13=0`（正しく
+  ACK）、`addr_match=1`/`rw=0`（正しくwrite判定）。
+- データバイト`0xA5`送信後、ACK確認：`P13=0`（正しくACK）。
+- `rx_data[0..7]`（`NET_0..NET_7`）＝`1 0 1 0 0 1 0 1` → **`0xA5`と完全
+  一致**（シフトレジスタへの取り込みが正しく機能）。
+- STOP後：`busy=0`（正しく解除）。
+
+WRITEトランザクションはエンドツーエンド（START→ADDR+ACK→DATA+ACK→
+rx_data確定→STOP→busy解除）で**全チェックが期待通り**。
+
+### 89.3 test_main：READトランザクション（2回目のSTART、`first=False`）— アドレス一致せず
+
+2回目のSTART直後の`busy=1`は正しく確認できたが、`start(first=False)`
+内部の`force_release_gated()`（Group-A `QS`＋4本の行クロックnet
+`x2.scl_row0..3`を同時にforce/release）実行後、アドレスバイト`0xA1`
+（=0x50<<1|1）送信後のACK確認で：
+
+- `P13=1`（**ACKされず**、期待は`P13=0`）
+- `NC_CORE_rw=0`（**期待は1**——読み出しなのでrwビットが立つはず）
+
+以降の8ビット`recv_bit()`もSDA(`P13`)が全て`1`のまま変化なし（スレーブ
+がtx_data送信を一切していない＝addr_matchしていないため無反応、という
+一貫した結果）。
+
+**分析**：89.1で判明した通り、v9ネットリストではQS force/releaseが
+そもそも不要な可能性が高いのに対し、`force_release_gated()`は
+（旧設計の対策のまま）Group-Aの`QS`だけでなく**4本の行クロックnet
+自体も強制的にLOWへ落とす**——もし新ネットリストの`scl_row0..3`
+生成ロジックが旧設計と完全に同一でない場合、この強制動作がむしろ
+回路を壊している可能性がある（旧設計での「正しい」対策が、新設計
+では不要かつ有害になっている可能性）。次の実験候補：2回目以降の
+`start()`でも`force_release_gated()`ではなく単純な`force_release()`
+（Group-A `QS`のみ、クロックnet強制なし）を試す、あるいは何も
+force/releaseせず素の回路動作に任せてみる（89.1の知見が正しければ
+これで十分な可能性）。
+
+### 89.4 test_negative：addr_match自体は正しいが、NACKチェックに
+タイミングマージン不足
+
+`addr_match=0`（不一致アドレス`0x22`=0x11<<1|0を正しく非一致判定）
+は確認できたが、直前の`P13`（SDA）チェックが`0`（NACKなら`1`である
+べき）と出た。原因を精査した結果、この`d(SDA)`直前の`x(SDA)`後の
+待ち時間が`g.s()`（1ステップサイズ=20ns）のみで、76.39/76.40で判明・
+修正済みのSDA外付けプルアップのRC充電時間マージン（`SDA_RELEASE_
+SETTLE_NS`=500ns）が**この1箇所だけ未適用のまま**（旧`gen_irsim_cmd.py`
+から無変更でコピーした`gen_negative()`の独自インラインチェックが、
+`read_ack()`等と違って個別に実装されていたため見落とし）だったこと
+が判明。addr_match自体は正しく0のままなので、これは実際の誤ACKでは
+なく**プローブタイミングが早すぎた計測アーティファクト**と判断。
+
+`script/gen_irsim_cmd_v9.py`の`gen_negative()`を修正：該当箇所の
+`g.s()`を`g.s(SDA_RELEASE_SETTLE_NS)`に変更し、`.cmd`ファイルを再生成
+（ノード参照の再検証：63個中未定義0件、変わらず）。
+
+### 89.5 run_batch.sh の軽微な修正
+
+ログ末尾で`quit`コマンドが`(tty,4): unrecognized command: quit`と
+なっていたが、それより前の全シミュレーションは正常完了しており実害
+なし（stdinがEOFに達した時点でirsimは正常終了していた）。
+`irsim/run_batch.sh`から`quit`行を削除（ヒアドキュメント終端＝EOFの
+みで十分）。
+
+### 89.6 残課題
+
+- READトランザクション（2回目以降のSTART）のアドレス不一致問題：
+  `force_release_gated()`の要否・妥当性を再検証する実験が必要
+  （ユーザーの判断待ち）。
+- test_negative修正版の再実行待ち（89.4の仮説が正しいか確認）。

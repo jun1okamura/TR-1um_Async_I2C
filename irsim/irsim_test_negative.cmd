@@ -284,7 +284,16 @@ h P2
 s 40
 l P2
 x P13
-s
+| same SDA pull-up RC recovery margin as send_bit()/read_ack() etc.
+| (500ns, not just one 20ns stepsize) -- this inline
+| NACK check previously used a single stepsize here (carried over
+| unmodified from the old gen_irsim_cmd.py), which is the same margin
+| gap design_notes.md 76.39/76.40 found and fixed everywhere else SDA
+| is released -- a real v9 run (design_notes.md 89.x) caught SDA still
+| reading 0 here (looking like a false ACK) purely from not having had
+| time to rise yet, even though addr_match itself already correctly
+| read 0 (foreign address correctly not matched).
+s 500
 h P2
 s
 | check: unmatched address -> NACK, i.e. SDA stays HIGH (no slave pulldown)

@@ -27,7 +27,12 @@ irsim "$PRM" "$SIM" > "$LOG" 2>&1 << 'EOF'
 @ irsim_reset_check.cmd
 @ irsim_test_main.cmd
 @ irsim_test_negative.cmd
-quit
 EOF
+# NOTE: no explicit "quit" here -- a real run confirmed this build's irsim
+# doesn't recognize "quit" as a command at this point ("unrecognized
+# command: quit") even though everything before it ran correctly; stdin
+# hitting EOF (heredoc ends) is enough to make irsim exit cleanly on its
+# own, so the extra line was just producing a harmless but confusing
+# warning at the end of the log.
 
 echo "done -- see $LOG"

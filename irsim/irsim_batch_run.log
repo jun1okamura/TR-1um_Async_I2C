@@ -1,0 +1,279 @@
+*** IRSIM 9.7.121 *** @ Wed Aug 26 17:33:39 JST 2026
+Unexpected first line: 
+
+Using default name "Vdd" for power net.
+Using default name "Gnd" for ground net.
+
+Read tr_1um_i2c_slave_async.sim lambda:1.00u format:MIT
+845 nodes; transistors: n-channel=1038 p-channel=1039 shorted=256
+parallel txtors: n-channel=2 p-channel=2
+irsim> P13=X SDA_O=X NC_CORE_busy=X NC_CORE_rw=X NC_CORE_addr_match=X 
+time = 0.000ns
+time = 100.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 100.000ns
+time = 500.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 500.000ns
+time = 1000.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 1000.000ns
+time = 3000.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 3000.000ns
+time = 8000.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 8000.000ns
+time = 8020.000ns; there are 24 pending events
+time = 8040.000ns
+time = 8060.000ns; there are 24 pending events
+time = 8160.000ns; there are 69 pending events
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 8160.000ns; there are 69 pending events
+irsim> time = 11160.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 11160.000ns
+time = 11180.000ns; there are 24 pending events
+time = 11200.000ns
+time = 11220.000ns; there are 24 pending events
+time = 11320.000ns; there are 69 pending events
+SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 11320.000ns; there are 69 pending events
+P2=1 P13=1 SDA_O=1 P15=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 11320.000ns; there are 69 pending events
+time = 11340.000ns; there are 69 pending events
+time = 11380.000ns; there are 71 pending events
+NC_CORE_busy=1 
+time = 11380.000ns; there are 71 pending events
+time = 11400.000ns; there are 71 pending events
+time = 11420.000ns; there are 58 pending events
+SDA_O=1 
+time = 11420.000ns; there are 58 pending events
+time = 11440.000ns
+time = 11460.000ns; there are 24 pending events
+NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 11460.000ns; there are 24 pending events
+time = 11480.000ns; there are 24 pending events
+time = 11980.000ns
+time = 12020.000ns
+time = 12040.000ns
+time = 12540.000ns
+time = 12580.000ns
+time = 12600.000ns
+time = 13100.000ns
+time = 13140.000ns
+time = 13160.000ns
+time = 13660.000ns
+time = 13700.000ns
+time = 13720.000ns
+time = 14220.000ns
+time = 14260.000ns
+time = 14280.000ns
+time = 14780.000ns
+time = 14820.000ns
+time = 14840.000ns
+time = 15340.000ns
+time = 15380.000ns
+time = 15400.000ns
+time = 15900.000ns
+time = 15940.000ns
+time = 16440.000ns
+time = 16460.000ns
+P13=0 
+time = 16460.000ns
+time = 16480.000ns
+NC_CORE_addr_match=1 NC_CORE_rw=0 
+time = 16480.000ns
+time = 16500.000ns; there are 1 pending events
+time = 17000.000ns
+time = 17040.000ns
+time = 17060.000ns
+time = 17560.000ns
+time = 17600.000ns
+time = 17620.000ns
+time = 18120.000ns
+time = 18160.000ns
+time = 18180.000ns
+time = 18680.000ns
+time = 18720.000ns
+time = 18740.000ns
+time = 19240.000ns
+time = 19280.000ns
+time = 19300.000ns
+time = 19800.000ns
+time = 19840.000ns
+time = 19860.000ns
+time = 20360.000ns
+time = 20400.000ns
+time = 20420.000ns
+time = 20920.000ns
+time = 20960.000ns
+time = 21460.000ns
+time = 21480.000ns
+P13=0 
+time = 21480.000ns
+time = 21500.000ns
+NET_0=1 NET_1=0 NET_2=1 NET_3=0 NET_4=0 NET_5=1 NET_6=0 NET_7=1 
+time = 21500.000ns
+time = 22000.000ns
+time = 30000.000ns
+time = 30500.000ns
+NC_CORE_busy=0 
+time = 30500.000ns
+time = 30540.000ns
+time = 30560.000ns
+time = 30600.000ns
+NC_CORE_busy=1 
+time = 30600.000ns
+time = 30620.000ns
+time = 30640.000ns
+NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 30640.000ns
+time = 30660.000ns
+time = 31160.000ns
+time = 31200.000ns
+time = 31220.000ns
+time = 31720.000ns
+time = 31760.000ns
+time = 31780.000ns
+time = 32280.000ns
+time = 32320.000ns
+time = 32340.000ns
+time = 32840.000ns
+time = 32880.000ns
+time = 32900.000ns
+time = 33400.000ns
+time = 33440.000ns
+time = 33460.000ns
+time = 33960.000ns
+time = 34000.000ns
+time = 34020.000ns
+time = 34520.000ns
+time = 34560.000ns
+time = 34580.000ns
+time = 35080.000ns
+time = 35120.000ns
+time = 35620.000ns
+time = 35640.000ns
+P13=1 
+time = 35640.000ns
+time = 35660.000ns
+NC_CORE_rw=0 
+time = 35660.000ns
+time = 35680.000ns
+time = 36180.000ns
+time = 36200.000ns
+P13=1 
+time = 36200.000ns
+time = 36220.000ns
+time = 36240.000ns
+time = 36740.000ns
+time = 36760.000ns
+P13=1 
+time = 36760.000ns
+time = 36780.000ns
+time = 36800.000ns
+time = 37300.000ns
+time = 37320.000ns
+P13=1 
+time = 37320.000ns
+time = 37340.000ns
+time = 37360.000ns
+time = 37860.000ns
+time = 37880.000ns
+P13=1 
+time = 37880.000ns
+time = 37900.000ns
+time = 37920.000ns
+time = 38420.000ns
+time = 38440.000ns
+P13=1 
+time = 38440.000ns
+time = 38460.000ns
+time = 38480.000ns
+time = 38980.000ns
+time = 39000.000ns
+P13=1 
+time = 39000.000ns
+time = 39020.000ns
+time = 39040.000ns
+time = 39540.000ns
+time = 39560.000ns
+P13=1 
+time = 39560.000ns
+time = 39580.000ns
+time = 39600.000ns
+time = 40100.000ns
+time = 40120.000ns
+P13=1 
+time = 40120.000ns
+time = 40140.000ns
+time = 40160.000ns
+time = 40660.000ns
+time = 40700.000ns
+time = 41200.000ns
+time = 49200.000ns
+time = 49700.000ns
+NC_CORE_busy=0 
+time = 49700.000ns
+irsim> time = 52700.000ns
+P13=1 SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 52700.000ns
+time = 52720.000ns; there are 4 pending events
+time = 52740.000ns; there are 9 pending events
+time = 52760.000ns
+time = 52860.000ns
+SDA_O=1 NC_CORE_busy=0 NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 52860.000ns
+P2=1 P13=1 SDA_O=1 NC_CORE_addr_match=0 NC_CORE_busy=0 
+time = 52860.000ns
+time = 52880.000ns
+time = 52920.000ns
+NC_CORE_busy=1 
+time = 52920.000ns
+time = 52940.000ns
+time = 52960.000ns
+SDA_O=1 
+time = 52960.000ns
+time = 52980.000ns; there are 9 pending events
+time = 53000.000ns
+NC_CORE_rw=0 NC_CORE_addr_match=0 
+time = 53000.000ns
+time = 53020.000ns
+time = 53520.000ns
+time = 53560.000ns
+time = 53580.000ns
+time = 54080.000ns
+time = 54120.000ns
+time = 54140.000ns
+time = 54640.000ns
+time = 54680.000ns
+time = 54700.000ns
+time = 55200.000ns
+time = 55240.000ns
+time = 55260.000ns
+time = 55760.000ns
+time = 55800.000ns
+time = 55820.000ns
+time = 56320.000ns
+time = 56360.000ns
+time = 56380.000ns
+time = 56880.000ns
+time = 56920.000ns
+time = 56940.000ns
+time = 57440.000ns
+time = 57480.000ns
+time = 57500.000ns; there are 1 pending events
+time = 57520.000ns; there are 1 pending events
+P13=0 
+time = 57520.000ns; there are 1 pending events
+NC_CORE_addr_match=0 
+time = 57520.000ns; there are 1 pending events
+time = 57540.000ns
+time = 58040.000ns
+time = 66040.000ns
+time = 66540.000ns
+NC_CORE_busy=0 
+time = 66540.000ns
+irsim> (tty,4): unrecognized command: quit
+irsim> 
