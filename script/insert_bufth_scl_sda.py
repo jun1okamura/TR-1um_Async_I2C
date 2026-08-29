@@ -47,21 +47,34 @@ fm_multiway_partition after adding a handful of small instances can
 shift the recursive-bisection cut and relocate unrelated instances,
 see design_notes.md section 40).
 
-Run: python3 script/insert_bufth_scl_sda.py
+v8 (design_notes.md section 77.10): parametrized main() to accept
+in_path/out_path/row_assignment_json instead of the hardcoded V6_PATH/
+V7_PATH/ROW_ASSIGNMENT_JSON module-level defaults (which remain as the
+historical v6->v7 defaults, unchanged) -- called as
+main(in_path=..., out_path=..., row_assignment_json=...) to reuse this
+script for the v8 netlist (walking-one bit_walk RTL, section 77.2)
+without touching the v6->v7 default behavior.
+
+Run (v6->v7, historical default): python3 script/insert_bufth_scl_sda.py
+Run (any other netlist): import and call main(in_path=..., out_path=..., row_assignment_json=...)
 """
 import json
+import pathlib
 import re
 import sys
 
-sys.path.insert(0, "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from lef_parser import parse_lef  # noqa: E402
 from netlist_parser import parse_netlist  # noqa: E402
 from fm_partition import fm_multiway_partition  # noqa: E402
 
-V6_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net_v6.v"
-V7_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net_v7.v"
-TMP_STAGE1_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/.i2c_slave_async_net_v7_stage1_tmp.v"
-ROW_ASSIGNMENT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/row_assignment_v7.json"
+_SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+_REPO_ROOT = _SCRIPT_DIR.parent
+
+V6_PATH = str(_REPO_ROOT / "src" / "i2c_slave_async_net_v6.v")
+V7_PATH = str(_REPO_ROOT / "src" / "i2c_slave_async_net_v7.v")
+TMP_STAGE1_PATH = str(_REPO_ROOT / "src" / ".i2c_slave_async_net_v7_stage1_tmp.v")
+ROW_ASSIGNMENT_JSON = str(_REPO_ROOT / "LEF" / "row_assignment_v7.json")
 
 N_ROWS = 4
 BUF_CELL = "BUF_X1"
@@ -109,8 +122,9 @@ def redirect(src, instname, pinname, new_net):
     return src[: bm.start()] + new_block + src[bm.end():]
 
 
-def main():
-    src = open(V6_PATH).read()
+def main(in_path=V6_PATH, out_path=V7_PATH, row_assignment_json=ROW_ASSIGNMENT_JSON,
+         tmp_stage1_path=TMP_STAGE1_PATH):
+    src = open(in_path).read()
 
     # ---- Stage 1: rename raw scl/sda_in fanout to scl_buf/sda_in_buf,
     # insert the two BUFTH instances. -----------------------------------
@@ -128,28 +142,34 @@ def main():
 
     n_scl_a = len(re.findall(r"\.A\(scl_buf\)", src))
     n_sda_pins = len(re.findall(r"\bsda_in_buf\b", src))
-    print(f"stage1: {n_scl_a} scl_buf .A() sinks (expect 4: row0-3 BUF_X1)")
+    print(f"stage1: {n_scl_a} scl_buf .A() sinks (expect <= N_ROWS={N_ROWS}: u_buf_scl_row0..{N_ROWS-1} BUF_X1, "
+          f"one per row scl actually touches)")
     print(f"stage1: {n_sda_pins} total sda_in_buf references "
           f"(expect 9 = 7 cell-pin sinks + 1 dead-assign + BUFTH.Y decl... "
           f"see report below for exact split)")
 
-    # Sanity: scl_buf's only remaining consumers should be the 4 existing
-    # per-row BUF_X1 buffers (u_buf_scl_row0..3.A). If this count is ever
-    # not 4, the STDCELL/netlist structure changed since v6 and this
-    # script's "no re-split needed for scl" assumption needs revisiting.
-    assert n_scl_a == 4, (
-        f"expected exactly 4 .A(scl_buf) sinks (u_buf_scl_row0..3); got "
-        f"{n_scl_a} -- scl's existing row-buffer structure may have "
-        f"changed, review before proceeding"
+    # Sanity: scl_buf's only remaining consumers should be the existing
+    # per-row BUF_X1 buffers (u_buf_scl_row0..N_ROWS-1.A) inserted by
+    # insert_row_buffers.py -- at most N_ROWS of them (one per row scl's
+    # own fanout actually touches; a row with zero scl sinks simply gets
+    # no buffer, so n_scl_a can be < N_ROWS but never >). Originally
+    # hardcoded to "== 4" (N_ROWS=4 only); generalized (this session,
+    # N_ROWS=5/6 feasibility experiments, design_notes 77.21-24) to the
+    # actual N_ROWS module attribute so this script works for any row
+    # count without re-editing this assertion each time.
+    assert n_scl_a <= N_ROWS, (
+        f"expected at most N_ROWS={N_ROWS} .A(scl_buf) sinks "
+        f"(u_buf_scl_row0..{N_ROWS-1}); got {n_scl_a} -- scl's existing "
+        f"row-buffer structure may have changed, review before proceeding"
     )
 
-    open(TMP_STAGE1_PATH, "w").write(src)
+    open(tmp_stage1_path, "w").write(src)
 
     # ---- Stage 2: row-partition-based BUF_X1 split for sda_in_buf. -----
     macros = parse_lef()
     widths = {name: m["size"][0] for name, m in macros.items()}
 
-    net = parse_netlist(path=TMP_STAGE1_PATH)
+    net = parse_netlist(path=tmp_stage1_path)
     instances = net["instances"]
     print(f"\nstage2: parsed {len(instances)} instances (post-BUFTH-insertion)")
 
@@ -202,16 +222,16 @@ def main():
     src = insert_wire_decls(src, new_wires)
     src = insert_instance_blocks(src, inserted_blocks)
 
-    with open(V7_PATH, "w") as f:
+    with open(out_path, "w") as f:
         f.write(src)
-    print(f"\nwrote {V7_PATH}")
+    print(f"\nwrote {out_path}")
 
     full_part = dict(part)
     for r, bn, _c in branch_report:
         full_part[f"u_buf_sda_in_row{r}"] = r
-    with open(ROW_ASSIGNMENT_JSON, "w") as f:
+    with open(row_assignment_json, "w") as f:
         json.dump(full_part, f, indent=1)
-    print(f"wrote {ROW_ASSIGNMENT_JSON} ({len(full_part)} instances)")
+    print(f"wrote {row_assignment_json} ({len(full_part)} instances)")
 
     print("\n=== summary ===")
     print("  u_bufth_scl      A=scl        Y=scl_buf      (feeds existing scl_row0-3 buffers)")
@@ -220,7 +240,7 @@ def main():
         print(f"  u_buf_sda_in_row{r:<2} A=sda_in_buf Y={bn:<12} FO={c}")
 
     import os
-    os.remove(TMP_STAGE1_PATH)
+    os.remove(tmp_stage1_path)
 
 
 if __name__ == "__main__":

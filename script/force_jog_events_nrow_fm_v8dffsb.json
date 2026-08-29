@@ -1,0 +1,13 @@
+[
+ {
+  "net": "scl_row2",
+  "inst": "u_buf_scl_row2",
+  "pin": "Y",
+  "orig_x": 1120.5000000000011,
+  "clear_x": 1088.100000000001,
+  "jog_y": 1908.8,
+  "channel": 3,
+  "channel_entry_y": 2297.6,
+  "track_y": 1709.0
+ }
+]

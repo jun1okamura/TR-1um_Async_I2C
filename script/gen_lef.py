@@ -65,12 +65,26 @@ PIN_META = {
     "NOR2":     _gate_meta("A", "B"),
     "AND2_X1":  _gate_meta("A", "B"),
     "OR2":      _gate_meta("A", "B"),
+    # XOR2/XNOR2 (design_notes 77.24/77.26): the user added physical GDS
+    # cells (+ xschem schematic/symbol/extracted) for these directly into
+    # the shared TR-1um_STDCELL.gds library this session -- confirmed via
+    # direct query: PR boundary 27.0um (5 tracks) x 64.8um, on-grid, same
+    # row height as every other cell. Previously excluded from ABC
+    # synthesis via a trimmed liberty copy (design_notes 77.24) since they
+    # didn't physically exist yet; that restriction is no longer needed.
+    "XOR2":     _gate_meta("A", "B"),
+    "XNOR2":    _gate_meta("A", "B"),
     "NAND3":    _gate_meta("A", "B", "C"),
     "NOR3":     _gate_meta("A", "B", "C"),
     "OR3":      _gate_meta("A", "B", "C"),
+    # AND3_X1/AND4_X1: same story as XOR2/XNOR2 above -- user-added this
+    # session (design_notes 77.26). PR boundary 27.0um/5tracks (AND3_X1)
+    # and 32.4um/6tracks (AND4_X1), both 64.8um tall, on-grid.
+    "AND3_X1":  _gate_meta("A", "B", "C"),
     "NAND4":    _gate_meta("A", "B", "C", "D"),
     "NOR4":     _gate_meta("A", "B", "C", "D"),
     "OR4":      _gate_meta("A", "B", "C", "D"),
+    "AND4_X1":  _gate_meta("A", "B", "C", "D"),
     "MUX2":     _gate_meta("A", "B", "S"),
     # DFFR: async-reset D flip-flop (section 35.8's 20-transistor TG-based
     # design). CK is the clock pin (marked USE CLOCK, not plain SIGNAL, so
@@ -108,6 +122,24 @@ PIN_META = {
     "DFF": {
         "D":   ("INPUT",  "SIGNAL"),
         "CK":  ("INPUT",  "CLOCK"),
+        "Q":   ("OUTPUT", "SIGNAL"),
+        "QB":  ("OUTPUT", "SIGNAL"),
+        **_PWR,
+    },
+    # DFFS: async-SET D flip-flop (V8, design_notes.md section 77.14 --
+    # user added the physical layout to TR-1um_STDCELL.gds so V8's
+    # walking-one bit_walk[7] register, which resets to 1, can map
+    # directly to a real SET-type cell instead of needing DFFR + polarity
+    # inversion, design_notes.md section 77.9). Same TG-based
+    # master/slave structure as DFFRB/DFF, mirrored for an active-HIGH
+    # SET instead of active-LOW RSTB (confirmed from the GDS text labels:
+    # D/CK/SET/Q/QB M2PIN-backed ports, vdd/gnd M1PIN rail; CKP/CKB/QM/QS
+    # are internal-node TXM1 labels only, same as DFF's own precedent,
+    # correctly excluded since no M1PIN/M2PIN marker polygon backs them).
+    "DFFS": {
+        "D":   ("INPUT",  "SIGNAL"),
+        "CK":  ("INPUT",  "CLOCK"),
+        "SET": ("INPUT",  "SIGNAL"),
         "Q":   ("OUTPUT", "SIGNAL"),
         "QB":  ("OUTPUT", "SIGNAL"),
         **_PWR,

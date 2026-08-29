@@ -1,8 +1,8 @@
 # script/ ガイド
 
-`script/`配下の現行スクリプト（全27本＋本セッションで追加した`reassemble_top.py`）の
-説明資料。RTL設計からトップレベルLVSクリーン化までの再現可能なパイプラインを構成する
-スクリプトのみを残しており、開発過程で使われた旧世代・重複・一回限りのデバッグ用
+`script/`配下の現行スクリプト（全30本）の説明資料。RTL設計からIRSIMチップレベル
+動作検証準備までの再現可能なパイプラインを構成するスクリプトのみを残しており、
+開発過程で使われた旧世代・重複・一回限りのデバッグ用
 スクリプトは削除済み（削除対象は主にv2/v3・row/2row/2row_fm世代の予測定器・配置器・
 ルータ、および解消済みバグ専用のハイライト/デバッグスクリプト）。各スクリプトの
 コメント冒頭に、より詳しい設計判断の背景（design_notes.mdの節番号）が記載されている。
@@ -21,7 +21,8 @@
 
 | スクリプト | 役割 |
 |---|---|
-| `insert_bufth_scl_sda.py` | Yosys合成直後のネットリストに対し、トップレベルの`scl`/`sda_in`にBUFTH（シュミットトリガ・バッファ）を挿入するネットリスト変換（現行`src/i2c_slave_async_net_v7.v`を作った最終ステップ）。一度限りの変換で、出力ファイルは`src/`に保存済みのため、通常の再現手順では再実行不要。 |
+| `insert_row_buffers.py` | Yosys合成直後のネットリストに対し、指定ネット（既定はscl/scl_n）へ配置行毎のBUF_X1バッファを挿入（`i2c_slave_async_net_v3.v→v4`、design_notes §40）。`main(in_path=, out_path=, row_assignment_json=, target_nets=)`で引数化済み、任意のネットリストに再利用可能（V8で実際に再利用、design_notes §77.10）。一度削除されv8作業時にgit履歴から復元。 |
+| `insert_bufth_scl_sda.py` | 上記の出力に対し、トップレベルの`scl`/`sda_in`にBUFTH（シュミットトリガ・バッファ）を挿入するネットリスト変換（`v6→v7`、design_notes §42）。`main(in_path=, out_path=, row_assignment_json=, tmp_stage1_path=)`で引数化済み（design_notes §77.10でV8向けに追加）、任意のネットリストに再利用可能。 |
 | `gen_liberty.py` | Yosys/ABC合成用のプレースホルダLiberty（`TR1um_5_stdcell.lib`）を生成。**タイミング値は全てプレースホルダ**（実SPICE特性化なし）。 |
 
 ## 3. LEF・標準セルライブラリ
@@ -47,10 +48,14 @@
 |---|---|
 | `route_channels_nrow_fm.py` | **現行の中核ルータ**（v3、約140KB）。N行/(N+1)チャネル構成で、TAP電源メッシュ→行内ローカル配線→高FO/隣接ペア配線→複数行またぎ配線→強制ジョグ処理の4パス方式。全viaは`via_1`PCellインスタンス。 |
 | `ripup_reroute_shorts.py` | 汎用（ネット名非依存）のポストルート短絡自動修正。パスごとに異なる衝突回避ロジックを持つ`route_channels_nrow_fm.py`の限界を補う後処理。 |
+| `fix_v8_remaining_shorts.py` | V8（DFFSなし版）でripup_reroute_shorts.pyが「両側複雑ネット」として自動修正を拒否した残り短絡3件を手動修正するワンオフスクリプト（design_notes §77.16）。`Fixer`クラス（ripup_reroute_shorts.py）のライブ衝突チェックを再利用しつつ、(1) 複数チャネルにまたがり分割記録された同一ネットの縦配線をまとめて1本として移設する`move_multi_piece_vertical`、(2) 行内部を貫通する未チェック区間まで毎回再検証してしまう`try_fix_horizontal`の限界を避け、旧track_yと新track_yの差分帯のみをチェックする`try_fix_horizontal_incremental`、の2つの汎用ヘルパーを追加。結果はDRC 0違反・短絡0件で完全収束（`layout/step8/v8_step_4_manual_short_fix.gds`）。 |
 | `route_top_pins_nrow_fm.py` | STEP6: 全トップレベルポートをコアのBBOX端まで引き出し、M1PIN/M2PINマーカーを配置（フレーム結線の準備）。 |
 | `highlight_top_pins_nrow_fm.py` | `route_top_pins_nrow_fm.py`が使う、各トップレベルポートの物理位置をハイライトする補助関数群。 |
 | `compress_channels_nrow_fm.py` | チャネル高さを縮めて配置・配線を再実行するポストプロセス（実測トラック使用量に基づく）。 |
 | `squeeze_channels_nrow_fm.py` | 既存の配線済みGDSに対し、未使用のYスライスを幾何学的に除去してチャネル高さを圧縮（再配線なし）。STEP7で使用、コア高さを1813.6um→988.2um（45.5%削減）。 |
+| `verify_connectivity_nrow_fm_m1m2.py` | `verify_connectivity_nrow_fm.py`のM1優先・M2フォールバック版。トップレベルM2オンリーのスタブネットピン（M1探索のみの原版では「PIN NOT FOUND」誤検出）にも対応（design_notes §77.17）。 |
+| `run_v8_step7_squeeze_step6_toppins.py` | V8向けSTEP7（チャネル圧縮）+STEP6（トップピン引き出し）統合ドライバ。ルータ実行ログが残っていないV8の配線実績からcompaction_infoを実測ベースで導出。コア高さ2288.8um→1333.0um（-41.8%）（design_notes §77.18）。 |
+| `add_power_pins_v8.py` | STEP6拡張：TAPセルのVDD/GND M2ストラップがBBOX上下端（Y=0/core_h）に達する箇所、およびM1電源パッドがBBOX左右端（X=0/row_width）に達する箇所（最左右列のみ）に、信号ピンと同じM1PIN/M2PINマーカー規約でVDD/GNDトップピンを追加（design_notes §77.20）。 |
 
 ## 6. 配線 — 実行エントリポイント
 
@@ -95,6 +100,21 @@ cd script
 python3 reassemble_top.py    # FRAME GDS変更を反映
 python3 route_gio_core.py    # GIO⇔コア結線 → 最終トップレベルGDS
 ```
+
+## 10. IRSIMチップレベル動作検証
+
+| スクリプト | 役割 |
+|---|---|
+| `gen_irsim_sim.py` | `src/tr_1um_i2c_slave_async.extracted`（チップ全体、LVSクリーン済み）を再帰的にトランジスタレベルまでフラット化し、IRSIM用`.sim`（`irsim/tr_1um_i2c_slave_async.sim`）を生成。ビヘイビア置換なし（コア+GIO+全16パッドセル、2082トランジスタ）。ESD保護ダイオードは非導通・非対応形式のため意図的に省略。SDAパッドへの外付けプルアップ抵抗も追加（design_notes §76）。 |
+| `gen_irsim_cmd.py` | `test_i2c_slave_async.py`/`test_i2c_slave_async_negative.py`と同一のバス上トランザクションを、`gen_irsim_sim.py`が導出した信号→フラットノード対応表に基づきIRSIM刺激スクリプト（`irsim/irsim_test_main.cmd`/`irsim_test_negative.cmd`）へ機械的に翻訳。リセットのみを長時間保持して収束を確認する軽量診断スクリプト`irsim/irsim_reset_check.cmd`も生成（design_notes §76.10、まずこちらを実行推奨）。 |
+
+再現手順:
+```sh
+cd script
+python3 gen_irsim_sim.py     # チップ全体 → irsim/tr_1um_i2c_slave_async.sim
+python3 gen_irsim_cmd.py     # → irsim/irsim_test_main.cmd, irsim_test_negative.cmd
+```
+実行方法・信号対応表は[`irsim/README.md`](./irsim/README.md)を参照。
 
 ## 削除したスクリプトについて
 

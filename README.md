@@ -22,16 +22,27 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 | コアセル単体LVS（レイアウト抽出netlist vs スキーマティック） | 完了（**クリーン**、design_notes §60〜74） |
 | トップレベル統合（FRAME/GIO⇔コア結線） | 完了（`script/route_gio_core.py`、design_notes §75） |
 | トップレベルLVS（`tr_1um_i2c_slave_async` vs schematic） | 完了（**クリーン**、design_notes §75.8） |
-| IRSIM用`.sim`ファイル準備 | 未着手 |
+| IRSIM用`.sim`ファイル準備（チップレベル） | 完了（`irsim/tr_1um_i2c_slave_async.sim`、2082トランジスタ、design_notes §76） |
+| IRSIMチップレベル動作検証（実`TR-1um.prm`下） | WRITEトランザクション（START〜STOP）完全動作確認済み。READトランザクションで`rw`/`addr_match`取り込みの同一エッジレース、および`sda_oe`⇔パッド`HIZ13`間の極性不一致を発見——**V8**でRTLレベルの根本修正へ（design_notes §76.29〜76.48, §77） |
+| **V8**（RTL根本修正: ウォーキングワン化 + sda_oe極性反転） | Verilog検証（iverilog+MyHDL）・NET合成 完了。**DFFSなし版**（`i2c_slave_async_net_v8.v`系、186インスタンス、DFFRB×37/DFFS×0）を正式版として採用。配置配線STEP1〜3完了＋残り短絡3件を手動修正し`v8_step_4_manual_short_fix.gds`でDRC 0・短絡0を達成（design_notes §77.16）。STEP6（トップピン引き出し）・STEP7（チャネル圧縮、圧縮スクリプト自体の3件のバグを根本修正）も完了、`layout/step8/v8_step_8_squeezed_top_pins_routed.gds`でDRC 0・短絡0・コア高さ-41.8%（2288.8→1333.0um）（design_notes §77.17〜77.18）。VDD/VSSトップピン追加（TAPセルM2/M1のBBOX端、5列20個のM2ピン＋左右列16個のM1ピン）も完了、**`layout/step8/v8_step_9_power_pins_added.gds`でDRC 0・信号短絡0・電源net（VDD/GND各1連結成分、共有0）を確認**（design_notes §77.20）。DFFS許可版（行幅2538um、短絡5件）は保留。 |
+| **V9**（DFFS許可・コア再配置配線、GIO再結線） | コアの配置配線をやり直し（`route_gio_core_v9.py`によるGIO⇔コア結線・電源メッシュ再構築）。DRC 0違反を達成した最終物理設計を`src/tr_1um_i2c_slave_async.gds`に確定（design_notes §79）。チップレベルLVS用SPICE生成（GIO実SPICE＋コアLVSクリーンSPICE＋`gio_connections.json`から機械生成、design_notes §80〜82）を経て、以下3つの実バグを発見・修正: (1) スキーマティック・レイアウト双方でチップTOP PIN（P1〜P7/VSS/P9〜P15/VDD、16本）が未宣言だった問題（design_notes §82〜83）、(2) `route_gio_core_v9.py`の電源配線書き直しでHIZ2/HIZ7/HIZ9/HIZ10/HIZ15/OUT13のVDD/VSS固定タイ結線が丸ごと欠落していた問題（design_notes §84）、(3) `gio_connections.json`のP11記載ミス（実際はcore.tx_data[1]に接続済みなのに誤って未接続と記載）でLVS参照ネットリストが実レイアウトと食い違っていた問題（design_notes §85）。**これら全ての修正後、ユーザー実機KLayoutでのチップレベルDRC/LVS確認で最終的にクリーンを達成**（design_notes §85.6, §86）。 |
 
-最終レイアウト成果物（トップレベル、チップ全体）:
-[`src/tr_1um_i2c_slave_async_routed.gds`](./src/tr_1um_i2c_slave_async_routed.gds)
-（FRAME/GIO + コアセル `i2c_slave_async_nrow_fm` を結線済み、LVSクリーン）
+**最終レイアウト成果物（V9、トップレベル・チップ全体）**:
+[`src/tr_1um_i2c_slave_async.gds`](./src/tr_1um_i2c_slave_async.gds)
+（FRAME/GIO + コアセル `i2c_slave_async_nrow_fm` を結線済み、実機KLayoutでの
+チップレベル**DRC/LVSクリーン確認済み**、design_notes §79〜86）。
+チップレベルLVS用参照SPICE:
+[`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`](./schematic/tr_1um_i2c_slave_async_v9_lvs.spice)
+（`script/gen_lvs_spice_top_v9.py`で機械生成、`schematic/gio_connections.json`が
+一次データソース）。
 コアセル単体の最終レイアウト:
 [`layout/i2c_slave_async_nrow_fm_v7rr_routed.gds`](./layout/i2c_slave_async_nrow_fm_v7rr_routed.gds)
 LVS用スキーマティック: [`schematic/i2c_slave_async_nrow_fm.sch`](./schematic/i2c_slave_async_nrow_fm.sch)
 （Top Cell名`i2c_slave_async_nrow_fm`をレイアウトと統一）、
 トップレベルスキーマティック: [`schematic/tr_1um_i2c_slave_async.sch`](./schematic/tr_1um_i2c_slave_async.sch)
+
+（`src/tr_1um_i2c_slave_async_routed.gds`はV7時代の成果物として履歴保存のため
+残置。V9以降の正式な最終成果物は上記`src/tr_1um_i2c_slave_async.gds`。）
 
 ## 構成
 
@@ -67,13 +78,19 @@ FRAME/
 script/
   route_gio_core.py          GIO⇔コア間の結線ルータ（20信号+VDD/VSS、再現可能）
   reassemble_top.py           FRAME GDS変更を反映してトップGDSのGIOセルを差し替え
-  他、配置配線・DRC/接続性検証・LVS準備スクリプト一式（全28本、詳細は
+  gen_irsim_sim.py            チップ全体をトランジスタレベルまで再帰フラット化し
+                              IRSIM用`.sim`を生成（design_notes §76）
+  gen_irsim_cmd.py            既存MyHDLテストベンチと同一シナリオをIRSIM刺激
+                              スクリプト（`.cmd`）へ機械的に翻訳
+  他、配置配線・DRC/接続性検証・LVS準備スクリプト一式（全30本、詳細は
   [`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複スクリプトは削除済み。
+irsim/                        IRSIMチップレベル動作検証一式（`.sim`/`.cmd`、詳細は
+                              [`irsim/README.md`](./irsim/README.md)）
 references/                  UM10204仕様書、DRCサマリ資料
 TR1um_5_stdcell.lib          Yosys用Liberty（タイミング未特性化のプレースホルダ）
 logic_cells_mapping.md       RTL論理→スタンダードセル対応表
-design_notes.md              設計ノート本体（RTL設計からトップレベルLVSクリーン化まで
-                              全75節、詳細記録）
+design_notes.md              設計ノート本体（RTL設計からIRSIMチップレベル検証・V8計画まで
+                              全77節、詳細記録）
 ```
 
 ## 特徴 / 既知の制限（RTL）
@@ -83,6 +100,14 @@ design_notes.md              設計ノート本体（RTL設計からトップレ
 - 7bitアドレッシングのみ（10bit未対応）
 - クロックストレッチ未対応（本スレーブはSCLを駆動しない）
 - 受信データは常にACKする設計（アプリ側NACKは未実装、拡張ポイントとして記載）
+- **既知の問題（V8で修正予定、design_notes §77）**:
+  - READアドレスバイト取り込み時、`bit_cnt`の自己リセットと`rw`/
+    `addr_match`の取り込みが同一SCLエッジ・同一組み合わせパスを共有する
+    同一エッジレースあり（実測`TR-1um.prm`下のIRSIM検証で発見、
+    §76.43〜76.47）。ウォーキングワン方式への置き換えで根本解消予定。
+  - コアの`sda_oe`出力とSDAパッド`HIZ13`入力の間で極性が逆（§76.17〜
+    76.18）。実シリコンのままではアイドル/リセット時にSDAを能動的に
+    LOW駆動し続けてしまう。RTL側での出力極性反転で修正予定。
 
 ## 物理設計（配置配線）の概要
 
@@ -120,15 +145,28 @@ design_notes.md              設計ノート本体（RTL設計からトップレ
 （design_notes §59）。
 
 **LVS本実行**（実機xschem/KLayout環境でのレイアウト抽出ネットリストとの比較）は
-コアセル単体・トップレベルとも**完了しクリーン**（design_notes §60〜75）。
+コアセル単体・トップレベルとも**完了しクリーン**（design_notes §60〜75、v7時点）。
 主な経緯:
 - コアセル単体LVS: VDD/GND浮き・命名不一致・短絡等を段階的に修正し、
   §74までにクリーン化。
-- トップレベルLVS（`tr_1um_i2c_slave_async` = FRAME/GIO + コア）:
+- トップレベルLVS（`tr_1um_i2c_slave_async` = FRAME/GIO + コア、v7）:
   GIO⇔コアの結線を独自ルータ（`script/route_gio_core.py`）で実装後、
   VDDポート未認識（境界隣接M1PIN/M2PINマーカー不足）、VSSのグローバルネット
   扱い、コアsymbolのGND/VSS命名不一致、GIOの`OUT2`ピンの誤配線（VSSへの
   誤接続）を順に発見・修正し、最終的にLVSクリーンを達成（design_notes §75）。
+
+**V9チップレベルLVS**（コア再配置配線後、`src/tr_1um_i2c_slave_async.gds`が
+最終成果物）も**クリーン**（design_notes §79〜86）。v7からのコア変更に伴い
+再度LVSを通す過程で、v7では潜んでいなかった／顕在化しなかった3つの実バグを
+新たに発見・修正:
+- チップTOP PIN（P1〜P7/VSS/P9〜P15/VDD、16本）がスキーマティック・
+  レイアウトの両方で未宣言だった（§82〜83）。
+- `route_gio_core_v9.py`の電源配線再実装で、HIZ2/HIZ7/HIZ9/HIZ10/HIZ15/
+  OUT13の（スキーマティック上意図的な）VDD/VSS固定タイ結線が丸ごと
+  欠落していた（§84）。
+- `gio_connections.json`のP11の記載が誤り（実際は`core.tx_data[1]`に
+  接続済みなのに未接続と記載）で、LVS参照ネットリストが実レイアウトと
+  食い違っていた（§85）。
 
 ## 実行方法
 
@@ -136,8 +174,12 @@ design_notes.md              設計ノート本体（RTL設計からトップレ
 
 ```sh
 cd src
-iverilog -o sim i2c_slave_async.v i2c_slave_async_tb.v && vvp sim
+iverilog -o sim i2c_slave_async.v stdcell_behavioral_stubs.v i2c_slave_async_tb.v && vvp sim
 ```
+
+（`i2c_slave_async.v`はDEL1/NOR2/INV_X1をゲート単位で構造的にインスタンス化
+しているため、`stdcell_behavioral_stubs.v`の同時コンパイルが必須。省略すると
+`Unknown module type: DEL1`等のエラーになる。）
 
 ゲートレベル（合成後ネットリスト）のシミュレーションも同じスタブで可能:
 
@@ -160,9 +202,13 @@ python3 test_i2c_slave_async_negative.py
 
 ### Yosys論理合成（RTL → ゲートレベルネットリスト）
 
+**注意**: `yowasp-yosys`（WASM/WASI版）は`abc`ステップでエラー無く異常
+終了することが確認されている（design_notes.md §77.9）。ネイティブ版
+（例: macOSなら`brew install yosys`、コマンドは`yosys`）の使用を推奨。
+
 ```sh
-pip install yowasp-yosys
-yowasp-yosys -p "
+pip install yowasp-yosys   # または brew install yosys（推奨）
+yowasp-yosys -p "           # ネイティブ版なら `yosys -p "` に読み替え
   read_verilog src/i2c_slave_async.v
   hierarchy -top i2c_slave_async -keep_portwidths
   proc; opt
@@ -196,7 +242,7 @@ python3 verify_schematic_v7.py    # 幾何学的接続検証（xschem不要）
 
 - 設計・実装の全記録（RTLのステートマシン設計、UM10204各節との対応、
   論理合成、配置配線の全試行錯誤、DRC/LVSクリア化、トップレベル統合まで）は
-  [`design_notes.md`](./design_notes.md)（全75節）を参照。主な区切り:
+  [`design_notes.md`](./design_notes.md)（全86節）を参照。主な区切り:
   - §1〜11: RTL設計・検証・xschem回路図
   - §12〜38: 物理実装環境の構築、配置配線の試行錯誤（複数世代）
   - §39〜46: セル再構築、バッファ挿入、DRC/短絡の系統的解消
@@ -205,5 +251,23 @@ python3 verify_schematic_v7.py    # 幾何学的接続検証（xschem不要）
   - §59: LVS準備（スキーマティック生成）
   - §60〜74: コアセル単体LVSのクリーン化（VDD/GND浮き、短絡、
     スイッチレベルシミュレーションによる検証）
-  - §75: トップレベル統合（FRAME/GIO⇔コア結線）とトップレベルLVSクリーン化
+  - §75: トップレベル統合（FRAME/GIO⇔コア結線）とトップレベルLVSクリーン化（v7）
+  - §76: IRSIMチップレベル動作検証（実`TR-1um.prm`下でWRITEパス完全動作
+    確認、READ側同一エッジレース・sda_oe極性不一致を発見）
+  - §77: **V8計画**（ウォーキングワン方式によるレース解消、sda_oe極性
+    反転、Verilog検証→NET合成→配置配線→DRC/LVS検証→IRSIM検証の
+    フル再実行フロー）
+  - §78: `gio_connections.json`（GIO⇔コア結線マップ、v9チップレベル
+    LVS作業の一次データソース）の導出とv7実配線との相互検証
+  - §79: **V9**コア再配置配線（DFFS許可、GIO再結線、電源メッシュ再構築）
+    のDRCクリーン化
+  - §80〜81: v9チップレベルLVS用参照SPICE生成、最終レイアウトの`src/`確定
+  - §82〜83: チップTOP PIN未宣言バグの発見・修正（スキーマティック側
+    ・レイアウト側の両方、P1〜P7/VSS/P9〜P15/VDDの16ポート）
+  - §84: HIZ2/HIZ7/HIZ9/HIZ10/HIZ15/OUT13のVDD/VSS固定タイ結線が
+    v9の電源配線書き直しで欠落していたバグの発見・修正
+  - §85: `gio_connections.json`のP11記載ミス（実際は`core.tx_data[1]`
+    に接続済みなのに誤って未接続と記載）の発見・修正、**チップレベル
+    DRC/LVSクリーン達成**
+  - §86: TOP PINラベルのテキストサイズ調整
 - 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)

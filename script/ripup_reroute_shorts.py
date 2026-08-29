@@ -108,6 +108,15 @@ X_GRID = 5.4
 
 EPS = 1e-6
 VIA_MATCH_EPS_UM = 0.06
+# max distance (um) a pin_map-matched real-pin rectangle (tier (a) of
+# _endpoint_pad_region) may sit from the endpoint it's being used to
+# exclude, before it's rejected as a stale/mismatched pin_map entry
+# rather than the endpoint's own pad (design_notes.md section 77.39).
+# A real pin's via lands right at its own pad edge (a few um at most,
+# accounting for pad size + a short jog); hundreds of um away can only
+# mean pin_map's (vx, vy) for that entry has drifted from the real LEF
+# pin location after an earlier try_fix_* move.
+PIN_RECT_SANITY_UM = 15.0
 
 
 def overlap_1d(a0, a1, b0, b1):
@@ -137,7 +146,21 @@ def find_conflicts(net_shapes):
 
 
 class Fixer:
-    def __init__(self, in_gds, pin_map, net_shapes, ch_y0, ch_heights, row_width):
+    def __init__(self, in_gds, pin_map, net_shapes, ch_y0, ch_heights, row_width, placement=None):
+        """placement (design_notes.md section 77.37/77.38, new optional
+        arg): the loaded placement_nrow_fm_*.json dict (same one used to
+        derive ch_y0/ch_heights/row_width), if available. When given,
+        clear_excluding()'s "own net" pad-exclusion at a net's endpoint
+        uses the REAL standard-cell pin rectangle (read from here) or
+        the REAL via_1 PCell center (queried live from in_gds) instead
+        of a guessed via-pad-sized square symmetric about the endpoint
+        Y net_shapes.json recorded -- seen this session to produce
+        false-positive self-collisions whenever a real pin's rectangle
+        is edge-anchored rather than centered on that Y, or a via's
+        true center sits ~1-2um off the recorded box edge. Passing
+        placement=None reproduces the exact old (symmetric-guess-only)
+        behavior -- fully backward compatible for any caller that
+        doesn't have a placement JSON handy."""
         self.layout = db.Layout()
         self.layout.read(in_gds)
         self.dbu = self.layout.dbu
@@ -156,6 +179,19 @@ class Fixer:
         self.fixed_vertical = 0
         self.fixed_horizontal = 0
         self.failed = []
+
+        self.pin_geom = None
+        if placement is not None:
+            self.pin_geom = {}
+            for row in placement["rows"]:
+                for inst in row:
+                    r = inst["row"]
+                    yoff = self.ch_y0[r] + self.ch_heights[r]
+                    for pname, pinfo in inst["pins"].items():
+                        self.pin_geom[(inst["name"], pname)] = [
+                            (lyr, x0, y0 + yoff, x1, y1 + yoff)
+                            for lyr, x0, y0, x1, y1 in pinfo["rects"]
+                        ]
 
     def um(self, v):
         return int(round(v / self.dbu))
@@ -214,11 +250,124 @@ class Fixer:
                 mid = (bx0 + bx1) / 2.0
                 pts = ((mid, by0), (mid, by1))
             for ex, ey in pts:
-                own.insert(db.Box(self.um(ex - half), self.um(ey - half),
-                                   self.um(ex + half), self.um(ey + half)))
+                own.insert(self._endpoint_pad_region(exclude_net, ex, ey, half))
         if not own.is_empty():
             region -= own.merged()
         return region.is_empty()
+
+    def _endpoint_pad_region(self, net, ex, ey, half):
+        """Best-available exclusion region for one of `net`'s own box
+        endpoints at (ex, ey) (design_notes.md section 77.37/77.38/77.39/
+        77.40):
+
+        (a) if `net` owns a real standard-cell pin (per self.pin_geom,
+            enumerated via self.pin_map.get(net, []) to know which
+            (instance, pin) pairs belong to this net) whose rectangle
+            is actually NEAR (ex, ey) -- use the EXACT rectangle(s),
+            not a guessed square. Fixes the false-positive seen when a
+            real standard-cell pin's M2 rect is edge-anchored (e.g.
+            Y=[604.4,607.8]) rather than centered on the recorded
+            endpoint Y (604.4) -- the old symmetric guess covered only
+            half of it, leaving the other half as an unexcluded sliver
+            of this SAME net's own metal that then falsely blocked
+            every candidate near it (both ends of a stub are checked,
+            so this could false-block on either side).
+
+            v2 (77.40): originally this matched via pin_map's OWN
+            (vx, vy) bookkeeping (exact-equality within
+            VIA_MATCH_EPS_UM), on the assumption that pin_map records
+            each pin's true LEF location. Two separate ways this broke,
+            found back-to-back this session while chasing the SAME
+            remaining short (_051_ <-> scl_row0):
+              - pin_map's (vx, vy) is NOT always the pin's real
+                location -- it can be wherever the FIRST via/jog for
+                that pin happens to sit (net "_111_"'s pin_map entry
+                for _223_.B is recorded at (1363.5, 355.0), the trunk-
+                to-M2 junction, even though _223_.B's real rectangle is
+                Y=[604.4,607.8], ~249um away up a multi-hop via chain).
+                Matching by (vx, vy) equality therefore FAILS to find
+                _223_.B at all when checking the M2 leg's real top
+                endpoint (1363.5, 604.4) -- exactly the endpoint that
+                needed the real-rectangle exclusion in the first place.
+              - the same bookkeeping can also give a FALSE match: net
+                "_051_"'s pin_map records pin "_176_.Y" at
+                (1223.1, 257.8) -- a point inside channel1, not inside
+                any row -- while _176_.Y's real rectangle is
+                Y=[604.3,607.7]. Matching by (vx, vy) equality wrongly
+                pulls in that far-away rectangle as if it were this
+                endpoint's own local pad, leaving the TRUE local
+                via/pad footprint at (1223.1, 257.8) unexcluded.
+            Both failure modes trace to the same root cause: pin_map's
+            (vx, vy) is a live "where did this pin's via last land"
+            tracker (rewritten by every successful try_fix_* -- see the
+            "if net in self.pin_map" blocks below), not a stable key
+            into pin_geom. So (vx, vy) is now used ONLY to enumerate
+            which (instance, pin) pairs belong to `net` -- never to
+            decide whether a given pair's rectangle applies to THIS
+            endpoint. That decision is made purely by geometric
+            proximity: does the pin's real rectangle actually sit near
+            (ex, ey)? A real pin's own via lands right at its own pad
+            edge (a few um at most); a rectangle hundreds of um away
+            can only be a different endpoint of the same multi-hop net,
+            not this one's own local footprint.
+        (b) else, if a real via_1 PCell instance exists within a small
+            search radius -- use ITS exact center for the symmetric
+            pad, not the possibly-offset net_shapes box edge (via
+            centers were found up to ~1.7um off the recorded edge).
+        (c) else, the historical symmetric guess centered exactly at
+            (ex, ey) -- unchanged fallback, so behavior for any net/
+            endpoint this doesn't have better data for is identical to
+            before this fix (fully backward compatible when
+            self.pin_geom is None, i.e. no placement JSON was given to
+            the constructor)."""
+        reg = db.Region()
+        if self.pin_geom is not None:
+            for inst, pname, vx, vy in self.pin_map.get(net, []):
+                rects = self.pin_geom.get((inst, pname))
+                if rects and self._rects_near_point(rects, ex, ey, PIN_RECT_SANITY_UM):
+                    for lyr, rx0, ry0, rx1, ry1 in rects:
+                        reg.insert(db.Box(self.um(rx0), self.um(ry0), self.um(rx1), self.um(ry1)))
+                    return reg
+        cx, cy = self._nearby_via_center(ex, ey)
+        if cx is not None:
+            reg.insert(db.Box(self.um(cx - half), self.um(cy - half),
+                               self.um(cx + half), self.um(cy + half)))
+            return reg
+        reg.insert(db.Box(self.um(ex - half), self.um(ey - half),
+                           self.um(ex + half), self.um(ey + half)))
+        return reg
+
+    def _rects_near_point(self, rects, ex, ey, margin):
+        """True if (ex, ey) lies within `margin` um of at least one of
+        `rects`' bounding boxes (each rect is (layer, x0, y0, x1, y1)).
+        Used to sanity-check a pin_map-matched pin_geom rectangle before
+        trusting it as the exclusion pad for endpoint (ex, ey) -- see
+        _endpoint_pad_region tier (a) / design_notes.md section 77.39."""
+        for lyr, rx0, ry0, rx1, ry1 in rects:
+            if (rx0 - margin) <= ex <= (rx1 + margin) and (ry0 - margin) <= ey <= (ry1 + margin):
+                return True
+        return False
+
+    def _nearby_via_center(self, x, y, radius=2.5):
+        """Exact center of a real via_1 PCell instance within `radius`
+        um of (x, y), or (None, None) if none found. radius=2.5 covers
+        the ~1.7um edge-vs-center offsets seen this session while
+        staying well short of TRACK_PITCH=5.4um, so it can never
+        accidentally pick up an unrelated via a full track away."""
+        target = db.Vector(self.um(x), self.um(y))
+        r = self.um(radius)
+        best, best_d2 = None, None
+        for inst in self.top.each_inst():
+            if inst.cell.name != "via_1":
+                continue
+            d = inst.trans.disp
+            dx, dy = d.x - target.x, d.y - target.y
+            if abs(dx) <= r and abs(dy) <= r:
+                d2 = dx * dx + dy * dy
+                if best_d2 is None or d2 < best_d2:
+                    best_d2 = d2
+                    best = (d.x * self.dbu, d.y * self.dbu)
+        return best if best is not None else (None, None)
 
     # ---- GDS mutation helpers ----
     def delete_box(self, layer_name, box):
@@ -557,7 +706,7 @@ def main():
         print(f"{len(complex_nets)} multi-segment/high-fanout net(s) excluded from ever being "
               f"moved (moved only if the OTHER side of a conflict is simple): {sorted(complex_nets)}")
 
-    fixer = Fixer(in_gds, pin_map, net_shapes, ch_y0, ch_heights, row_width)
+    fixer = Fixer(in_gds, pin_map, net_shapes, ch_y0, ch_heights, row_width, placement=placement)
 
     permanently_failed = set()
     it = 0

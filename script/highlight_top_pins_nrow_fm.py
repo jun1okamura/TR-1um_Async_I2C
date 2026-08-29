@@ -65,8 +65,26 @@ MARKER_SIZE_UM = 6.0  # a bit bigger than a via pad (3.4um) so it stands out
 
 # port -> underlying net name, where different from the port name itself
 # (see i2c_slave_async_net_v6.v's trailing `assign` block).
+#
+# v9 FIX (design_notes.md 78.7, this session): "sda_oe": "sda_oe_r" was
+# correct for v6's RTL (which had `assign sda_oe = sda_oe_r;`), but v9's
+# RTL (src/i2c_slave_async_net_v9_rowbuf.v) no longer aliases sda_oe --
+# its driving DFFRB's QB pin connects DIRECTLY to net "sda_oe" (line 894:
+# ".QB(sda_oe)"), while "sda_oe_r" is now a SEPARATE internal-only net
+# (the same flip-flop's non-inverted Q output, line 893: ".Q(sda_oe_r)"),
+# confirmed via direct grep. Leaving the stale v6-era alias in place
+# caused route_top_pins_nrow_fm.py's gather_pins() (which imports
+# port_net_name from this module) to capture the WRONG pin for the
+# "sda_oe" port -- it grabbed the Q/sda_oe_r pin's physical location
+# instead of QB/sda_oe's, and routed+labeled a BBOX-edge exit there.
+# Root-caused directly from a KLayout LVS net cross-reference the user
+# ran (layout/step8/LVS_error1.lvsdb): net pair layout='sda_oe' <->
+# schematic='SDA_OE_R' (Match -- i.e. the labeled "sda_oe" wire really
+# IS electrically sda_oe_r), plus a SEPARATE pair layout='$I1117' <->
+# schematic='SDA_OE' (Match but anonymous -- the real sda_oe/QB net was
+# never given a labeled edge pin at all, since "sda_oe" as a net name
+# was never a key in net_to_port under the old, wrong alias).
 PORT_NET_ALIAS = {
-    "sda_oe": "sda_oe_r",
     "addr_match": "addr_ok",
     "rw": "rw_bit",
 }

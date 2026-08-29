@@ -1,0 +1,190 @@
+{
+ "_meta": {
+  "purpose": "v3 (design_notes.md 79.2): PTECT-aware edge selection -- BOTTOM edge is only allowed for a TAP column whose X position falls OUTSIDE PTECT's box (X<-800 or X>800), since only then does the straight vertical core-exit hop from a BOTTOM pin avoid cutting through PTECT (X -800..800, Y -800..-150). TAP0/TAP3 qualify (X~+-802..807); TAP1/TAP2 do not (well inside +-800) and are forced to TOP. This keeps wire length close to v1's unconstrained optimum while still eliminating every PTECT crossing (v2's blanket TOP-only rule pushed 2 legs' arc spans past a third of the ring, forcing 13 shared lanes and colliding with NEAR_R=913 -- not needed once the PTECT rule is applied precisely).",
+  "R": 880.0,
+  "gio_destinations_fixed_by_frame_schematic": {
+   "VDD": [
+    [
+     "main",
+     100.0,
+     925.0,
+     "TOP"
+    ],
+    [
+     "HIZ2",
+     -580.0,
+     921.7,
+     "TOP"
+    ],
+    [
+     "HIZ7",
+     -580.0,
+     -921.7,
+     "BOTTOM"
+    ],
+    [
+     "HIZ15",
+     580.0,
+     921.7,
+     "TOP"
+    ]
+   ],
+   "VSS(GND)": [
+    [
+     "main",
+     -925.0,
+     5.0,
+     "LEFT"
+    ],
+    [
+     "HIZ9",
+     220.0,
+     -921.7,
+     "BOTTOM"
+    ],
+    [
+     "HIZ10",
+     580.0,
+     -921.7,
+     "BOTTOM"
+    ],
+    [
+     "OUT13",
+     921.7,
+     180.0,
+     "RIGHT"
+    ]
+   ]
+  }
+ },
+ "VDD": {
+  "total_ring_distance": 929.2,
+  "assignment": [
+   {
+    "tap": "TAP0",
+    "src_edge": "BOTTOM",
+    "src_xy": [
+     -801.9,
+     -138.5
+    ],
+    "dest_name": "HIZ7",
+    "dest_xy": [
+     -580.0,
+     -921.7
+    ],
+    "dest_edge": "BOTTOM",
+    "ring_dist": 221.9
+   },
+   {
+    "tap": "TAP1",
+    "src_edge": "TOP",
+    "src_xy": [
+     -267.3,
+     794.6
+    ],
+    "dest_name": "HIZ2",
+    "dest_xy": [
+     -580.0,
+     921.7
+    ],
+    "dest_edge": "TOP",
+    "ring_dist": 312.7
+   },
+   {
+    "tap": "TAP2",
+    "src_edge": "TOP",
+    "src_xy": [
+     267.3,
+     794.6
+    ],
+    "dest_name": "main",
+    "dest_xy": [
+     100.0,
+     925.0
+    ],
+    "dest_edge": "TOP",
+    "ring_dist": 167.3
+   },
+   {
+    "tap": "TAP3",
+    "src_edge": "TOP",
+    "src_xy": [
+     807.3,
+     794.6
+    ],
+    "dest_name": "HIZ15",
+    "dest_xy": [
+     580.0,
+     921.7
+    ],
+    "dest_edge": "TOP",
+    "ring_dist": 227.3
+   }
+  ]
+ },
+ "VSS": {
+  "total_ring_distance": 4049.6,
+  "assignment": [
+   {
+    "tap": "TAP0",
+    "src_edge": "BOTTOM",
+    "src_xy": [
+     -807.3,
+     -138.5
+    ],
+    "dest_name": "HIZ9",
+    "dest_xy": [
+     220.0,
+     -921.7
+    ],
+    "dest_edge": "BOTTOM",
+    "ring_dist": 1027.3
+   },
+   {
+    "tap": "TAP1",
+    "src_edge": "TOP",
+    "src_xy": [
+     -272.7,
+     794.6
+    ],
+    "dest_name": "main",
+    "dest_xy": [
+     -925.0,
+     5.0
+    ],
+    "dest_edge": "LEFT",
+    "ring_dist": 1482.3
+   },
+   {
+    "tap": "TAP2",
+    "src_edge": "TOP",
+    "src_xy": [
+     261.9,
+     794.6
+    ],
+    "dest_name": "OUT13",
+    "dest_xy": [
+     921.7,
+     180.0
+    ],
+    "dest_edge": "RIGHT",
+    "ring_dist": 1318.1
+   },
+   {
+    "tap": "TAP3",
+    "src_edge": "BOTTOM",
+    "src_xy": [
+     801.9,
+     -138.5
+    ],
+    "dest_name": "HIZ10",
+    "dest_xy": [
+     580.0,
+     -921.7
+    ],
+    "dest_edge": "BOTTOM",
+    "ring_dist": 221.9
+   }
+  ]
+ }
+}

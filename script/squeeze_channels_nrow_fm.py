@@ -96,6 +96,7 @@ def build_y_map(ch_y0, ch_heights, row_y0, row_h, n_rows, n_ch,
         kept = sorted(kept_by_channel[c])
         # channel band: [ch_y0[c], ch_y0[c]+ch_heights[c]]
         band_lo = ch_y0[c]
+        band_hi = ch_y0[c] + ch_heights[c]
         # advance identity up to band_lo (should already be cur_old==band_lo
         # by construction, since rows/channels are contiguous)
         assert abs(cur_old - band_lo) < 1e-6, (c, cur_old, band_lo)
@@ -104,6 +105,29 @@ def build_y_map(ch_y0, ch_heights, row_y0, row_h, n_rows, n_ch,
             track_y = band_lo + track0_offset + idx * track_pitch
             slice_lo = track_y - track_pitch / 2.0
             slice_hi = track_y + track_pitch / 2.0
+            # v8 fix (this session, design_notes 77.x): TRACK0_OFFSET
+            # (2.0) < TRACK_PITCH/2 (2.7) means the FIRST kept index's
+            # nominal slice can start slightly BELOW band_lo, and/or the
+            # LAST kept index's slice can end slightly ABOVE band_hi --
+            # both bleed into the neighboring ROW band, which is
+            # supposed to be pure identity-mapped (untouched) territory.
+            # Confirmed via GDS forensics as the exact mechanism behind
+            # every post-squeeze M2 Smin violation this session: a
+            # cell's own physical pin (moved by the RIGID per-instance
+            # transform, using ONLY the row's own identity shift) versus
+            # a routed wire's endpoint at the exact same pre-squeeze Y
+            # (moved by this independent per-point y_map query) landing
+            # 1.2-2.7um apart post-squeeze, because that Y fell inside a
+            # track slice that had silently grown past the channel/row
+            # boundary and stolen some of the row's "identity" span for
+            # itself. Clip every slice to the channel's own true bounds
+            # before it can affect the map at all -- a track's real
+            # extent was never actually outside the channel to begin
+            # with.
+            slice_lo = max(slice_lo, band_lo)
+            slice_hi = min(slice_hi, band_hi)
+            if slice_hi - slice_lo < 1e-9:
+                continue
             # gap BEFORE this track's slice (relative to prev_track_top) is
             # collapsed to zero width
             gap = slice_lo - prev_track_top
@@ -204,8 +228,29 @@ def main(in_gds, compaction_info_path, out_gds, pin_map_in=None, pin_map_out=Non
     dbu = layout.dbu
     top = layout.cell(TOP_CELL_NAME)
 
+    MFG_GRID_UM = 0.05  # v8 fix (this session): y_map()'s breakpoint
+                         # accumulation (repeated float += over ~170+
+                         # breakpoints for a design this size) drifts off
+                         # the true manufacturing grid by a few
+                         # thousandths of a um -- individually invisible,
+                         # but the real KLayout DRC deck (drc.lydrc)
+                         # flags every one as an OFFGRID 0.050 violation
+                         # (340 found on V8's squeezed output, confirmed
+                         # via direct .lyrdb inspection: e.g. a mapped
+                         # Y=920.843 instead of a 0.05-multiple). Snap the
+                         # mapped value to the true process grid, not
+                         # just the layout's internal dbu (0.001um, far
+                         # finer than the real grid) -- this is what
+                         # every OTHER coordinate in this codebase
+                         # (TRACK_PITCH=5.4, TRACK0_OFFSET=2.0, PAD sizes,
+                         # etc.) already implicitly satisfies by
+                         # construction; only squeeze's per-point y_map()
+                         # evaluation was never snapped back to it.
+
     def um_map(y_dbu):
-        return int(round(y_map(y_dbu * dbu) / dbu))
+        y_new_um = y_map(y_dbu * dbu)
+        y_new_um = round(y_new_um / MFG_GRID_UM) * MFG_GRID_UM
+        return int(round(y_new_um / dbu))
 
     # 1. remap every top-level shape's Y coordinates, layer by layer.
     for li in layout.layer_indexes():

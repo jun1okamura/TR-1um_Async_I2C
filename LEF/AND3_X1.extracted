@@ -1,0 +1,28 @@
+* Created by KLayout
+*** My special header ***
+
+* cell AND3_X1
+* pin A
+* pin B
+* pin C
+* pin Y
+* pin gnd
+* pin vdd
+.SUBCKT AND3_X1 A B C Y gnd vdd
+* device instance $1 r0 *1 21,53.2 PMOS
+XM$1 vdd \$2 Y vdd PMOS L=1u W=10.2u AS=28.56p AD=28.56p PS=26u PD=26u
+* device instance $2 r0 *1 4,53.2 PMOS
+XM$2 vdd A \$2 vdd PMOS L=1u W=10.2u AS=28.56p AD=15.3p PS=26u PD=13.2u
+* device instance $3 r0 *1 8,53.2 PMOS
+XM$3 \$2 B vdd vdd PMOS L=1u W=10.2u AS=15.3p AD=15.3p PS=13.2u PD=13.2u
+* device instance $4 r0 *1 12,53.2 PMOS
+XM$4 vdd C \$2 vdd PMOS L=1u W=10.2u AS=15.3p AD=28.56p PS=13.2u PD=26u
+* device instance $5 r0 *1 21,8.2 NMOS
+XM$5 gnd \$2 Y gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+* device instance $6 r0 *1 8.6,8.2 NMOS
+XM$6 gnd A \$4 gnd NMOS L=1u W=3.4u AS=9.52p AD=2.04p PS=12.4u PD=4.6u
+* device instance $7 r0 *1 10.8,8.2 NMOS
+XM$7 \$4 B \$5 gnd NMOS L=1u W=3.4u AS=2.04p AD=2.04p PS=4.6u PD=4.6u
+* device instance $8 r0 *1 13,8.2 NMOS
+XM$8 \$5 C \$2 gnd NMOS L=1u W=3.4u AS=2.04p AD=9.52p PS=4.6u PD=12.4u
+.ENDS AND3_X1

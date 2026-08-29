@@ -1,20 +1,20 @@
 // =============================================================================
 // i2c_slave_async_tb.v
 //
-// Testbench for i2c_slave_async.v (v2, gate-synthesizable architecture).
+// Testbench for i2c_slave_async.v (v4: bit_cnt + last_bit_pending pipelined
+// terminal-count flag + active-low sda_oe, design_notes.md section 77.24).
 // Not run in the delivery sandbox (no iverilog/Verilator available there);
 // run it locally, e.g.:
 //
-//   iverilog -o sim i2c_slave_async.v i2c_slave_async_tb.v && vvp sim
-//   (or) verilator --binary -j 0 i2c_slave_async_tb.v i2c_slave_async.v --top-module i2c_slave_async_tb
+//   iverilog -o sim i2c_slave_async.v stdcell_behavioral_stubs.v i2c_slave_async_tb.v && vvp sim
+//   (or) verilator --binary -j 0 i2c_slave_async_tb.v i2c_slave_async.v stdcell_behavioral_stubs.v --top-module i2c_slave_async_tb
 //
-// NOTE: this testbench needs behavioral models for DEL1/NOR2/INV_X1 (v2
-// instantiates them structurally) to be visible to the simulator. iverilog
-// will treat them as undefined-module errors unless you either (a) also
-// compile ../TR1um_5_stdcell behavioral/gate models alongside this file, or
-// (b) compile a quick behavioral stub library for iverilog-only simulation
-// (DEL1: Y=A with a small #delay; NOR2: Y=~(A|B); INV_X1: Y=~A). This repo
-// does not yet include such stubs -- add them before running this TB.
+// NOTE: this testbench needs behavioral models for DEL1/NOR2/INV_X1 (v2/v3
+// instantiate them structurally) to be visible to the simulator --
+// stdcell_behavioral_stubs.v (in this same directory) provides them, along
+// with every other TR1um_5_stdcell cell used anywhere in this project.
+// iverilog will report "Unknown module type: DEL1/NOR2/INV_X1" if it is
+// left out of the compile command.
 //
 // Exercises the same three scenarios verified throughout this project
 // (script/test_v3_positive.py / test_v3_negative.py against the matching
@@ -68,7 +68,10 @@ module i2c_slave_async_tb;
         .rw         (rw),
         .busy       (busy)
     );
-    assign sda = s_oe ? 1'b0 : 1'bz;
+    // v3: sda_oe is now active-low (0 = drive low, 1 = release), matching
+    // the SDA pad's HIZ13 convention directly -- see i2c_slave_async.v
+    // header and design_notes.md section 77.3.
+    assign sda = s_oe ? 1'bz : 1'b0;
 
     task check(input cond, input [511:0] msg);
         begin

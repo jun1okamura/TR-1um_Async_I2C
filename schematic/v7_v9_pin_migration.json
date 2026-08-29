@@ -1,0 +1,419 @@
+{
+ "_meta": {
+  "generated": "this session, after fixing script/highlight_top_pins_nrow_fm.py's stale sda_oe PORT_NET_ALIAS bug (design_notes.md 78.7) and regenerating layout/step8/v9_step_9_power_pins_added.gds -- supersedes the pre-fix schematic/v7_v9_pin_migration.json (78.5), where sda_oe's v9 position was wrong (X=834.3/24.3 chip-frame, the Q/sda_oe_r pin's location, not QB/sda_oe's real X=823.5/13.5).",
+  "core_offset_chip_frame": [
+   -810.0,
+   -140.0
+  ],
+  "v7_source": "script/route_gio_core.py NETS dict (hardcoded, chip-frame coords)",
+  "v9_source": "layout/step8/v9_step_9_power_pins_added.gds M1PIN/M2PIN+TXM1/TXM2 labels, extracted via klayout.db, converted to chip-frame via core_offset_chip_frame"
+ },
+ "signals": {
+  "addr_match": {
+   "v9": {
+    "x": 808.5,
+    "y": 352.0,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "new_in_v9": true
+  },
+  "busy": {
+   "v9": {
+    "x": 148.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "new_in_v9": true
+  },
+  "rst_n": {
+   "v7": {
+    "x": 78.3,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 305.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": 226.8,
+   "dy": -2.1
+  },
+  "rw": {
+   "v9": {
+    "x": 45.9,
+    "y": -138.5,
+    "edge": "BOTTOM",
+    "layer": "M2"
+   },
+   "new_in_v9": true
+  },
+  "rx_data[0]": {
+   "v7": {
+    "x": 191.7,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": -40.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": -232.2,
+   "dy": -2.1
+  },
+  "rx_data[1]": {
+   "v7": {
+    "x": -808.5,
+    "y": 438.4,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 422.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[2]": {
+   "v7": {
+    "x": -808.5,
+    "y": 443.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 427.6,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[3]": {
+   "v7": {
+    "x": -808.5,
+    "y": 449.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 433.0,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[4]": {
+   "v7": {
+    "x": -808.5,
+    "y": 454.6,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 438.4,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[5]": {
+   "v7": {
+    "x": -808.5,
+    "y": 460.0,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 443.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[6]": {
+   "v7": {
+    "x": -808.5,
+    "y": 465.4,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 449.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_data[7]": {
+   "v7": {
+    "x": -808.5,
+    "y": 433.0,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": -808.5,
+    "y": 416.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": -16.2
+  },
+  "rx_valid": {
+   "v9": {
+    "x": -737.1,
+    "y": -138.5,
+    "edge": "BOTTOM",
+    "layer": "M2"
+   },
+   "new_in_v9": true
+  },
+  "scl": {
+   "v7": {
+    "x": -89.1,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": -359.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": -270.0,
+   "dy": -2.1
+  },
+  "sda_in": {
+   "v7": {
+    "x": -56.7,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": -326.7,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": -270.0,
+   "dy": -2.1
+  },
+  "sda_oe": {
+   "v7": {
+    "x": 808.5,
+    "y": 330.4,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": 13.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": -795.0,
+   "dy": 464.2,
+   "edge_changed": true
+  },
+  "tx_data[0]": {
+   "v7": {
+    "x": 808.5,
+    "y": 341.2,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": 808.5,
+    "y": 346.6,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": 5.4
+  },
+  "tx_data[1]": {
+   "v7": {
+    "x": 808.5,
+    "y": 335.8,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": 808.5,
+    "y": 341.2,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "dx": 0.0,
+   "dy": 5.4
+  },
+  "tx_data[2]": {
+   "v7": {
+    "x": 332.1,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 808.5,
+    "y": 335.8,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "dx": 476.4,
+   "dy": -460.9,
+   "edge_changed": true
+  },
+  "tx_data[3]": {
+   "v7": {
+    "x": 299.7,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 808.5,
+    "y": 330.4,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "dx": 508.8,
+   "dy": -466.3,
+   "edge_changed": true
+  },
+  "tx_data[4]": {
+   "v7": {
+    "x": 267.3,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 494.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": 226.8,
+   "dy": -2.1
+  },
+  "tx_data[5]": {
+   "v7": {
+    "x": 234.9,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 461.7,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": 226.8,
+   "dy": -2.1
+  },
+  "tx_data[6]": {
+   "v7": {
+    "x": 202.5,
+    "y": 796.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "v9": {
+    "x": 429.3,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": 226.8,
+   "dy": -2.1
+  },
+  "tx_data[7]": {
+   "v7": {
+    "x": 808.5,
+    "y": 346.6,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "v9": {
+    "x": 526.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "dx": -282.0,
+   "dy": 448.0,
+   "edge_changed": true
+  }
+ },
+ "summary": {
+  "edge_changed_signals": [
+   "sda_oe",
+   "tx_data[2]",
+   "tx_data[3]",
+   "tx_data[7]"
+  ],
+  "new_in_v9_no_v7_gio_connection": [
+   "addr_match",
+   "busy",
+   "rw",
+   "rx_valid"
+  ],
+  "same_edge_shift_groups": {
+   "TOP_group_A_dx+226.8_dy-2.1": [
+    "rst_n",
+    "tx_data[4]",
+    "tx_data[5]",
+    "tx_data[6]"
+   ],
+   "TOP_scl_dx-270.0": [
+    "scl"
+   ],
+   "TOP_sda_in_dx-270.0": [
+    "sda_in"
+   ],
+   "TOP_rx_data0_dx-232.2": [
+    "rx_data[0]"
+   ],
+   "RIGHT_tx_data01_dx0_dy+5.4": [
+    "tx_data[0]",
+    "tx_data[1]"
+   ],
+   "LEFT_rx_data1-7_dx0_dy-16.2": [
+    "rx_data[1]",
+    "rx_data[2]",
+    "rx_data[3]",
+    "rx_data[4]",
+    "rx_data[5]",
+    "rx_data[6]",
+    "rx_data[7]"
+   ]
+  },
+  "power_architecture_note": "v7: row-rail taps at LEFT(GND,x=-810)/RIGHT(VDD,x=810), 1 exit/net via VDD_ROWS/GND_ROWS+10um M2 bus. v9: 4 TAP columns x 2 edges(TOP/BOTTOM) = 8 pins/net, structurally different, route_gio_core.py's VDD_ROWS/GND_ROWS code cannot be reused as-is (see design_notes.md 78.5 finding 3)."
+ },
+ "recommendation": "route_gio_core.py's NETS dict must be regenerated from these v9 chip-frame coordinates (not hand-patched from v7's), especially for the 4 edge-changed signals (sda_oe, tx_data[2], tx_data[3], tx_data[7]) whose GIO-side pad/edge/layer assignment likely also needs re-selection to keep routing paths clear of the core/PTECT area. Power routing section needs a structural redesign for v9's 8-pins/net TAP-column architecture."
+}

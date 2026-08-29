@@ -1,0 +1,369 @@
+{
+ "_meta": {
+  "purpose": "Optimized v9 NETS dict for route_gio_core.py's successor: core-side coords are v9's REAL, GDS-extracted BBOX-edge pin positions (from schematic/v7_v9_pin_migration.json); GIO-side coords are REUSED UNCHANGED from v7's NETS dict (fixed by the frame's own schematic, independent of core version). Direction (CW/CCW) and lane assignment computed fresh via the SAME algorithm as route_gio_core.py (R_NOM=880.0, LANE_R0=847.0, LANE_PITCH=6.0, CUT=4625.0, PERI=7400.0).",
+  "lanes_needed": 11,
+  "v7_lanes_needed_reference": 11
+ },
+ "nets": {
+  "rx_data[0]": {
+   "core": {
+    "x": -40.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -180,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 0,
+   "R": 847.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[3]": {
+   "core": {
+    "x": -808.5,
+    "y": 433.0,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -620,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 0,
+   "R": 847.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[5]": {
+   "core": {
+    "x": -808.5,
+    "y": 443.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -180,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 0,
+   "R": 847.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[3]": {
+   "core": {
+    "x": 808.5,
+    "y": 330.4,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -530,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 1,
+   "R": 853.0,
+   "edge_changed_from_v7": true
+  },
+  "tx_data[2]": {
+   "core": {
+    "x": 808.5,
+    "y": 335.8,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -270,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 2,
+   "R": 859.0,
+   "edge_changed_from_v7": true
+  },
+  "scl": {
+   "core": {
+    "x": -359.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -530,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 3,
+   "R": 865.0,
+   "edge_changed_from_v7": false
+  },
+  "sda_in": {
+   "core": {
+    "x": -326.7,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 270,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 3,
+   "R": 865.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[2]": {
+   "core": {
+    "x": -808.5,
+    "y": 427.6,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -180,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 3,
+   "R": 865.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[6]": {
+   "core": {
+    "x": -808.5,
+    "y": 449.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 620,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 3,
+   "R": 865.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[0]": {
+   "core": {
+    "x": 808.5,
+    "y": 346.6,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -270,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 4,
+   "R": 871.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[6]": {
+   "core": {
+    "x": 429.3,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 530,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 4,
+   "R": 871.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[7]": {
+   "core": {
+    "x": 526.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 530,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 4,
+   "R": 871.0,
+   "edge_changed_from_v7": true
+  },
+  "rx_data[4]": {
+   "core": {
+    "x": -808.5,
+    "y": 438.4,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 180,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 4,
+   "R": 871.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[1]": {
+   "core": {
+    "x": 808.5,
+    "y": 341.2,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -530,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 5,
+   "R": 877.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[4]": {
+   "core": {
+    "x": 494.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 270,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 5,
+   "R": 877.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[7]": {
+   "core": {
+    "x": -808.5,
+    "y": 416.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 620,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 6,
+   "R": 883.0,
+   "edge_changed_from_v7": false
+  },
+  "rx_data[1]": {
+   "core": {
+    "x": -808.5,
+    "y": 422.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -620,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 7,
+   "R": 889.0,
+   "edge_changed_from_v7": false
+  },
+  "tx_data[5]": {
+   "core": {
+    "x": 461.7,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -270,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 8,
+   "R": 895.0,
+   "edge_changed_from_v7": false
+  },
+  "sda_oe": {
+   "core": {
+    "x": 13.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 220,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 9,
+   "R": 901.0,
+   "edge_changed_from_v7": true
+  },
+  "rst_n": {
+   "core": {
+    "x": 305.1,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 530,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 10,
+   "R": 907.0,
+   "edge_changed_from_v7": false
+  }
+ }
+}

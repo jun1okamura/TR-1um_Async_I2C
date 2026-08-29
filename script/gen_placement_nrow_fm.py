@@ -105,17 +105,66 @@ from gen_placement_2row import fill_combo, TRACK_UM, TAP_CELL  # noqa: E402
 N_ROWS = 4
 OUT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/placement_nrow_fm.json"
 
-# Fixed row width target (user request): 5.4um x 300 grid steps.
-TARGET_ROW_WIDTH_UM = 5.4 * 300  # 1620.0um
-N_GAPS = 2  # 3 TAP columns; unchanged from the 1436.4um version -- more
-            # room per gap only makes packing easier, never harder.
+# Fixed row width target (user request, v2-v7): 5.4um x 300 grid steps
+# (1620.0um), derived by solving for TAP_INTERVAL_TRACKS given N_GAPS.
+#
+# V8 (design_notes.md section 77.6/77.11, user request): TAP columns
+# increased from 3 to 5 (N_GAPS 2->4) to strengthen the power mesh -- more,
+# closer-spaced VDD/GND straps across the row. Was N_GAPS=2 (3 TAP
+# columns) from the 1436.4um version through v7. Unlike N_GAPS=2 (which
+# divides 1620um evenly: TAP_INTERVAL_TRACKS=147 exactly), N_GAPS=4 does
+# NOT divide 1620um evenly ((1620 - 5*10.8)/4/5.4 = 72.5, not an integer)
+# -- so for v8 this is inverted: TAP_INTERVAL_TRACKS is now the fixed
+# integer input and TARGET_ROW_WIDTH_UM is DERIVED from it, landing very
+# close to (but not exactly) the original 1620um/300-track target.
+# v9 (design_notes.md section 77.33-77.40, user request): N_GAPS=3
+# (4 TAP columns), unequal per-gap split [97,97,98] tracks -- hits
+# TARGET_ROW_WIDTH_UM=1620.0um exactly (see _tap_tracks's docstring).
+# This is the currently-adopted configuration; v8's N_GAPS=4/
+# TAP_INTERVAL_TRACKS=115 (row width 2538.0um) values are kept only in
+# git history/this comment for provenance -- restore them if a v8-style
+# run is ever needed again.
+N_GAPS = 3  # 4 TAP columns
 TAP_WIDTH_UM = 10.8  # TAP2's own width
+TAP_INTERVAL_TRACKS = [97, 97, 98]
+def _tap_tracks(gap_i):
+    """TAP_INTERVAL_TRACKS may be a single int (uniform gap width, the
+    original v2-v8 behavior -- required whenever N_GAPS divides
+    1620um/300-tracks evenly, e.g. N_GAPS=2 -> 147 tracks/gap exactly)
+    or a per-gap list/tuple of length N_GAPS (design_notes.md section
+    77.33/77.34: for N_GAPS values that do NOT divide 300 tracks evenly
+    -- e.g. N_GAPS=3 -> 292 total gap-tracks needed, not divisible by 3;
+    N_GAPS=4 -> 290 total, not divisible by 4 -- a uniform per-gap
+    value can only ever get CLOSE to TARGET_ROW_WIDTH_UM, never exactly
+    equal to it. Splitting the (always-integer, since TAP_WIDTH_UM is
+    itself a whole number of tracks) total gap-track budget UNEVENLY
+    across gaps hits the target exactly instead, since fill_combo()
+    (gen_placement_2row.FILL2/FILL3) can absorb any non-1 per-gap slack
+    regardless of how that slack varies gap-to-gap. TAP column X
+    positions stay identical across every ROW either way (uniform or
+    per-gap list) because every row consumes the SAME gap-track
+    sequence -- only different GAPS may now differ from each other,
+    never the same gap between two different rows -- so the TAP power
+    mesh straps (route_channels_nrow_fm.py) still line up vertically
+    exactly as before; nothing about that alignment depended on all
+    gaps being equal to EACH OTHER, only on each gap being equal across
+    rows, which is preserved."""
+    if isinstance(TAP_INTERVAL_TRACKS, (list, tuple)):
+        assert len(TAP_INTERVAL_TRACKS) == N_GAPS, (
+            f"TAP_INTERVAL_TRACKS list has {len(TAP_INTERVAL_TRACKS)} entries, "
+            f"expected N_GAPS={N_GAPS}")
+        return TAP_INTERVAL_TRACKS[gap_i]
+    return TAP_INTERVAL_TRACKS
 
-# Derived so N_GAPS gaps of TAP_INTERVAL_TRACKS tracks each, plus
-# (N_GAPS+1) TAP columns, land on TARGET_ROW_WIDTH_UM exactly:
-# 1620 = 3*10.8 + 2*TAP_INTERVAL_TRACKS*5.4  ->  TAP_INTERVAL_TRACKS = 147
-TAP_INTERVAL_TRACKS = round((TARGET_ROW_WIDTH_UM - (N_GAPS + 1) * TAP_WIDTH_UM) / N_GAPS / TRACK_UM)
-assert abs(3 * TAP_WIDTH_UM + N_GAPS * TAP_INTERVAL_TRACKS * TRACK_UM - TARGET_ROW_WIDTH_UM) < 1e-6
+
+def _total_gap_tracks():
+    if isinstance(TAP_INTERVAL_TRACKS, (list, tuple)):
+        return sum(TAP_INTERVAL_TRACKS)
+    return N_GAPS * TAP_INTERVAL_TRACKS
+
+
+TARGET_ROW_WIDTH_UM = (N_GAPS + 1) * TAP_WIDTH_UM + _total_gap_tracks() * TRACK_UM
+assert abs((N_GAPS + 1) * TAP_WIDTH_UM + _total_gap_tracks() * TRACK_UM - TARGET_ROW_WIDTH_UM) < 1e-6
 
 # Priority M2 corridor width (user request, this session -- see the
 # pack_row_distributed module comment below for the full rationale):
@@ -124,17 +173,93 @@ assert abs(3 * TAP_WIDTH_UM + N_GAPS * TAP_INTERVAL_TRACKS * TRACK_UM - TARGET_R
 # the same amount so its "does N_GAPS suffice" check stays honest.
 PRIORITY_FILL_TRACKS = 2  # FILL2 = 10.8um = 2 tracks
 
+# Targeted X-decoupling nudges (design_notes.md section 77.40, Task
+# #20, user request): {instance_name: extra_tracks}. Splits that
+# instance's gap's anchor-side slack FILL budget into two pieces --
+# `extra_tracks` worth is inserted immediately BEFORE the named
+# instance (shifting it, and every real cell packed after it within
+# the same gap, to the right by extra_tracks*TRACK_UM), and the
+# remaining slack is placed at the gap's normal anchor position same
+# as before. Gap width (and therefore every TAP column's X, and hence
+# the cross-row power mesh alignment) is completely unaffected -- only
+# the split point of the SAME total slack within that one gap moves.
+#
+# v9 remaining short (scl_row0 <-> _051_, design_notes.md 77.37-77.41):
+# root cause, FINAL (77.41, after two earlier, superseded explanations
+# in 77.37/77.39 -- both corrected following the user's own review of
+# the routed GDS in KLayout, which is what eventually surfaced the real
+# mechanism below): row0's "_276_" (a DFFRB whose CK pin is driven by
+# scl_row0) and row1's "_176_" (a MUX2 whose Y pin drives _051_) land
+# their pins at nearly the same absolute X (~1223.1) by coincidence of
+# the FM-partition placement + each cell's own internal pin offset.
+# scl_row0 is a genuinely 3-row-spanning net (pins in rows 0, 1, 3 --
+# confirmed via pin_map cross-referenced against each pin's own
+# instance's row in placement_nrow_fm_v9.json), so it is drawn by pass 2
+# (spanning nets), which runs AFTER pass 1 (row-only/adjacent-pair,
+# where the simple 2-pin "_051_" is drawn). By the time scl_row0's row0
+# pin is processed, "_051_" already occupies column X=1223.1 in channel
+# 1 -- route_channels_nrow_fm.py's own live collision check (pass 2's
+# final-run channel_clear, around line 2143) correctly DETECTS this and
+# tries to escape via find_channel_clear_x + draw_jog, exactly the
+# mechanism point 7's module docstring describes. The escape itself is
+# what fails: draw_jog's departure-leg search (near the pin's own Y)
+# can't find ANY nearby track with a clear vertical exit at x=1223.1,
+# nor is a direct M1 bridge to the far clear_x it found (x=585.9) safe
+# either -- so it falls through to draw_jog's last-resort fallback
+# (route_channels_nrow_fm.py ~line 1605), which explicitly logs
+# "may leave a short to investigate" and draws anyway. This is a
+# genuine, self-documented capacity/search limitation in the router's
+# jog logic for this specific spot, not a modeling bug like the two
+# Fixer issues found earlier this session (design_notes.md 77.38) --
+# confirmed by reproducing the exact same warning message, at the exact
+# same (x, y), from a clean re-route of the unmodified v9 placement.
+#
+# Fix: rather than teach draw_jog a smarter escape (bigger change, more
+# risk elsewhere -- see the v27/v28/v32/v32b history in
+# route_channels_nrow_fm.py for how delicate that logic already is),
+# remove the X coincidence that triggers the collision check in the
+# first place, at the placement level -- "_276_" sits in row0's gap 2
+# (X=[1080.0,1609.2]), which has ~264.6um (49 tracks) of trailing
+# FILL3/FILL2 slack after its real-cell block ends, ample budget to
+# nudge from.
+#
+# Every nudge also drags "u_buf_sda_in_row0" (the next real cell in the
+# same gap) forward by the same amount, which can create NEW coincidental
+# X collisions of its own -- confirmed empirically by sweeping the nudge
+# amount and re-running the full placement+route+auto-fix pipeline for
+# each: 20 tracks -> 2 new unresolved shorts elsewhere; 14 -> 4; 12 -> 4;
+# 11 -> 3; 10 -> 1 new unresolved short; 8 -> 3; 9 tracks -> ZERO
+# warnings from draw_jog, 0 DRC violations, and only 2 conflicts (both
+# ordinary M1-trunk cases the existing Fixer already resolves
+# automatically) -- verified via drc_check_nrow_fm.py +
+# verify_connectivity_nrow_fm.py: "ALL NETS FULLY CONNECTED, NO SHORTS
+# DETECTED". This is a placement-level search problem (which nudge
+# amount avoids every other net's own column), not something to solve
+# analytically -- 9 tracks is an empirically-found value for the CURRENT
+# v9 netlist/placement and would need re-sweeping if the netlist changes.
+NUDGE_BEFORE = {"_276_": 9}  # 9 tracks = 48.6um -- see comment above
+
 
 
 def _gaps_needed(cell_queue, widths):
     """Local copy of gen_placement_2row.py's dry-run gap counter, using
     THIS file's TAP_INTERVAL_TRACKS (that function reads its own module's
     global, so importing it directly would silently use 111 tracks, not
-    130 -- see the note above)."""
+    130 -- see the note above).
+
+    When TAP_INTERVAL_TRACKS is a per-gap list (see _tap_tracks()), this
+    dry run doesn't know in advance which gap index each bucket will
+    become, so it conservatively uses the SMALLEST gap's budget for
+    every bucket -- guaranteed to never UNDER-count the number of gaps
+    actually needed (it may over-count by at most a little if gaps are
+    very uneven, which only makes the N_GAPS<=... assert in main() a
+    bit more conservative, never unsafe)."""
+    min_gap_tracks = (min(TAP_INTERVAL_TRACKS) if isinstance(TAP_INTERVAL_TRACKS, (list, tuple))
+                       else TAP_INTERVAL_TRACKS)
     q = deque(cell_queue)
     n_gaps = 0
     while q:
-        gap_tracks_left = TAP_INTERVAL_TRACKS - 2 * PRIORITY_FILL_TRACKS
+        gap_tracks_left = min_gap_tracks - 2 * PRIORITY_FILL_TRACKS
         seg = []
         while q:
             typ, name, pins = q[0]
@@ -207,7 +332,8 @@ PRIORITY_FILL_CELL = "FILL2"
 
 
 def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
-                          priority_fill_tracks=0, priority_fill_cell=PRIORITY_FILL_CELL):
+                          priority_fill_tracks=0, priority_fill_cell=PRIORITY_FILL_CELL,
+                          nudge_before=None):
     """Pack a row's cells into n_gaps TAP-bounded gaps of fixed size
     (TAP_INTERVAL_TRACKS each, so TAP column X positions are identical
     for every row regardless of content -- required for the TAP power
@@ -228,7 +354,16 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
     EVERY gap (see module comment above the function) -- placed before
     the anchor-based real-cell/slack-FILL packing, and NOT part of
     that packing's own slack-FILL budget (i.e. real cells only ever
-    compete for the tracks left over after this reservation)."""
+    compete for the tracks left over after this reservation).
+
+    nudge_before: optional {instance_name: extra_tracks} (module-level
+    NUDGE_BEFORE, Task #20/design_notes.md 77.40) -- for any real cell
+    matching a key here, `extra_tracks` of FILL is inserted immediately
+    before it within its gap's contiguous real-cell block, funded by
+    reducing that SAME gap's own anchor-slack by the same amount (so
+    total gap width, and every TAP column's X, is unchanged -- only
+    where inside the gap the slack/real-cell split falls moves)."""
+    nudge_before = nudge_before or {}
     placed = []
     x = 0.0
     tap_idx = 0
@@ -273,14 +408,14 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
     # separation this is meant to provide (measured: this bug made the
     # first version of this function barely move the needle -- see
     # design_notes 38.7).
-    gap_budget = TAP_INTERVAL_TRACKS - 2 * priority_fill_tracks
-    assert gap_budget > 0, (
-        f"priority_fill_tracks={priority_fill_tracks} (x2, both gap edges) leaves no "
-        f"budget out of TAP_INTERVAL_TRACKS={TAP_INTERVAL_TRACKS} for real cells")
     gap_order = list(range(n_gaps)) if anchor == "left" else list(reversed(range(n_gaps)))
     gap_segs = {}
     gap_slack = {}
     for gap_i in gap_order:
+        gap_budget = _tap_tracks(gap_i) - 2 * priority_fill_tracks
+        assert gap_budget > 0, (
+            f"priority_fill_tracks={priority_fill_tracks} (x2, both gap edges) leaves no "
+            f"budget out of gap {gap_i}'s TAP_INTERVAL_TRACKS={_tap_tracks(gap_i)} for real cells")
         gap_tracks_left = gap_budget
         seg = []
         while cell_queue:
@@ -309,12 +444,23 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
 
         seg = gap_segs[gap_i]
         slack = gap_slack[gap_i]
-        if anchor == "right" and slack > 0:
-            place_fill_combo(slack)
+        nudge_total = sum(nudge_before.get(name, 0) for _typ, name, _pins in seg)
+        assert nudge_total <= slack, (
+            f"gap {gap_i}: nudge_before requests {nudge_total} tracks but only "
+            f"{slack} tracks of slack are available in this gap")
+        anchor_slack = slack - nudge_total
+        assert anchor_slack != 1, (
+            f"gap {gap_i}: nudge_before leaves exactly 1 track of anchor slack, "
+            f"which fill_combo cannot fill -- adjust nudge_before's amount by +-1")
+        if anchor == "right" and anchor_slack > 0:
+            place_fill_combo(anchor_slack)
         for typ, name, pins in seg:
+            extra = nudge_before.get(name, 0)
+            if extra:
+                place_fill_combo(extra)
             place(typ, name, widths[typ], pins)
-        if anchor == "left" and slack > 0:
-            place_fill_combo(slack)
+        if anchor == "left" and anchor_slack > 0:
+            place_fill_combo(anchor_slack)
 
         place_priority_fill()  # reserved corridor, gap's trailing edge
 
@@ -376,7 +522,8 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
     for r, cells in enumerate(rows_cells):
         anchor = "left" if r % 2 == 0 else "right"
         placed, w = pack_row_distributed(deque(cells), widths, N_GAPS, anchor=anchor,
-                                          priority_fill_tracks=PRIORITY_FILL_TRACKS)
+                                          priority_fill_tracks=PRIORITY_FILL_TRACKS,
+                                          nudge_before=NUDGE_BEFORE)
         placed_rows.append(placed)
         widths_out.append(w)
     for r, w in enumerate(widths_out):

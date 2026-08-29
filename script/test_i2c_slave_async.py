@@ -34,7 +34,9 @@ def testbench():
     rst_n = Signal(bool(1))
     scl = Signal(bool(1))
     sda_master_oe = Signal(bool(0))   # master pulls SDA low when 1
-    sda_slave_oe = Signal(bool(0))    # slave pulls SDA low when 1
+    sda_slave_oe = Signal(bool(1))    # v3: slave pulls SDA low when 0 (active-low,
+                                       # matches i2c_slave_async_model.py's sda_oe
+                                       # port polarity, design_notes.md section 77.3)
     sda_line = Signal(bool(1))        # resolved open-drain bus value
 
     tx_data = Signal(intbv(0)[8:])
@@ -50,10 +52,12 @@ def testbench():
 
     @instance
     def bus_model():
-        # open-drain wired-AND: line is LOW if either side pulls it low
+        # open-drain wired-AND: line is LOW if either side pulls it low.
+        # v3: sda_slave_oe is active-low (0 = slave drives), so it
+        # contributes a "drive low" vote when it reads 0.
         while True:
             yield sda_master_oe, sda_slave_oe
-            sda_line.next = not (sda_master_oe or sda_slave_oe)
+            sda_line.next = not (sda_master_oe or (not sda_slave_oe))
 
     def send_bit(bitval):
         yield delay(T)

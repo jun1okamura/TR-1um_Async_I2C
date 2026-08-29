@@ -3,7 +3,19 @@ import klayout.db as db
 
 GDS = sys.argv[1] if len(sys.argv) > 1 else \
     "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/Layout/i2c_slave_async_nrow_fm_routed.gds"
-TOP_CELL = "i2c_slave_async_nrow_fm"
+# BUG FOUND 2026-08-29 (design_notes.md 79.8): TOP_CELL was hardcoded to
+# the CORE cell name regardless of which GDS was passed in. Every call
+# this session against layout/step8/v9_top_routed.gds (chip-level, top
+# cell "tr_1um_i2c_slave_async") was silently checking the CORE cell
+# "i2c_slave_async_nrow_fm" instead -- which is nested INSIDE the chip
+# cell, not the other way around, so begin_shapes_rec() on it never saw
+# any of the chip-level power/signal routing at all. Every "0 violations"
+# report for the chip-level GDS this session was checking nothing
+# relevant. Real KLayout DRC (run by the user) found 50 real violations
+# this script had completely missed as a direct result. Fixed: accept an
+# explicit top-cell override (2nd CLI arg), defaulting to the core name
+# only for backward compatibility with the earlier core-only checks.
+TOP_CELL = sys.argv[2] if len(sys.argv) > 2 else "i2c_slave_async_nrow_fm"
 
 layout = db.Layout()
 layout.read(GDS)

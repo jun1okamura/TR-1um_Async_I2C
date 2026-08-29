@@ -16,7 +16,8 @@ def check(cond, msg):
 @block
 def testbench():
     rst_n = Signal(bool(1)); scl = Signal(bool(1))
-    sda_master_oe = Signal(bool(0)); sda_slave_oe = Signal(bool(0))
+    sda_master_oe = Signal(bool(0))
+    sda_slave_oe = Signal(bool(1))   # v3: active-low (0 = slave drives), section 77.3
     sda_line = Signal(bool(1))
     tx_data = Signal(intbv(0)[8:]); rx_data = Signal(intbv(0)[8:])
     rx_valid = Signal(bool(0)); addr_match = Signal(bool(0))
@@ -30,7 +31,7 @@ def testbench():
     def bus_model():
         while True:
             yield sda_master_oe, sda_slave_oe
-            sda_line.next = not (sda_master_oe or sda_slave_oe)
+            sda_line.next = not (sda_master_oe or (not sda_slave_oe))
 
     def send_bit(bitval):
         yield delay(T)
