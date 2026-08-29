@@ -35,7 +35,8 @@ force/release、およびクロックnetを**HIGH**（LOWではない）で強�
 条件分岐・算術演算が無くVerilogの`check()`タスクのような自己集計は
 できないため、実行後のログをオフラインで自動照合する
 [`script/check_irsim_tb_log.py`](../script/check_irsim_tb_log.py)を
-追加し、Verilog版と同じ形式（`[OK]`/`[FAIL]`＋最終`RESULT`行）で
+追加し、Verilog版の`$display("[t=%0t] %s: %s", ...)`と同じ書式
+（`[t=<time>] OK:`/`FAIL:`＋右詰めメッセージ＋最終`RESULT`行、§100）で
 PASS/FAIL判定を出す：
 
 ```sh
@@ -44,6 +45,16 @@ irsim TR-1um.prm tr_1um_i2c_slave_async.sim > irsim_tb.log 2>&1 << 'EOF'
 @ irsim_tb.cmd
 EOF
 python3 ../script/check_irsim_tb_log.py irsim_tb.log irsim_tb_expected.json
+```
+
+上記2ステップ（実行→照合）を1コマンドにまとめた
+[`run_tb.sh`](run_tb.sh)（§100.2）もある。`iverilog ... && vvp sim`と
+同様に、実行してその場でPASS/FAILレポートまで表示される：
+
+```sh
+cd irsim
+./run_tb.sh              # 通常実行（デフォルト TR-1um.prm）
+./run_tb.sh TR-1um.prm -v   # -v で各ビットサンプルも表示
 ```
 
 **旧版（v7世代）の到達点（このセクション以降は旧`.sim`ベースの記録、

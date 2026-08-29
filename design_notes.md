@@ -15549,3 +15549,62 @@ v9チップレベルnetlist（`tr_1um_i2c_slave_async.sim`、2077トランジス
 87節から続いたIRSIM再検証（新.sim生成→新.cmd生成→READトランザクション
 不具合の原因調査・修正→Verilog版相当の自己検証テストベンチ整備）が
 完了。
+
+## 100. check_irsim_tb_log.py の出力をVerilog版と同一書式に整形、run_tb.sh追加
+
+ユーザーが`iverilog`/`vvp`で`i2c_slave_async_tb.v`を直接実行した際の
+実出力：
+
+```
+[t=240000] OK:                                        busy asserted after START
+[t=960000] OK:                             slave ACKed matching address (write)
+...
+```
+
+と「同じようなbatch ファイル」の作成を依頼された。対応内容：
+
+### 100.1 `script/check_irsim_tb_log.py` の出力書式変更
+
+- `parse_log()`：各dumpブロックを閉じる`time = ...`行の時刻を正規表現
+  でキャプチャし、`(time_str, {node: value})`のタプルとして返すよう変更
+  （従来は値の辞書のみ）。
+- 新関数`fmt_line(time_str, status, label)`：
+  `f"[t={t}] {status}:{label:>{MSG_FIELD_WIDTH}}"`
+  （`MSG_FIELD_WIDTH=65`）で、Verilogの
+  `$display("[t=%0t] %s: %s", $time, status, msg)`相当の右詰め書式を
+  再現。
+- `main()`：各headlineチェックの出力を`[OK]`/`[FAIL]`固定文字列方式
+  から`fmt_line()`経由の`[t=...] OK:`/`[t=...] FAIL:`方式に変更。
+- グループ合成チェック（read byte == 0x3Cのような複数ビットから
+  再構成する判定）はこれまでループの外側で末尾にまとめて出力していた
+  ため、実際の発生順序（他のheadlineチェックの間）とズレていた。
+  各チェックに元の`checks[]`配列内インデックスを紐付け、全出力行を
+  `(index, text)`のリストに集めてから最後に一括ソート・出力する方式に
+  変更し、Verilog版と完全に同じ時系列順序で表示されるようにした。
+- per-bit `[sample] ...`行（read byte再構成用の8ビットサンプル、
+  Verilog版には存在しない中間ログ）はデフォルトで非表示にし、
+  `-v`/`--verbose`オプション指定時のみ表示するよう変更——これにより
+  デフォルト出力がVerilog版と1:1で14行そろう。
+- 実データ（`irsim/irsim_tb.log`）で再検証：整形後も
+  `All 14 checks PASSED`（終了コード0）を確認。また`NET_3`を意図的に
+  反転させた合成ログでも`[t=13340.000] FAIL: rx_data == 0xA5
+  (NET_3: expected=0 actual='1')`、`1 of 14 check(s) FAILED`
+  （終了コード1）と正しく検出することを確認。
+
+### 100.2 `irsim/run_tb.sh` 新規追加
+
+`irsim/run_batch.sh`と同じstdinヒアドキュメント方式でIRSIMを
+非対話実行し、その場で`check_irsim_tb_log.py`にログを渡して
+PASS/FAILレポートまで一括表示する、Verilogの
+`iverilog ... && vvp sim`相当の「一発実行」スクリプト：
+
+```sh
+cd irsim
+./run_tb.sh              # 通常実行（デフォルト TR-1um.prm）
+./run_tb.sh TR-1um.prm -v   # -v で各ビットサンプルも表示
+```
+
+内部では`irsim_tb.cmd`のみを実行し（`irsim_reset_check.cmd`等は
+含めない——`irsim_tb.cmd`自身が`preamble()`でコールドスタート
+リセットを行うため単独で完結する）、生ログを`irsim_tb_run.log`に
+保存した上で`script/check_irsim_tb_log.py`を自動呼び出しする。
