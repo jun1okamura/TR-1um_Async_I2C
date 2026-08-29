@@ -240,47 +240,52 @@ class CmdGen:
         is ALWAYS transparent, so QS is never actually isolated the way
         it is at cold start (both gates X-gated together).
 
-        Fix: also force `gate_nets` (the group's own row-clock nets) LOW
-        for the SAME window as the QS force. CK=0 makes QM<->QS opaque
-        (isolating QS from stale D) while QS<->net5 becomes transparent
-        instead -- but net5=NOT(QB) and QB is an always-on inverter of
-        QS, so this forms a SELF-REINFORCING loop with our forced value
-        rather than fighting it. Doing this for the WHOLE group at once
-        (not just one instance) matters: several other Group-A instances
-        share these same row-clock nets, so they get isolated and reset
-        together too, meaning by the time the clock nets are released
-        back to their real levels, the combinational logic downstream
-        already reflects the freshly-cleared register state instead of a
-        stale one."""
+        `nodes` is expected to be dffrb_state_nodes(...)'s output -- BOTH
+        the QS (slave) and QM (master) storage nodes for each instance,
+        not just QS. An earlier version of this function forced CK LOW
+        and only QS (design_notes.md 76.41/76.42's original fix). A real
+        run (design_notes.md 94.1) found that fix incomplete: QS itself
+        stayed correctly forced through the whole CK=0 window (net5's
+        self-reinforcing loop does hold it, as originally reasoned), but
+        QM was never forced at all, and the master latch (net2's own
+        pass-gates, MM1/MM7 in DFFRB's body) is DIRECTLY TRANSPARENT TO
+        D whenever CK=0 -- there is no self-reinforcing loop protecting
+        QM the way there is for QS, so QM continued tracking real D the
+        entire time regardless of what was forced into it. Once the
+        clock nets were released and a later real CK 0->1 edge made
+        QM<->QS transparent again, QM's un-reset, D-tracking value
+        overwrote the QS value that had been correctly held until then.
+
+        Fix (design_notes.md 94.3): force CK **HIGH** instead of LOW.
+        At CK=1, DFFRB's own topology is the opposite of the CK=0 case:
+        the master latch (QM) is OPAQUE (isolated from D, so an external
+        force on QM actually sticks, the same way net5's loop protected
+        QS at CK=0), and QM<->QS is transparent (so forcing QM also
+        drives QS to match through the network itself, not by fighting
+        it -- forcing QS at the same time is redundant but harmless).
+        Doing this for the WHOLE group at once (not just one instance)
+        matters: several other Group-A instances share these same
+        row-clock nets, so they get isolated and reset together too."""
         setter = self.l if value == 0 else self.h
         for g in gate_nets:
-            self.l(g)
+            self.h(g)
         for n in nodes:
             setter(n)
         self.s()
         if probe:
-            self.note("probe: QS nodes right after forcing (clock still forced low)")
+            self.note("probe: right after forcing (clock still forced HIGH)")
             self.d(*probe)
         for n in nodes:
             self.x(n)
         self.s()
-        # A real run found bit_cnt[0] specifically (a self-referential
-        # toggle bit, D=NOT(Q)) ends up back at 1 instead of 0 right
-        # after this function returns, while its sibling Group-A
-        # registers (rw, addr_match, bit_cnt[1:2], all of shreg) --
-        # sharing the SAME row-clock net -- correctly land on 0. Adding
-        # a settle here (between releasing QS and releasing the clock
-        # nets) made NO difference to the outcome on a real run
-        # (design_notes.md 93.x) -- ruled out as a release-ordering
-        # race. Kept anyway since it doesn't hurt correctness elsewhere.
         if probe:
-            self.note("probe: QS nodes right after releasing QS (clock still forced low)")
+            self.note("probe: right after releasing QM/QS (clock still forced HIGH)")
             self.d(*probe)
         for g in gate_nets:
             self.x(g)
         self.s()
         if probe:
-            self.note("probe: QS nodes right after releasing clock nets too")
+            self.note("probe: right after releasing clock nets too")
             self.d(*probe)
 
     def preamble(self, reset_hold_ns=3000):
@@ -352,11 +357,11 @@ class CmdGen:
         plain one-time force_release() -- see design_notes.md 89.1's
         finding that this design doesn't seem to need forcing at all, an
         open question only for the REPEAT-START case so far):
-          "gated" (default) -- force_release_gated() as before: force QS
-            AND the group's own row-clock nets low together. This is
-            what irsim_test_main.cmd uses, and a real run found it left
-            addr_match/rw stuck for the 2nd (read) transaction's address
-            byte (design_notes.md 89.3).
+          "gated" (default) -- force_release_gated() as before: force QM
+            AND QS, AND the group's own row-clock nets HIGH, together.
+            This is what irsim_test_main.cmd uses (design_notes.md 94.3
+            for why CK is forced HIGH, not LOW as an earlier revision
+            did).
           "plain" -- force_release() on QS only, no clock-net forcing
             (the OLD design's technique that a real run on THIS netlist
             has not yet been tried).
@@ -432,21 +437,19 @@ class CmdGen:
             self.note("NOT the first START: real SCL clocking has already happened")
             self.note("in an earlier transaction, so Group-A's own row-clock nets")
             self.note("now hold real, DEFINED levels -- NOT the cold-start X that")
-            self.note("made plain force_release() work above. A real run (on the")
-            self.note("OLD .sim, same topology) confirmed this breaks addr_match")
-            self.note("specifically: DFFRB's QM<->QS gate is transparent whenever its")
-            self.note("CK=1, so a QS force gets immediately overridden by whatever D")
-            self.note("says the instant the force releases -- genuinely correct")
-            self.note("transparent-latch behavior, not an IRSIM artifact (76.41/76.42).")
-            self.note("Fix: also force the group's own row-clock nets low for the")
-            self.note("same window, so QS is genuinely isolated (not just nominally X)")
-            self.note("while we reset it, and the whole group settles together before")
-            self.note("the clock nets are released back to real values.")
-            self.note("A real run on THIS netlist (design_notes.md 89.3) found this")
-            self.note("mode leaves addr_match/rw stuck for the 2nd (read) transaction's")
-            self.note("address byte -- see irsim_test_main_noforce.cmd for the")
-            self.note("group_a_mode=\"none\" experiment testing whether this forcing")
-            self.note("is even still necessary on v9's re-synthesized netlist.")
+            self.note("made plain force_release() work above.")
+            self.note("Diagnostic history (design_notes.md 89-94): plain force_release()")
+            self.note("on QS alone breaks addr_match (76.41/76.42's transparent-latch")
+            self.note("finding). Gating the row-clock nets LOW while forcing QS alone")
+            self.note("(an earlier revision of this function) LOOKED like it worked for")
+            self.note("most Group-A registers but silently left bit_cnt[0] wrong (94.1):")
+            self.note("QM (the master latch) is directly transparent to D whenever CK=0,")
+            self.note("so it was never actually reset, and re-corrupted QS the moment")
+            self.note("the clock nets were released. Fix: force BOTH QM and QS, AND")
+            self.note("gate the row-clock nets HIGH (not low) -- at CK=1 the master is")
+            self.note("OPAQUE (a force on QM actually sticks) and QM<->QS is transparent")
+            self.note("(QS follows QM through the network itself). See")
+            self.note("force_release_gated()'s docstring for the full derivation (94.3).")
             self.force_release_gated(
                 dffrb_state_nodes(DFFRB_28_INSTANCES),
                 DFFRB_28_CLOCK_NETS, value=0, probe=debug_probe)

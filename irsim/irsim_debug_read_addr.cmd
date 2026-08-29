@@ -586,25 +586,23 @@ d NC_CORE_busy
 | NOT the first START: real SCL clocking has already happened
 | in an earlier transaction, so Group-A's own row-clock nets
 | now hold real, DEFINED levels -- NOT the cold-start X that
-| made plain force_release() work above. A real run (on the
-| OLD .sim, same topology) confirmed this breaks addr_match
-| specifically: DFFRB's QM<->QS gate is transparent whenever its
-| CK=1, so a QS force gets immediately overridden by whatever D
-| says the instant the force releases -- genuinely correct
-| transparent-latch behavior, not an IRSIM artifact (76.41/76.42).
-| Fix: also force the group's own row-clock nets low for the
-| same window, so QS is genuinely isolated (not just nominally X)
-| while we reset it, and the whole group settles together before
-| the clock nets are released back to real values.
-| A real run on THIS netlist (design_notes.md 89.3) found this
-| mode leaves addr_match/rw stuck for the 2nd (read) transaction's
-| address byte -- see irsim_test_main_noforce.cmd for the
-| group_a_mode="none" experiment testing whether this forcing
-| is even still necessary on v9's re-synthesized netlist.
-l x2.scl_row0
-l x2.scl_row1
-l x2.scl_row2
-l x2.scl_row3
+| made plain force_release() work above.
+| Diagnostic history (design_notes.md 89-94): plain force_release()
+| on QS alone breaks addr_match (76.41/76.42's transparent-latch
+| finding). Gating the row-clock nets LOW while forcing QS alone
+| (an earlier revision of this function) LOOKED like it worked for
+| most Group-A registers but silently left bit_cnt[0] wrong (94.1):
+| QM (the master latch) is directly transparent to D whenever CK=0,
+| so it was never actually reset, and re-corrupted QS the moment
+| the clock nets were released. Fix: force BOTH QM and QS, AND
+| gate the row-clock nets HIGH (not low) -- at CK=1 the master is
+| OPAQUE (a force on QM actually sticks) and QM<->QS is transparent
+| (QS follows QM through the network itself). See
+| force_release_gated()'s docstring for the full derivation (94.3).
+h x2.scl_row0
+h x2.scl_row1
+h x2.scl_row2
+h x2.scl_row3
 l x2.x_269_.QS
 l x2.x_270_.QS
 l x2.x_271_.QS
@@ -654,7 +652,7 @@ l x2.x_299_.QM
 l x2.x_300_.QM
 l x2.x_301_.QM
 s
-| probe: QS nodes right after forcing (clock still forced low)
+| probe: right after forcing (clock still forced HIGH)
 d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 x x2.x_269_.QS
 x x2.x_270_.QS
@@ -705,14 +703,14 @@ x x2.x_299_.QM
 x x2.x_300_.QM
 x x2.x_301_.QM
 s
-| probe: QS nodes right after releasing QS (clock still forced low)
+| probe: right after releasing QM/QS (clock still forced HIGH)
 d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 x x2.scl_row0
 x x2.scl_row1
 x x2.scl_row2
 x x2.scl_row3
 s
-| probe: QS nodes right after releasing clock nets too
+| probe: right after releasing clock nets too
 d x2.x_270_.QS x2.x_270_.QM x2._147_[0] x2.bit_cnt[0]
 | check: phase/bit_cnt-owning registers cleared (rw/addr_match are
 | in this same Group-A, so also visible here)
