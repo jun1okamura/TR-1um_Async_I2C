@@ -1,6 +1,22 @@
 # IRSIM チップレベル動作検証
 
-**現状（このセッションの到達点）**: `script/test_i2c_slave_async.py`と同じ
+**⚠️ 2026-08-30更新（design_notes.md §87）**: `tr_1um_i2c_slave_async.sim`は
+チップレベルDRC/LVSクリーン確認済みの`schematic/
+tr_1um_i2c_slave_async_v9_lvs.spice`から
+[`script/gen_irsim_sim_v9.py`](../script/gen_irsim_sim_v9.py)（新規、
+旧`gen_irsim_sim.py`を置き換え）で再生成済み。ノード名が大きく変わって
+いる（下記「ノード名の注意」以降・信号対応表は**旧`.sim`基準のまま**、
+参考用に残してある）。**`irsim_test_main.cmd`等の`.cmd`ファイルは
+まだ旧ノード名のままで、新`.sim`に対しては使えない**（`gen_irsim_cmd.py`
+の再調査待ち、§87.5）。新`.sim`のトップレベル信号名は§87.4参照：
+`rst_n`=`P15`、`scl`=`P2`、`sda_in`=`P13`、`sda_oe`=`SDA_O`、`DIS`=`P7`、
+`tx_data[0..7]`=`P12 P11 P5 P6 P4 P1 P3 P14`、`rx_data[0..7]`=
+`NET_0..NET_7`、`busy`/`rw`/`addr_match`/`rx_valid`=
+`NC_CORE_busy`/`NC_CORE_rw`/`NC_CORE_addr_match`/`NC_CORE_rx_valid`
+（電源/GNDは従来通り`Vdd`/`Gnd`）。
+
+**旧版の到達点（このセクション以降は旧`.sim`ベースの記録）**:
+`script/test_i2c_slave_async.py`と同じ
 シナリオ（WRITE 0xA5 → READ 0x3C）が`irsim_test_main.cmd`でチップレベルの
 ゲートレベルネットリスト上、実機IRSIM実行で**エンドツーエンドに完全成功**
 することを確認済み（design_notes.md §76.27）。それまでに解決した問題群

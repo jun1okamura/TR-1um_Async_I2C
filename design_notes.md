@@ -14719,3 +14719,142 @@ TXM2レイヤーから該当16ラベルを名前一致で特定し、`klayout.db
 - `script/set_top_pin_text_size.py`：新規作成。
 - `src/tr_1um_i2c_slave_async.gds`：TOP PIN 16ラベルのテキストサイズ
   を20umに変更して上書き。
+
+## 87. IRSIM再検証：LVS用spiceからの新.sim生成（gen_irsim_sim_v9.py）
+
+ユーザー指示：「IRSIMでの再検証に入ります。LVSで使った.spice からIRSIM
+用のファイルを準備してください。」——82-86節でチップレベルDRC/LVS
+クリーンを確認した`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`
+（＝`simulations/tr_1um_i2c_slave_async.spice`と同一）を、旧
+`src/tr_1um_i2c_slave_async.extracted`（KLayout LVS抽出ベース）の
+代わりにIRSIM`.sim`生成のソースとして使う。
+
+### 87.1 新旧ソースの構造比較
+
+事前調査で新ソース（`tr_1um_i2c_slave_async_v9_lvs.spice`）の構文が
+旧`.extracted`と異なることを確認：
+
+- トランジスタ行：`M<任意サフィックス> drain gate source bulk model
+  params...`（例`MXM1`/`MM2`/`M_FILL2_1_p`）。旧`XM$<n>`ではない。
+- サブサーキットインスタンス行：`x<名前> net1..netN CELLTYPE`（小文字
+  x、旧`X$<n>`ではない）。
+- ESDダイオード：`D<名前> ...`（例`DD1`、旧`D$<n>`ではない）。
+- `l=`/`w=`パラメータは小文字（旧は大文字`L=`/`W=`）。
+- `.subckt`/`.ends`は小文字、かつ`.ends`はサブサーキット名を繰り返さ
+  ない（旧`.ENDS <name>`と異なる）。
+- **無名`$N`ネットが皆無**（24個の`.subckt`ブロック全てで確認）。トップ
+  レベルのポートは82節の`TOP_PIN_ORDER`修正により文字通り`P1`..`P15`/
+  `VDD`/`VSS`。内部ネットもYosysの実名（`bit_cnt[0]`、`_065_`等）。
+
+このためVDD/GND識別（旧76.3の「探偵作業」）が不要になり、トップ
+サブサーキットの仮引数リスト自体が`VDD`/`VSS`を持つ。
+
+### 87.2 script/gen_irsim_sim_v9.py（新規作成）
+
+`script/gen_irsim_sim.py`を上記の構文差分に合わせて書き直した新スクリ
+プト。主な設計判断：
+
+- パーサ：`.subckt`/`.ends`をブロック単位で素直に走査する方式に変更
+  （旧の正規表現ベースの一括マッチではなく、`.ends`が名前を繰り返さ
+  ないため）。`+`継続行のマージは旧同様、生テキスト全体に対して行う
+  （コメント側の継続行は`*+`で始まるため誤って結合されない）。
+- `M`/`x`/`D`の行頭1文字で分岐（大小文字両対応）。`l=`/`w=`パラメータ
+  は大小文字問わず抽出。`m=`乗数パラメータ（`DEL1`等に存在）は旧同様
+  無視（旧`.sim`は既にこの単純化のまま実機フル書き込みトランザクション
+  検証に成功しているため、今回は再検討しない）。
+- `VDD_NODE`/`GND_NODE`：トップの仮引数がそのまま`"VDD"`/`"VSS"`（
+  探偵作業不要）。`Vdd`/`Gnd`への強制リネームは旧同様必要（IRSIM自体の
+  デフォルト挙動要件、76.8）。
+- `substitute_bufth_with_buf_x1()`：旧同様に必要（`BUFTH`の帰還ループ
+  はIRSIMのターナリソルバー自体の恒久的限界、76.12-76.15、ハードウェア
+  依存ではないためソース netlist が変わっても再発する）。新ソースでも
+  `BUFTH`/`BUF_X1`の仮引数リストが完全一致（`VDD A Y GND`）することを
+  直接確認済み。
+- `insert_sda_hiz_inverter()`は**意図的に移植しなかった**：これはv7時代
+  の`sda_oe`↔`HIZ13`間RTL極性バグ（本来あるべきインバータが無い）に
+  対する検証用の埋め合わせだった。README.md記載の通りV8以降でRTL側の
+  極性が修正済みであり、このv9 LVS用netlistは既にその修正済みRTLを
+  反映したスキーマティックに対してLVSクリーンなので、旧インバータを
+  再挿入すると逆に極性を壊す。実機IRSIM実行で`sda_oe`の極性が再び
+  おかしければ、それはRTL側の退行を意味する（このジェネレータの不備
+  ではない）。
+- SDAプルアップ：概念（弱いPMOS、パッド自身の実駆動ゲートで排他制御）
+  とサイジング（L=1u/W=1.9u、TR-1um.prm実測ベースで約19.6kΩ、76.29-
+  76.38）はそのまま踏襲。ただしゲートノード（`PAD_DRIVE_NODE`）は
+  ハードコードパスではなく**構造検索**で特定：フラット化後の全デバイス
+  から`model=NMOSE, L=2, W=150`かつドレイン/ソースがトップネット
+  `"P13"`に触れる唯一のトランジスタを検索し、そのゲートを使用（新
+  ソースでは`OSS_ESD_5V_DIO`の`MXM2 PAD NG VSS VSS NMOSE w=150u
+  l=2u`が該当、旧`XN1.XN16.N9`と役割は同一）。実行結果：
+  `x1.x12.NG`が一意に見つかった（想定通り、`OSS_FRAME_GIO`の`x12`が
+  P13＝SDAパッドのインスタンス）。プルアップ先ノード（`PULLUP_NODE`）
+  も旧`sanitize('$58')`のようなエイリアス不要で、単に`"P13"`（トップ
+  レベルの素の実ネット名）。
+
+### 87.3 実行結果・検証
+
+```
+parsed 24 .subckt blocks from ../schematic/tr_1um_i2c_slave_async_v9_lvs.spice
+flattened: 155 instances walked, 2076 transistors, 28 ESD diodes skipped, max hierarchy depth 2
+SDA pad drive-gate node (structurally found): x1.x12.NG
+by original model: {'PMOS': 1038, 'NMOSE': 30, 'NMOS': 1008, 'PMOS-pullup-gated': 1}
+distinct nodes: 844
+wrote ../irsim/tr_1um_i2c_slave_async.sim
+```
+
+旧`.sim`（2074実トランジスタ＋合成3個＝2077個、ノード863個）とほぼ
+同水準（新：2076実＋合成1個＝2077個、ノード844個）——合成デバイス数の
+差2個は不要になった`insert_sda_hiz_inverter()`の2トランジスタ分と正確
+に一致し、想定通り。追加の直接検証：
+
+- 出力`.sim`中に無名`$`ノードが実データ行に皆無であることを確認（ヘッダ
+  コメント文字列中の1件のみ、実ノード名ではない）。
+- `Vdd`（1080箇所）・`Gnd`（1060箇所）が期待通り多数のデバイス端子に
+  出現することを確認。
+- 末尾のSDAプルアップ行が`p x1.x12.NG Vdd P13 1 1.9`であることを直接
+  確認（設計意図通り）。
+
+### 87.4 トップレベルネット名の再導出（gen_irsim_cmd.py用の下準備）
+
+新ソースはトップレベルポートが実名のため、`gen_irsim_cmd.py`が必要と
+する主要信号の一部は、旧`.extracted`のような多段の位置合わせ調査
+なしで**直接**特定できることを、トップサブサーキットの実引数リスト
+（x1=`OSS_FRAME_GIO`、x2=`i2c_slave_async_nrow_fm`）の位置照合のみで
+確認した（`.sim`中に対応ノードが実際に複数デバイス端子で使われている
+ことも`awk`で追加確認済み）：
+
+| 信号 | 新ノード名（旧） |
+|---|---|
+| rst_n | `P15`（旧`N106`） |
+| scl | `P2`（旧`N102`） |
+| sda_in（SDAパッド） | `P13`（旧`N58`） |
+| sda_oe（内部、監視専用） | `SDA_O`（旧`N45`） |
+| DIS（P7） | `P7`（旧`N2`、たまたま同名） |
+| tx_data[0..7]（bit0..bit7） | `P12 P11 P5 P6 P4 P1 P3 P14`（旧`N26 N19 N21 N22 N57 N103 N72 N68`） |
+| rx_data[0..7]（bit0..bit7） | `NET_0..NET_7`（旧`N32 N15 N34 N13 N42 N78 N83 N64`） |
+| busy（内部、外部ピンなし） | `NC_CORE_busy`（旧`XN3.busy`） |
+| rw（内部） | `NC_CORE_rw`（旧`XN3.rw`） |
+| addr_match（内部） | `NC_CORE_addr_match`（旧`XN3.addr_match`） |
+| rx_valid（内部） | `NC_CORE_rx_valid`（旧`XN3.rx_valid`） |
+
+busy/rw/addr_match/rx_validが新ソースでは`i2c_slave_async_nrow_fm`の
+正式な仮引数（トップまで配線済み、`NC_`接頭辞＝チップピン未接続の意）
+になっている点が旧`.extracted`（内部専用ノード、パス指定`XN3.busy`
+必須）との構造上の違い——今回のverilogベース再生成（77.45/77.46）に
+よるもので、むしろ新方式の方がシンプル。
+
+### 87.5 残課題：gen_irsim_cmd.pyは未更新（次のIRSIM再実行前に必要）
+
+`script/gen_irsim_cmd.py`は依然として**旧`.sim`のノード名**（`N45`/
+`N58`/`N102`/`N106`/`XN3.busy`/`XN2`等の33個のDFFRBインスタンスパス/
+`N34`/`N635`/`N666`/`N343`のクロックドメインnet/`DEL1`の`N697`/
+`N704`等）をハードコードしたままで、新`.sim`にはこれらのノードは
+**存在しない**（インスタンス名の付け方自体が旧`X$n`→新`xn`、内部
+ネット名もYosys再合成でおそらく完全に別物）。87.4の表はトップレベル
+（ポートまで配線されている信号）のみ再導出済みだが、`gen_irsim_cmd.py`
+が依存する**内部専用**のワークアラウンド系ノード（33個のDFFRBインス
+タンスの`QS`パス、`$28`/`$227`リセットグループの構成、4本のクロック
+ドメインnet、`DEL1`/`BUFTH`内部ノード）は、新ソースのインスタンス
+階層・合成後ネット名に対して**再調査が必要**（旧76.10-76.42相当の
+深い実機トレース作業に匹敵する規模）。ユーザーへ報告の上、続行するか
+どうかの判断を仰ぐ。
