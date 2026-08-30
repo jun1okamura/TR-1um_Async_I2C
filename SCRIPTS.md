@@ -9,7 +9,7 @@ v7→v8→v9の版遺産として今も参照される一部の旧版スクリ�
 （design_notes.mdの節番号）が記載されている。
 
 現行の最終ネットリスト/レイアウトは**v9**（`src/i2c_slave_async_net_v9_rowbuf.v`
-135インスタンス、`src/tr_1um_i2c_slave_async.gds`、チップレベルDRC/LVS
+137インスタンス、`src/tr_1um_i2c_slave_async.gds`、チップレベルDRC/LVS
 クリーン確認済み、design_notes.md §86）。v7/v8はその前段の版で、
 一部スクリプト（配置・配線の共通基盤、`gen_schematic_v7.py`等）はv9でも
 そのまま再利用されている。

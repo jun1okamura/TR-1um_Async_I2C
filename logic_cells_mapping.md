@@ -3,7 +3,7 @@
 参照元（現行）: `LEF/TR-1um_STDCELL.lef`（物理LEF、`gen_lef.py`で`LEF/TR-1um_STDCELL.gds`
 から自動生成）＋ 同ディレクトリ配下の各セルの`.sch`/`.sym`/`.extracted`
 （xschem回路図・シンボル・LVS用抽出ネットリスト）。ネットリスト側の参照元は
-`src/i2c_slave_async_net_v9_rowbuf.v`（現行v9、row buffer＋BUFTH挿入後、135
+`src/i2c_slave_async_net_v9_rowbuf.v`（現行v9、row buffer＋BUFTH挿入後、137
 インスタンス、`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`のLVS基準）。
 `LEF/`配下のセットが唯一の正（物理GDS/LEF/schが完全に同期している）。
 
@@ -14,11 +14,11 @@
 | インバータ | INV_X1 | A(in), Y(out), VDD/GND(inout) | 駆動力バリアントはX1のみ |
 | バッファ | BUF_X1/X2/X4/X16 | A(in), Y(out), VDD/GND(inout) | 非反転。**X2/X4/X16は現行v9ネットリストで未使用**（予備） |
 | シュミットトリガ・バッファ | BUFTH | A(in), Y(out), VDD/GND(inout) | ヒステリシス付き入力バッファ。トップの`scl`/`sda_in`直後に2個挿入（`insert_bufth_scl_sda.py`）。**実チップ・回路図上は実在するが、IRSIMのternaryスイッチレベルソルバでは帰還ループを正しく解けないことが確認済みの恒久的制限**（design_notes §76.12-76.15）のため、`gen_irsim_sim_v9.py`のIRSIM用`.sim`生成時のみ`BUF_X1`へ機械的置換している（実レイアウト/LVSネットリスト自体は変更なし） |
-| AND | AND2_X1 | A,B(in), Y(out), VDD/GND(inout) | 2入力のみ実使用（AND3_X1/AND4_X1は物理LEF/GDSまで存在するが現行ネットリストでは未使用、§3参照） |
+| AND | AND2_X1/AND4_X1 | A,B[,C,D](in), Y(out), VDD/GND(inout) | AND4_X1も実使用1個あり（§4）。AND3_X1のみ物理LEF/GDSまで存在するが現行ネットリストでは未使用、§3参照 |
 | OR | OR2/3/4 | A,B[,C[,D]](in), Y(out), VDD/GND(inout) | |
 | NAND | NAND2/3/4 | A,B[,C[,D]](in), Y(out), VDD/GND(inout) | |
 | NOR | NOR2/3/4 | A,B[,C[,D]](in), Y(out), VDD/GND(inout) | |
-| XOR/XNOR | XOR2/XNOR2 | A,B(in), Y(out), VDD/GND(inout) | 物理LEF/GDSは存在するが**現行ネットリストで未使用** |
+| XOR/XNOR | XOR2/XNOR2 | A,B(in), Y(out), VDD/GND(inout) | 各1個実使用（§4、v4回路のフルliberty再合成でABCが選択） |
 | マルチプレクサ | MUX2 | S,A,B(in), Y(out), VDD/GND(inout) | 2:1セレクタ（`Y=S?B:A`） |
 | 遅延セル | DEL1 | A(in), Y(out), VDD/GND(inout) | 非反転バッファ相当だが意図的遅延線として使用（DEL2/DEL4は依然Liberty上のプレースホルダのみ、物理LEF/GDSなし） |
 | フリップフロップ | DFFRB | CK(clock in), D,RSTB(in), Q,QB(out), VDD/GND(inout) | **非同期リセット付きD-FF、`RSTB`はActive-LOW確定**（§2参照）。現行ネットリストで33個使用（§4） |
@@ -55,16 +55,17 @@ force/releaseリセット手法に直接影響する重要な特性（design_not
 - `DEL2` / `DEL4`（DEL1の多段版）
 
 `AND3_X1`/`AND4_X1`・`XOR2`/`XNOR2`・`DFFS`は当初この節のプレースホルダ
-だったが、その後の作業で物理LEF/GDSまで作成済み（§1参照）。ただし
-いずれも現行v9ネットリストの合成結果には一度も出現していない
-（§4参照、実使用は無い）。
+だったが、その後の作業で物理LEF/GDSまで作成済み（§1参照）。このうち
+`AND4_X1`/`XOR2`/`XNOR2`は現行v9ネットリストの合成結果に実際に各1個
+出現している（§4参照）。`AND3_X1`と`DFFS`のみ、物理セルはあるが現行
+ネットリストでは未使用のまま。
 
-現行v9ネットリスト（`src/i2c_slave_async_net_v9_rowbuf.v`、135インスタンス）は
+現行v9ネットリスト（`src/i2c_slave_async_net_v9_rowbuf.v`、137インスタンス）は
 `DEL2`/`DEL4`を一切使用しておらず、実在する物理セルのみで合成が閉じている。
 
 ## 4. 非同期I2Cスレーブ（`src/i2c_slave_async_net_v9_rowbuf.v`）での実使用状況
 
-構造Verilog（row buffer＋BUFTH挿入後、135インスタンス）でのセル使用数:
+構造Verilog（row buffer＋BUFTH挿入後、137インスタンス）でのセル使用数:
 
 | セル | 使用数 | セル | 使用数 |
 |---|---:|---|---:|
@@ -73,14 +74,18 @@ force/releaseリセット手法に直接影響する重要な特性（design_not
 | NAND2 | 22 | NOR4 | 2 |
 | NOR2 | 15 | BUFTH | 2 |
 | NOR3 | 8 | AND2_X1 | 2 |
-| BUF_X1 | 8 | OR3 | 1 |
-| INV_X1 | 6 | DEL1 | 1 |
-| OR2 | 5 | AND4_X1 | 1 |
+| BUF_X1 | 8 | XOR2 | 1 |
+| INV_X1 | 6 | XNOR2 | 1 |
+| OR2 | 5 | OR3 | 1 |
+| | | DEL1 | 1 |
+| | | AND4_X1 | 1 |
 
 ラッチ推論・未マッピングセルは無く、§3のプレースホルダセルへの依存も無い。
-BUF_X2/X4/X16・DFF（無リセット版）・DFFS・XOR2/XNOR2・AND3_X1・
-TAP2/TAP3も未使用（TAP2/TAP3は論理合成の対象外で、物理配置時に電源
-タップとして別途挿入される）。
+BUF_X2/X4/X16・DFF（無リセット版）・DFFS・AND3_X1・TAP2/TAP3は未使用
+（TAP2/TAP3は論理合成の対象外で、物理配置時に電源タップとして別途
+挿入される）。`XOR2`/`XNOR2`/`AND4_X1`は物理セルが揃った後のフルliberty
+再合成（design_notes §77.24以降のv4回路再合成）でABCが実際に選択し、
+各1個ずつ現在の論理に組み込まれている。
 
 `DFFRB`33個は非同期リセットグループが2系統に分かれる（design_notes
 §89以降で構造確認済み）: Group-A（24個、`RSTB`=`NOR2(~rst_n,
@@ -109,8 +114,8 @@ start_pulse)`）／Group-B（9個、`RSTB`=`busy AND rst_n`）。24+9=33で一�
 ### 次状態・出力ロジック（組合せ回路部分）
 
 - `MUX2`, `NAND2/3`, `NOR2/3/4`, `INV_X1`, `OR2/3/4`, `AND2_X1/4_X1`が実際の
-  合成結果の大半を占める（上記使用数表）。XOR/XNORは合成結果に一度も
-  現れていない（アドレス一致判定等もAND/OR/NAND/NORの組合せに帰着している）。
+  合成結果の大半を占める（上記使用数表）。`XOR2`/`XNOR2`もそれぞれ1個
+  ずつABCに選択されている（用途は個別トレース未実施）。
 
 ### ACK駆動・SDA出力段
 
