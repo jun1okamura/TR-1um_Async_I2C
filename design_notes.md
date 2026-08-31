@@ -16547,3 +16547,273 @@ DRC/LVS クリアーにしました。」と報告。
 
 本セッションでこちらから独立にPTECT削除後のDRC/LVSファイルを
 受け取って再検証してはいないため、この解消はユーザー報告ベース。
+
+## 103.16 RING_OSC単体SPICE検証用テストベンチ作成（ローカルngspice用）
+（2026-08-31）
+
+ユーザー要望：「ring_osc の下にTBディレクトリを作成して、その中で
+SPICEシミュレーションをします。local の ngspiceで、発振周波数を波形と
+測定でチェックできるSPICEファイルを作成できますか？モデルはIRSIMで
+使ったものと同じです。.tran で 200ns 程度、RSTN＝0 で 1n で５Vに遷移
+してください。OUT/OUTBの波形と周期を測定して、電源電流も測定と波形
+出力してください。」続けて：「RING_OSC.spice はLVSクリーンなものを
+使います。」
+
+**入力ネットリスト**：LVSクリーン確認済みの`simulations/RING_OSC.
+spice`（=`ring_osc/simulation/RING_OSC.spice`、`gen_lvs_spice_
+ringosc_v9.py`が参照しているのと同一ファイル）を使用。
+
+**モデル**：`script/gen_prm_characterize.py`（IRSIMの`TR-1um.prm`
+較正に使った、確認済みの実ngspiceデッキ）と同じ
+`~/Dropbox/91_OpenPDK/TR-1um/libs.tech/spice/models/ip62_models`
+（`.include`一発でmos/cap/diode/resの4ライブラリをまとめて読み込む
+インデックスファイル）、vdd=5.0Vも同一。
+
+**構文上の必須修正（電気的意味は不変）**：RING_OSC.spice自身の
+末端セル本体（INV_X1/AND2_X1/FILL2/INV3D）は"MM7 ... PMOS w=.. l=.."
+という裸のMライン（klayoutのLVS読み込み用の書式）でPMOS/NMOSを
+呼んでいるが、`ip62_models`はPMOS/NMOSを`.subckt`（sdwidthベースの
+AS/AD/PS/PD自動計算ラッパー）としてしか提供しておらず、裸M行が
+要求する実"`.model PMOS/NMOS`"カード（`PMOS_mst`/`NMOS_mst`という
+別名でのみ存在）には解決できないため、このままでは実ngspice
+トランジェント解析が通らない。この project の別のxschem書き出し
+ファイル（`simulations/BUFTH_X1_AC.spice`、実際にシミュレーション
+済みと確認済み）は末端セルをX行（サブサーキット呼び出し）で書いて
+おり、これが正しい変換先と判断。`script/gen_ring_osc_tb.py`で、
+該当12個の裸Mライン（grepで事前に数を確認）のプレフィックスのみを
+M→Xに機械的変換した`ring_osc/TB/RING_OSC_sim_ready.spice`を生成
+（他は一切変更なし、ノード・モデル名・w/lパラメータとも完全一致
+——diffで確認）。元の`simulations/RING_OSC.spice`はread-onlyの入力
+として一切変更していない。
+
+**テストベンチ**（`ring_osc/TB/tb_ring_osc.spice`）：RSTNネットが
+RING_OSCのENBピンに直結（RING_OSCのトポロジ——FB=AND2_X1(R[94],ENB)、
+R[94]=INV_X1を95段（奇数）通したFB——から、ENB=0でFBが強制的に0に
+固定され発振停止、ENB=1でループが閉じ発振開始することを確認済み）。
+RSTNは0Vから1nsで5Vへ立ち上がるPWL（ユーザー指定通り）。`.tran`は
+200ns、ステップ0.02ns。
+
+**測定**：OUT・OUTB（=RING_OSCのOUTDピン）それぞれについて、
+RISE=1→2（有効な周期を確実に1回捕捉するための主測定——約96〜97段の
+ループなので実周期は事前に分からず、200ns枠に収まる保証がRISE=1/2
+にしかないと判断）と、RISE=3→4（定常発振の裏取り用——後段の周期が
+枠に収まらない場合はこの測定だけ"failed"表示になるが他の測定・波形
+出力には影響しない設計）の両方を`.measure`。VDD電源電流は
+`i(vvdd)`の平均・ピーク・RMSを測定。`.control`ブロックで
+`v(OUT)/v(OUTB)/v(RSTN)/i(vvdd)`をASCII rawファイル
+（`tb_ring_osc.raw`）へ書き出し、`plot`コマンドも用意（対話
+実行時用）。
+
+**検証**：本サンドボックスにngspiceは無く（rootなしでのインストール
+も不可、確認済み）実行はできないため、代わりに(1) M→X変換後の
+ファイルを元ファイルとdiffし、変換対象の12行以外に一切差分がない
+ことを確認、(2) `klayout.db.NetlistSpiceReader`で構文的にパース
+できること・`RING_OSC`回路が存在し階層が解決すること・
+`.subckt`/`.ends`の対応数（5/5）が一致することを確認。実際の発振・
+電流波形の妥当性確認はユーザーのローカルngspice実行を待つ。
+
+出力：`ring_osc/TB/RING_OSC_sim_ready.spice`・
+`ring_osc/TB/tb_ring_osc.spice`（新規）。
+
+## 103.17 RING_OSCテストベンチ：extracted netlistへの切替＋
+## .tran延長（2026-08-31）
+
+ユーザーがローカルで実際にngspiceを実行し「動きました」と報告。続けて
+「RING_OSC を schematic ではなくて extracted に変更してください。」
+
+**ソース切替**：`simulations/RING_OSC.spice`（schematic）から
+`ring_osc/RING_OSC.extracted`（klayoutの実LVS抽出結果）へ変更。
+直接ファイルを読んで確認した2点の構造差：(1) extracted版は末端セル
+（INV_X1/AND2_X1/FILL2/INV3D）が既にXライン＋実抽出AS/AD/PS/PD付きで
+記述されており、schematic版で必要だったM→Xリネームは不要（裸M行0件を
+確認）。(2) トップレベルのピン順序が`ENB OUT OUTD VDD VSS`
+（アルファベット順、klayout抽出の慣習）で、schematic版の
+`OUT OUTD ENB VDD VSS`と異なる——`script/gen_ring_osc_tb.py`に
+`.SUBCKT RING_OSC ...`行から直接ピン順序を読み取る
+`read_ring_osc_pin_order()`を追加し、`xdut`行を決め打ちでなく
+プログラム的に生成するよう変更（配線ミス防止）。
+
+出力ファイル名も`RING_OSC_extracted_sim_ready.spice`に変更（中身は
+`ring_osc/RING_OSC.extracted`のバイト単位コピー、ヘッダのみ追加）。
+
+**`.tran`延長**：ユーザーの前回ローカル実行結果
+（`tb_ring_osc.raw`、共有フォルダ経由でこちらからも直接解析）を
+確認したところ、200ns枠内でOUT/OUTBとも立ち上がりエッジが1回
+（t=80.9ns）しか発生しておらず、2回目のエッジが来ていない——実周期が
+200nsの大部分を超える可能性が高いと判断し、延長を提案。ユーザー
+了承（「伸ばします。」）。`TRAN_STOP`を200ns→1usへ変更（ステップは
+0.02nsのまま、約5万点）。
+
+出力：`ring_osc/TB/RING_OSC_extracted_sim_ready.spice`（新規、
+旧`RING_OSC_sim_ready.spice`は削除）・`ring_osc/TB/tb_ring_osc.spice`
+（更新）。実際の発振波形・周期・電源電流の妥当性確認は引き続き
+ユーザーのローカルngspice実行を待つ。
+
+## 103.18 テストベンチのngspice警告修正＋RSTN立ち上げ時刻延長
+（2026-08-31）
+
+ユーザーが実際にextracted版を実行し、ログを共有：「RSTN を 10N まで
+０に伸ばしてください。その後5Vへ。以下のワーニングも対応ください。」
+（`period_out`/`freq_out`等の`measure`失敗——"no such function as
+'param=...'"、および`i_vdd_peak`の"no such vector as 'abs(i(vvdd))'"）。
+
+**RSTN延長**：`RSTN_T_EDGE_START`を1n→10nに変更（立ち上がりは引き続き
+10n→10.02nの高速エッジ）。
+
+**周期測定の失敗を修正**：ログを見ると、`t_out_r1`〜`t_out_r4`は
+`.control`ブロック内の`meas`コマンドで正しく計算できていたが、それを
+使う`PARAM='t_out_r2-t_out_r1'`形式の派生測定（`period_out`/`freq_out`
+等）だけが「no such function as 'param=1.536612e-07'」で失敗していた
+——数値自体は計算できているのに、それを新しい測定として登録する段階で
+`meas`コマンド（対話/controlブロック用のエイリアス）側の制約に
+引っかかっていると判断。ngspice本来の推奨形は、`PARAM=`を使う派生
+`.measure`はネットリストのトップレベル（`.control`の外、通常
+`.tran`の直後）に置く形——`script/gen_ring_osc_tb.py`のテンプレートを
+変更し、`t_out_r1`〜`freq_outb_late`まで全ての周期・周波数関連
+`.measure`をトップレベルディレクティブに移動（`.control`内は`run`後の
+`print`のみ）。
+
+**電流ピーク測定の失敗を修正**：`meas tran i_vdd_peak MAX
+abs(i(vvdd))`が「no such vector as 'abs(i(vvdd))'」で失敗——`meas`の
+MAXトリガは素のベクタ名を要求し、インライン関数式`abs(...)`を直接
+受け付けないと判断。`run`実行後に`.control`内で`let iabs =
+abs(i(vvdd))`により新規ベクタを明示的に作成し、`meas tran i_vdd_peak
+MAX iabs`と素のベクタ名を渡す形に変更（`i_vdd_avg`/`i_vdd_rms`は
+元々プレーンな`i(vvdd)`を直接渡していて成功していたため変更不要、
+`.measure`のトップレベル化のみ実施）。
+
+出力：`ring_osc/TB/tb_ring_osc.spice`（更新）。ワーニング解消・
+発振周期実測値の確認は次回のユーザーローカル実行を待つ。
+
+## 103.19 OUT/OUTB発振周波数が同一に見える件の調査（AS/AD差の正体）
+（2026-08-31）
+
+ユーザー疑問：「OUT と OUTB の発振周波数に違い出ないのが？です。
+AS/ADの面積に違いがあります。調査出来ますか？また plot v(out)
+v(outb)としてください。」
+
+**調査**：`ring_osc/RING_OSC.extracted`を直接精査。RING_OSCの2つの
+リングは意匠上、95段の主チェーンにそれぞれ異なるセル型を使っている
+——OUT側（x1[]チェーン、`X$162`バッファ経由）はINV_X1を95個、OUTD側
+（x54[]チェーン、`X$57`バッファ経由）はINV3D を95個（インスタンス数
+95 INV3D + 97 INV_X1(=95+両リング共通のバッファ2個)で確認、
+schematic側`simulations/RING_OSC.spice`のx1[]/x54[]チェーンの
+セル型指定でも同様に確認）。
+
+extracted netlist内、INV3DとINV_X1は共に**単一の`.SUBCKT`定義を
+全インスタンスで共有**（インスタンスごとの個別AS/AD上書きは無し
+——`grep -c "^\.SUBCKT INV3D\|^\.SUBCKT INV_X1"`で各1回のみ定義され
+ていることを確認）。つまり同じ型同士（INV3D同士・INV_X1同士）は
+完全に同一の抽出ジオメトリを使う。
+
+**AS/AD比較（ノードの物理的役割で揃えて比較——d/g/s/bの並び順が
+INV3DとINV_X1で異なるため単純な数値の並び比較はミスリード）**：
+
+- PMOS 出力側（Yに繋がる方の拡散面積）：INV3D=28.56p、INV_X1=28.56p
+  →**完全に同じ**
+- PMOS 電源側（VDDに繋がる方の拡散面積）：INV3D=539.48p、
+  INV_X1=28.56p →INV3Dが約19倍大きい
+- NMOS 出力側（Yに繋がる方）：INV3D=9.52p、INV_X1=9.52p
+  →**完全に同じ**
+- NMOS 電源側（GNDに繋がる方）：INV3D=306.89p、INV_X1=9.52p
+  →INV3Dが約32倍大きい
+
+**結論**：INV3D（名前の"D"はおそらくアンテナダイオード
+[antenna diode]構造を指す——プラズマエッチング工程でのゲート
+酸化膜保護のため、配線が長く延びるノードにVDD/GND側の逆バイアス
+ダイオードとして機能する拡散を追加する、標準的な設計手法）は、
+INV_X1と比べて**電源レール側（低インピーダンスノード）にのみ**
+巨大な拡散面積を追加した変種であり、**遅延に直接効く出力ノード側の
+拡散容量はINV_X1と全く同じ**。電源レールは電圧源で低インピーダンス
+駆動されているため、そこに追加された寄生容量は段遅延にほぼ影響
+しない。結果として、AS/ADの合計値には大きな差があるように見えても、
+実際に段遅延・ループ遅延を決める容量は両リングでほぼ同一——OUT/OUTB
+の発振周波数がほぼ一致するのは正しい・期待通りの結果であり、
+シミュレーションや測定のバグではないと判断。
+
+**plot変更**：`script/gen_ring_osc_tb.py`の`.control`ブロックを
+`plot v(out) v(outb)`（2波形の直接比較用に独立したplot）・
+`plot v(rstn)`・`plot i(vvdd)`の3つに分離（従来は
+`v(OUT) v(OUTB) v(RSTN)`を1つのplotにまとめていたが、電圧スケールの
+異なる信号を分けて見やすくするため）。
+
+## 103.20 INV3DのAS/AD誤り修正：抽出は電源側、実レイアウトは出力側
+（2026-08-31）
+
+ユーザーからの訂正：「これはレイアウトと違います。出力ノード側に
+拡散をつけています。extracted のルールが間違っています。とりあえず、
+spice ファイルを修正ください。」——103.19での「電源レール側に
+アンテナダイオード拡散がある」という結論は誤りで、実レイアウトでは
+出力ノード（Y）側に拡散が付いているとの実物確認による指摘。
+
+**独立検証**：103.19のAS/AD値を、INV_X1（無装飾の素のインバータ）の
+値と突き合わせて再検証。AS<->AD・PS<->PDを入れ替えると：
+- INV3D PMOS 電源側（旧AS=539.48p→新AD側の対偶であるAS=28.56p）が
+  INV_X1 PMOSの電源側（AD=28.56p）と**完全一致**
+- INV3D NMOS 電源側（旧AD=306.89p→新AS側の対偶であるAD=9.52p）が
+  INV_X1 NMOSの電源側（AD=9.52p）と**完全一致**
+
+つまり入れ替え後は「電源レール側はベースライン値でINV_X1と同一、
+出力(Y)側だけがアンテナダイオード分の追加拡散」という、設計として
+自然な形にきれいに揃う——入れ替え前はどちらの端子もINV_X1の値と
+一致しておらず、その時点で既に疑わしかった。ユーザーの指摘と数値的
+整合性の両方から、抽出時にPMOS/NMOSのソース・ドレイン端子（AS/AD/
+PS/PD）の対応付けが逆になっていたと判断。
+
+**修正**：`script/gen_ring_osc_tb.py`に`fix_inv3d_as_ad_swap()`を
+追加。`.SUBCKT INV3D ... .ENDS INV3D`ブロック内の2デバイス行に対して
+のみ、想定される修正前の値と完全一致することを確認した上でAS<->AD・
+PS<->PDを入れ替える（他のセル・他のブロックには一切影響しない、
+修正前の値が想定と違えば例外を送出し無言では書き換えない設計）。
+
+**適用範囲**：この修正は`ring_osc/TB/RING_OSC_extracted_sim_ready.
+spice`（シミュレーション専用コピー）にのみ適用し、マスターの
+`ring_osc/RING_OSC.extracted`（klayoutの生の抽出結果）は意図的に
+無修正のまま——恒久的な修正はユーザー側のLVS抽出デックのAS/AD
+割り当てルール自体で行うべきもので、抽出結果への後付けパッチは
+「とりあえず」の応急処置という位置づけ。
+
+出力：`ring_osc/TB/RING_OSC_extracted_sim_ready.spice`（更新、
+diff確認済み——変更は該当2行のみ）・`ring_osc/TB/tb_ring_osc.spice`
+（再生成）。修正後の実際の周波数差の確認は次回のユーザーローカル
+実行を待つ。
+
+## 103.21 `.tran`を2usまで再延長（period_out_late計測不能のため）
+（2026-08-31）
+
+ユーザー：「late が計算出来ないので .tran を2usまで伸ばします。」
+——103.18で追加したRISE=3→4の後段クロスチェック測定
+（`period_out_late`/`period_outb_late`）が、103.17で延長した1us
+枠内でも4回目の立ち上がりエッジに到達せず計算できなかったための
+再延長。`TRAN_STOP`を1u→2uに変更（ステップ0.02nsのまま、約10万点）。
+
+出力：`ring_osc/TB/tb_ring_osc.spice`（更新）。
+
+## 103.22 2us実行結果：OUT/OUTBが約4.2倍の周波数差（AS/AD修正の効果
+## 確認）、`.tran`を3usへ再々延長（2026-08-31）
+
+ユーザーが2us版のログを共有。実測値：
+- `period_out`（RISE1→2）=153.661ns、`freq_out`=6.50783MHz
+- `period_out_late`（RISE3→4）=153.661ns（RISE1/2と完全一致——定常
+  発振を確認）
+- `period_outb`（RISE1→2）=641.844ns、`freq_outb`=1.55801MHz
+- `t_outb_r4`が2us枠内に来ず`period_outb_late`が計算不能
+  （"out of interval"エラー、後続の`PARAM`式もundefined parameter
+  エラーで失敗——ただし他の測定・後続処理には影響なし、設計通り）。
+
+**確認**：103.20のINV3D AS/AD修正後、OUTB（INV3Dを95段使うリング）は
+OUT（INV_X1を95段使うリング）よりおよそ**4.2倍遅い**という大きな差が
+明確に出た。これは103.20で修正した通り、INV3Dの出力(Y)ノード側に
+INV_X1比で約22倍（PMOS: 539.48p/28.56p、NMOS: 306.89p/9.52pの単純和
+比較）の拡散容量が直接乗ったことと整合する——アンテナダイオード拡散が
+スイッチングノードそのものを直接ロードする形になったため、段遅延が
+大幅に増加したと考えられる。103.19時点（修正前）で「両リングの周波数
+がほぼ同じ」に見えたのは、まさにこのAS/AD割り当て誤りが原因だった
+ことが数値的にも裏付けられた形。
+
+**`.tran`再延長**：`t_outb_r3`=1617.81ns、周期≈641.8nsから、
+`t_outb_r4`はおよそ1617.8+641.8≈2259.8nsに来ると推定——2us枠を
+わずかに超えていたために失敗したと判断。`TRAN_STOP`を2u→3uへ延長
+（推定値に700ns超の余裕を持たせた）。
+
+出力：`ring_osc/TB/tb_ring_osc.spice`（更新）。
