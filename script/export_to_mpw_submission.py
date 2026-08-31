@@ -2,8 +2,9 @@
 """
 export_to_mpw_submission.py -- copies this project's final chip-level GDS
 and LVS reference netlist into an OpenSUSI TR-1um_MPW_template-based
-submission repo (this session: TR-1um_TEST3), and updates that repo's own
-info.yaml to match.
+submission repo (this session: TR-1um_I2C_2026, renamed from its
+original TR-1um_TEST3 -- both the local folder and its GitHub remote),
+and updates that repo's own info.yaml to match.
 
 Background (this session, user: "TR-1um_TEST3 へチップレベルの最終GDS と
 LVS 用の spice file をコピーします...同じ作業をする可能性があるので
@@ -84,7 +85,7 @@ SRC_GDS = PROJECT_ROOT / "ring_osc" / "tr_1um_i2c_slave_async_ringosc_clean.gds"
 SRC_LVS_NETLIST = PROJECT_ROOT / "schematic" / "tr_1um_i2c_slave_async_ringosc_v9_lvs.spice"
 
 # ---- destination (OpenSUSI TR-1um_MPW_template-based submission repo) ----
-DEST_REPO = pathlib.Path("~/Dropbox/98_LSI_Design/TR-1um_TEST3").expanduser()
+DEST_REPO = pathlib.Path("~/Dropbox/98_LSI_Design/TR-1um_I2C_2026").expanduser()
 TOP_CELL = "tr_1um_i2c_slave_async"
 
 # cell rename applied at export time only -- see module docstring
