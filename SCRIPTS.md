@@ -1,6 +1,6 @@
 # script/ ガイド
 
-`script/`配下の現行スクリプト（全52本）の説明資料。RTL設計からIRSIMチップ
+`script/`配下の現行スクリプト（全59本）の説明資料。RTL設計からIRSIMチップ
 レベル動作検証までの再現可能なパイプラインを構成するスクリプトを中心に、
 v7→v8→v9の版遺産として今も参照される一部の旧版スクリプトも残している
 （該当箇所に明記）。開発過程で使われた真に一回限りのデバッグ・実験用
@@ -98,7 +98,7 @@ v8/v9はこの一気通貫スクリプトを持たず、§5の各スクリプト
 |---|---|
 | `gen_schematic_v7.py` | v7ネットリスト（`src/i2c_slave_async_net_v7.v`）からLVS用xschemスキーマティック（`schematic/i2c_slave_async_nrow_fm.sch`）を生成。DFFRB/BUFTHは`LEF/`配下のプロジェクト固有sch/symを、他は`TR-1um_5_stdcell`を参照。`verify_schematic_v7.py`が動的importで直接依存しているため現役。 |
 | `verify_schematic_v7.py` | xschem不要の独立幾何学的接続検証。生成された`.sch`が元のVerilogネットリストと接続等価であることを確認。 |
-| `gen_lvs_spice_v9.py` | v9版の直接生成アプローチ：`src/i2c_slave_async_net_v9_rowbuf.v`から、xschemを経由せず直接フラットな構造SPICEネットリスト（コア単体、トップセル`i2c_slave_async_nrow_fm`）を生成。 |
+| `gen_lvs_spice_v9.py` | v9版の直接生成アプローチ：`src/i2c_slave_async_net_v9_rowbuf.v`から、xschemを経由せず直接フラットな構造SPICEネットリスト（コア単体、トップセル`i2c_slave_async_nrow_fm`）を生成。RING_OSC統合後のLVSでコアのVDD/GNDピン不一致（`FILL2`がレイアウト側では36個のサブサーキットインスタンス、スキーマティック側はバラ素子表記で不一致）が発覚し、FILL2のみサブサーキット呼び出し（`xFILL2_i VDD GND FILL2`）で生成するよう修正（FILL3はバラ素子表記のまま、design_notes §103.13）。 |
 | `gen_lvs_spice_top_v9.py` | チップレベル（コア＋GIOフレーム）のLVS参照ネットリストを、コアLVSクリーン済みspice＋GIOスキーマティック＋`schematic/gio_connections.json`から合成生成。 |
 
 コアセル単体のLVS実行そのもの（実機xschem/KLayout環境）、およびトップレベル
@@ -151,6 +151,32 @@ cd ../irsim
 ```
 詳しい実行方法・信号対応表・波形（アナライザ）の見方は
 [`irsim/README.md`](./irsim/README.md)を参照。
+
+## 11. RING_OSC統合
+
+コア（`i2c_slave_async_nrow_fm`）横にリング発振器`RING_OSC`を追加配置・
+配線・LVS統合したパイプライン（design_notes §103）。実機KLayoutでの
+チップレベルDRC/LVSクリーンを確認済み。
+
+| スクリプト | 役割 |
+|---|---|
+| `place_ring_osc.py` | STEP1: `ring_osc/RING_OSC.gds`を単一セルインスタンスとしてv9最終チップGDSへ配置のみ実施（配線前、レビュー用のステージング出力）。 |
+| `gen_lef_ring_osc.py` | RING_OSCのLEF生成。`gen_lef.py`と同じテキストラベル一致方式（prBoundary/M1PIN・M2PIN/TXM1・TXM2）だが、RING_OSCはハードマクロのためCLASS BLOCK・SITE無し、かつ座標系はRING_OSC.gds自身のネイティブローカル座標のまま（原点(0,0)への詰め替えはしない）。実DRCでM2幅違反（1.8um、実ルールは3.0um以上）が出た後に導入し、以降のピン位置取得はGDSテキストの目視スキャンではなく本LEFを正とする。 |
+| `route_ring_osc_power_v9.py` | コア両端のTAP2 M2ストラップをRING_OSCまで延伸するVDD/VSS電源配線。当初案にあったRING_OSC上下M1(10um)バスは実DRCでショートが発覚しユーザー指示で撤去済み（design_notes §103.3）。 |
+| `route_ring_osc_signals_v9.py` | RING_OSCのOUT/OUTD/ENB信号配線。実DRC39件（M2幅1.8um誤り等）を`gen_lef_ring_osc.py`のLEF導入とM1/M2/PAD幅統一（3.4um、via_1ランドパッド幅に合わせフラットな接続に）で解消。以降複数ラウンドの実DRC/目視確認でP15配線・ENB-VSSショート等を修正（design_notes §103.5〜103.8）。 |
+| `gen_lvs_spice_ringosc_v9.py` | RING_OSC統合後のチップ全体LVS参照SPICEを生成。RING_OSC/INV3D/FILL2を独立サブサーキットとして保持するネスト構造（実LVS比較で正しいことを確認済み、design_notes §103.9〜103.12）。 |
+| `place_opensusi_logo.py` | コア〜RING_OSC間の空きスペースに、添付PNGをピクセルアート的にデジタイズしたOpenSUSIロゴをM2アートとして配置。PITCH=Wmin+Sminのグリッドで幅・スペースDRCを構造的に満たし、スペースをはみ出さない最大サイズ（319×65セル）で中央配置。配置前後でDRC違反差分0を自己検証（design_notes §103.14）。 |
+| `gen_ring_osc_tb.py` | RING_OSC単体の自己検証用ngspiceテストベンチ（`ring_osc/TB/`）を生成。LVSクリーンな`ring_osc/RING_OSC.extracted`（レイアウト抽出netlist）を使用し、実行はローカルngspiceで行う。INV3DのAS/AD抽出誤り（アンテナダイオード拡散が実レイアウトでは出力ノード側なのに抽出netlistでは電源側になっていた）を発見し、シミュレーション用コピー`RING_OSC_extracted_sim_ready.spice`のみ修正（マスタの`.extracted`は無改変、design_notes §103.16〜103.22）。 |
+
+実測確認済み（ローカルngspice、`.tran`3us）: `OUT`周期153.661ns/6.508MHz、
+`OUTB`周期641.844ns/1.558MHz（RISE1/2とRISE3/4のクロスチェックが完全一致、
+定常発振を確認）。再現手順:
+```sh
+cd script
+python3 gen_ring_osc_tb.py     # → ring_osc/TB/tb_ring_osc.spice 一式
+cd ../ring_osc/TB
+ngspice -b tb_ring_osc.spice   # 実行はローカル環境で（本サンドボックスにngspice無し）
+```
 
 ## 削除したスクリプトについて
 

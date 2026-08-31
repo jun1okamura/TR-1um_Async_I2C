@@ -8,3 +8,10 @@ references/
 src/sim
 *.vcd
 *.bak
+
+# ngspice ASCII rawfile outputs under ring_osc/TB/ can be tens of MB
+# (e.g. tb_ring_osc.raw was 18.5MB, by far the largest tracked file in
+# this repo) -- unlike irsim/*.raw (2-3MB, kept as precedent), these are
+# regenerated locally on every run and not worth tracking. Scoped to
+# ring_osc/TB/ only so the existing irsim/*.raw precedent is unaffected.
+ring_osc/TB/*.raw
