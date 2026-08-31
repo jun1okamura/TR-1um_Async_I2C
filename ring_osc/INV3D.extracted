@@ -1,0 +1,14 @@
+* Created by KLayout
+*** My special header ***
+
+* cell INV3D
+* pin A
+* pin Y
+* pin gnd
+* pin vdd
+.SUBCKT INV3D A Y gnd vdd
+* device instance $1 r0 *1 4,53.2 PMOS
+XM$1 Y A vdd vdd PMOS L=1u W=10.2u AS=539.48p AD=28.56p PS=96.2u PD=26u
+* device instance $2 r0 *1 5.4,8.2 NMOS
+XM$2 gnd A Y gnd NMOS L=1u W=3.4u AS=9.52p AD=306.89p PS=12.4u PD=77.2u
+.ENDS INV3D

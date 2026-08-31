@@ -119,6 +119,29 @@ MM7 Y A VDD VDD PMOS w=10.2u l=1u
 MM2 Y A GND GND NMOS w=3.4u l=1u
 .ends"""
 
+# FILL2 subcircuit body (round-4 fix, 2026-08-31, user request "コアの
+# FILL2をサブサーキット化して修正"): a fresh real KLayout LVS run
+# (ring_osc/LVS_error.lvsdb) showed the CORE's VDD/GND nets Mismatch --
+# root-caused via klayout.db.LayoutVsSchematic net-pair/device dump: the
+# LAYOUT side now extracts FILL2 as its own hierarchical subcircuit (36
+# "FILL2" instances contributing subcircuit-pin connections to VDD/GND,
+# exactly matching the real placed-instance count) rather than as bare
+# inline MOSFETs the way 77.47 originally modeled it -- while FILL3 is
+# STILL extracted as bare, un-hierarchized devices on the layout side
+# (no "FILL3" circuit exists in the .lvsdb at all; confirmed via merged
+# device width cross-check, W=1950.4=21.2*92 identical on both sides).
+# So only FILL2's schematic-side representation changes here, to a
+# subcircuit call -- this body is byte-identical (device names, PININFO,
+# L/W) to RING_OSC.spice's own ".subckt FILL2 VDD GND" (confirmed via
+# direct diff) so gen_lvs_spice_ringosc_v9.py's existing dedup logic
+# (normalize() byte-comparison against the base LVS file) recognizes the
+# two as the same cell and skips adding a duplicate definition.
+FILL2_SUBCKT_BODY = """.subckt FILL2 VDD GND
+*.PININFO GND:B VDD:B
+MM7 VDD GND VDD VDD PMOS w=21.2u l=3.2u
+MM2 GND VDD GND GND NMOS w=13.1u l=3.2u
+.ends"""
+
 TOP_SUBCKT_NAME = "i2c_slave_async_nrow_fm"  # matches every layout script's TOP_CELL_NAME
 
 # positional SPICE pin order per cell type, read directly from each
@@ -270,17 +293,32 @@ def count_fill_instances(placement_json):
 
 
 def build_fill_decap_lines(counts):
-    lines = ["** FILL2/FILL3 decoupling-cap devices (design_notes.md 77.47) --",
+    """FILL3: unchanged from 77.47 -- one bare PMOS+NMOS pair per real
+    placed instance (layout still extracts FILL3 as bare devices too).
+    FILL2: round-4 fix -- one "xFILL2_i VDD GND FILL2" subcircuit
+    instance per real placed instance instead (layout now extracts
+    FILL2 as its own hierarchical subcircuit; see FILL2_SUBCKT_BODY's
+    comment above for the full root-cause writeup)."""
+    lines = ["** FILL3 decoupling-cap devices (design_notes.md 77.47) --",
              "** one PMOS+NMOS pair per real placed instance, L/W from real",
-             "** device extraction against LEF/TR-1um_STDCELL.gds."]
+             "** device extraction against LEF/TR-1um_STDCELL.gds.",
+             "** FILL2 is instantiated as a subcircuit instead, below",
+             "** (design_notes.md round-4 fix, 2026-08-31 -- see",
+             "** FILL2_SUBCKT_BODY's comment for why)."]
     n_devices = 0
+    n_fill2_instances = 0
     for typ, count in sorted(counts.items()):
+        if typ == "FILL2":
+            for i in range(1, count + 1):
+                lines.append(f"xFILL2_{i} VDD GND FILL2")
+                n_fill2_instances += 1
+            continue
         pl, pw, nl, nw = FILL_DECAP[typ]
         for i in range(1, count + 1):
             lines.append(f"M_{typ}_{i}_p VDD GND VDD VDD PMOS w={pw}u l={pl}u")
             lines.append(f"M_{typ}_{i}_n GND VDD GND GND NMOS w={nw}u l={nl}u")
             n_devices += 2
-    return lines, n_devices
+    return lines, n_devices, n_fill2_instances
 
 
 def main():
@@ -325,10 +363,15 @@ def main():
         lines.append(f"x{name} " + " ".join(args) + f" {typ}")
 
     fill_counts = count_fill_instances(PLACEMENT_JSON)
-    fill_lines, n_fill_devices = build_fill_decap_lines(fill_counts)
+    fill_lines, n_fill_devices, n_fill2_instances = build_fill_decap_lines(fill_counts)
     lines.extend(fill_lines)
 
     lines.append(".ends")
+    lines.append("")
+
+    # FILL2 subcircuit body (round-4 fix) -- a separate top-level
+    # .subckt block, same as the library cell bodies below.
+    lines.append(FILL2_SUBCKT_BODY)
     lines.append("")
 
     # library cell bodies, embedded inline (matches xschem's own
@@ -348,7 +391,8 @@ def main():
     print(f"{len(instances)} instance(s), {len(top_ports)} top port(s), "
           f"{n_forced_pwr} power-pin connection(s) forced (not present in RTL text), "
           f"{len(used_types)} library cell body(ies) embedded, "
-          f"{n_fill_devices} FILL2/FILL3 decap device(s) added ({fill_counts})")
+          f"{n_fill_devices} FILL3 decap device(s) + {n_fill2_instances} FILL2 subcircuit "
+          f"instance(s) added ({fill_counts})")
 
 
 if __name__ == "__main__":

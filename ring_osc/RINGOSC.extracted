@@ -1,0 +1,561 @@
+* Created by KLayout
+*** My special header ***
+
+* cell RINGOSC
+* pin ENB
+* pin OUT
+* pin OUTD
+* pin VDD,VSS
+.SUBCKT RINGOSC ENB OUT OUTD VDD|VSS
+* cell instance $1 r0 *1 0,0
+X$1 VDD|VSS OUT ENB INVALL
+* cell instance $2 m0 *1 0,4.8
+X$2 VDD|VSS OUTD ENB INVALLD
+.ENDS RINGOSC
+
+* cell INVALLD
+* pin VSS
+* pin 
+* pin 
+.SUBCKT INVALLD VSS \$I4 \$I3
+* cell instance $1 r0 *1 0,0
+X$1 \$I4 \$1 VSS \$I3 \$2 VSS INV48D
+* cell instance $2 r180 *1 1620,124.8
+X$2 VSS \$1 \$2 VSS INV49D
+.ENDS INVALLD
+
+* cell INVALL
+* pin VSS
+* pin 
+* pin 
+.SUBCKT INVALL VSS \$I4 \$I3
+* cell instance $1 r0 *1 0,0
+X$1 \$I4 \$1 VSS \$I3 \$2 VSS INV48
+* cell instance $2 r180 *1 1620,124.8
+X$2 VSS \$1 \$2 VSS INV49
+.ENDS INVALL
+
+* cell INV49D
+* pin VSS
+* pin 
+* pin 
+* pin 
+.SUBCKT INV49D VSS \$I101 \$I100 \$I51
+* cell instance $1 r0 *1 1598.4,0
+X$1 \$I51 VSS FILL2
+* cell instance $2 r0 *1 43.2,0
+X$2 \$I149 \$I102 \$I51 VSS INV3D
+* cell instance $3 r0 *1 75.6,0
+X$3 \$I102 \$I103 \$I51 VSS INV3D
+* cell instance $4 r0 *1 108,0
+X$4 \$I103 \$I104 \$I51 VSS INV3D
+* cell instance $5 r0 *1 140.4,0
+X$5 \$I104 \$I105 \$I51 VSS INV3D
+* cell instance $6 r0 *1 172.8,0
+X$6 \$I105 \$I106 \$I51 VSS INV3D
+* cell instance $7 r0 *1 205.2,0
+X$7 \$I106 \$I107 \$I51 VSS INV3D
+* cell instance $8 r0 *1 237.6,0
+X$8 \$I107 \$I108 \$I51 VSS INV3D
+* cell instance $9 r0 *1 270,0
+X$9 \$I108 \$I109 \$I51 VSS INV3D
+* cell instance $10 r0 *1 302.4,0
+X$10 \$I109 \$I110 \$I51 VSS INV3D
+* cell instance $11 r0 *1 334.8,0
+X$11 \$I110 \$I111 \$I51 VSS INV3D
+* cell instance $12 r0 *1 367.2,0
+X$12 \$I111 \$I112 \$I51 VSS INV3D
+* cell instance $13 r0 *1 399.6,0
+X$13 \$I112 \$I113 \$I51 VSS INV3D
+* cell instance $14 r0 *1 432,0
+X$14 \$I113 \$I114 \$I51 VSS INV3D
+* cell instance $15 r0 *1 464.4,0
+X$15 \$I114 \$I115 \$I51 VSS INV3D
+* cell instance $16 r0 *1 496.8,0
+X$16 \$I115 \$I116 \$I51 VSS INV3D
+* cell instance $17 r0 *1 529.2,0
+X$17 \$I116 \$I117 \$I51 VSS INV3D
+* cell instance $18 r0 *1 561.6,0
+X$18 \$I117 \$I118 \$I51 VSS INV3D
+* cell instance $19 r0 *1 594,0
+X$19 \$I118 \$I119 \$I51 VSS INV3D
+* cell instance $20 r0 *1 626.4,0
+X$20 \$I119 \$I120 \$I51 VSS INV3D
+* cell instance $21 r0 *1 658.8,0
+X$21 \$I120 \$I121 \$I51 VSS INV3D
+* cell instance $22 r0 *1 691.2,0
+X$22 \$I121 \$I122 \$I51 VSS INV3D
+* cell instance $23 r0 *1 723.6,0
+X$23 \$I122 \$I123 \$I51 VSS INV3D
+* cell instance $24 r0 *1 756,0
+X$24 \$I123 \$I124 \$I51 VSS INV3D
+* cell instance $25 r0 *1 788.4,0
+X$25 \$I124 \$I125 \$I51 VSS INV3D
+* cell instance $26 r0 *1 820.8,0
+X$26 \$I125 \$I126 \$I51 VSS INV3D
+* cell instance $27 r0 *1 853.2,0
+X$27 \$I126 \$I127 \$I51 VSS INV3D
+* cell instance $28 r0 *1 885.6,0
+X$28 \$I127 \$I128 \$I51 VSS INV3D
+* cell instance $29 r0 *1 918,0
+X$29 \$I128 \$I129 \$I51 VSS INV3D
+* cell instance $30 r0 *1 950.4,0
+X$30 \$I129 \$I130 \$I51 VSS INV3D
+* cell instance $31 r0 *1 982.8,0
+X$31 \$I130 \$I131 \$I51 VSS INV3D
+* cell instance $32 r0 *1 1015.2,0
+X$32 \$I131 \$I132 \$I51 VSS INV3D
+* cell instance $33 r0 *1 1047.6,0
+X$33 \$I132 \$I133 \$I51 VSS INV3D
+* cell instance $34 r0 *1 1080,0
+X$34 \$I133 \$I134 \$I51 VSS INV3D
+* cell instance $35 r0 *1 1112.4,0
+X$35 \$I134 \$I135 \$I51 VSS INV3D
+* cell instance $36 r0 *1 1144.8,0
+X$36 \$I135 \$I136 \$I51 VSS INV3D
+* cell instance $37 r0 *1 1177.2,0
+X$37 \$I136 \$I137 \$I51 VSS INV3D
+* cell instance $38 r0 *1 1209.6,0
+X$38 \$I137 \$I138 \$I51 VSS INV3D
+* cell instance $39 r0 *1 1242,0
+X$39 \$I138 \$I139 \$I51 VSS INV3D
+* cell instance $40 r0 *1 1274.4,0
+X$40 \$I139 \$I140 \$I51 VSS INV3D
+* cell instance $41 r0 *1 1306.8,0
+X$41 \$I140 \$I141 \$I51 VSS INV3D
+* cell instance $42 r0 *1 1339.2,0
+X$42 \$I141 \$I142 \$I51 VSS INV3D
+* cell instance $43 r0 *1 1371.6,0
+X$43 \$I142 \$I143 \$I51 VSS INV3D
+* cell instance $44 r0 *1 1404,0
+X$44 \$I143 \$I144 \$I51 VSS INV3D
+* cell instance $45 r0 *1 1436.4,0
+X$45 \$I144 \$I145 \$I51 VSS INV3D
+* cell instance $46 r0 *1 1468.8,0
+X$46 \$I145 \$I146 \$I51 VSS INV3D
+* cell instance $47 r0 *1 1501.2,0
+X$47 \$I146 \$I147 \$I51 VSS INV3D
+* cell instance $48 r0 *1 1533.6,0
+X$48 \$I147 \$I148 \$I51 VSS INV3D
+* cell instance $49 r0 *1 1566,0
+X$49 \$I148 \$I100 \$I51 VSS INV3D
+* cell instance $51 r0 *1 10.8,0
+X$51 \$I101 \$I149 \$I51 VSS INV3D
+.ENDS INV49D
+
+* cell INV48D
+* pin 
+* pin 
+* pin VSS
+* pin 
+* pin 
+* pin 
+.SUBCKT INV48D \$1 \$3 VSS \$I150 \$I104 \$I57
+* cell instance $1 r0 *1 1598.4,0
+X$1 \$3 \$1 \$I57 VSS INV_X1
+* cell instance $2 r0 *1 1479.6,0
+X$2 \$2 \$I103 \$I57 VSS INV3D
+* cell instance $3 r0 *1 1447.2,0
+X$3 \$I148 \$2 \$I57 VSS INV3D
+* cell instance $4 r0 *1 1512,0
+X$4 \$I103 \$I150 \$I57 \$3 VSS AND2_X1
+* cell instance $5 r0 *1 1533.6,0
+X$5 \$I57 VSS FILL2
+* cell instance $6 r0 *1 1544.4,0
+X$6 \$I57 VSS FILL2
+* cell instance $7 r0 *1 1555.2,0
+X$7 \$I57 VSS FILL2
+* cell instance $8 r0 *1 1566,0
+X$8 \$I57 VSS FILL2
+* cell instance $9 r0 *1 1576.8,0
+X$9 \$I57 VSS FILL2
+* cell instance $10 r0 *1 1587.6,0
+X$10 \$I57 VSS FILL2
+* cell instance $11 r0 *1 10.8,0
+X$11 \$I57 VSS FILL2
+* cell instance $12 r0 *1 21.6,0
+X$12 \$I104 \$I105 \$I57 VSS INV3D
+* cell instance $13 r0 *1 54,0
+X$13 \$I105 \$I106 \$I57 VSS INV3D
+* cell instance $14 r0 *1 86.4,0
+X$14 \$I106 \$I107 \$I57 VSS INV3D
+* cell instance $15 r0 *1 118.8,0
+X$15 \$I107 \$I108 \$I57 VSS INV3D
+* cell instance $16 r0 *1 151.2,0
+X$16 \$I108 \$I109 \$I57 VSS INV3D
+* cell instance $17 r0 *1 183.6,0
+X$17 \$I109 \$I110 \$I57 VSS INV3D
+* cell instance $18 r0 *1 216,0
+X$18 \$I110 \$I111 \$I57 VSS INV3D
+* cell instance $19 r0 *1 248.4,0
+X$19 \$I111 \$I112 \$I57 VSS INV3D
+* cell instance $20 r0 *1 280.8,0
+X$20 \$I112 \$I113 \$I57 VSS INV3D
+* cell instance $21 r0 *1 313.2,0
+X$21 \$I113 \$I114 \$I57 VSS INV3D
+* cell instance $22 r0 *1 345.6,0
+X$22 \$I114 \$I115 \$I57 VSS INV3D
+* cell instance $23 r0 *1 378,0
+X$23 \$I115 \$I116 \$I57 VSS INV3D
+* cell instance $24 r0 *1 410.4,0
+X$24 \$I116 \$I117 \$I57 VSS INV3D
+* cell instance $25 r0 *1 442.8,0
+X$25 \$I117 \$I118 \$I57 VSS INV3D
+* cell instance $26 r0 *1 475.2,0
+X$26 \$I118 \$I119 \$I57 VSS INV3D
+* cell instance $27 r0 *1 507.6,0
+X$27 \$I119 \$I120 \$I57 VSS INV3D
+* cell instance $28 r0 *1 540,0
+X$28 \$I120 \$I121 \$I57 VSS INV3D
+* cell instance $29 r0 *1 572.4,0
+X$29 \$I121 \$I122 \$I57 VSS INV3D
+* cell instance $30 r0 *1 604.8,0
+X$30 \$I122 \$I123 \$I57 VSS INV3D
+* cell instance $31 r0 *1 637.2,0
+X$31 \$I123 \$I124 \$I57 VSS INV3D
+* cell instance $32 r0 *1 669.6,0
+X$32 \$I124 \$I125 \$I57 VSS INV3D
+* cell instance $33 r0 *1 702,0
+X$33 \$I125 \$I126 \$I57 VSS INV3D
+* cell instance $34 r0 *1 734.4,0
+X$34 \$I126 \$I127 \$I57 VSS INV3D
+* cell instance $35 r0 *1 766.8,0
+X$35 \$I127 \$I128 \$I57 VSS INV3D
+* cell instance $36 r0 *1 799.2,0
+X$36 \$I128 \$I129 \$I57 VSS INV3D
+* cell instance $37 r0 *1 831.6,0
+X$37 \$I129 \$I130 \$I57 VSS INV3D
+* cell instance $38 r0 *1 864,0
+X$38 \$I130 \$I131 \$I57 VSS INV3D
+* cell instance $39 r0 *1 896.4,0
+X$39 \$I131 \$I132 \$I57 VSS INV3D
+* cell instance $40 r0 *1 928.8,0
+X$40 \$I132 \$I133 \$I57 VSS INV3D
+* cell instance $41 r0 *1 961.2,0
+X$41 \$I133 \$I134 \$I57 VSS INV3D
+* cell instance $42 r0 *1 993.6,0
+X$42 \$I134 \$I135 \$I57 VSS INV3D
+* cell instance $43 r0 *1 1026,0
+X$43 \$I135 \$I136 \$I57 VSS INV3D
+* cell instance $44 r0 *1 1058.4,0
+X$44 \$I136 \$I137 \$I57 VSS INV3D
+* cell instance $45 r0 *1 1090.8,0
+X$45 \$I137 \$I138 \$I57 VSS INV3D
+* cell instance $46 r0 *1 1123.2,0
+X$46 \$I138 \$I139 \$I57 VSS INV3D
+* cell instance $47 r0 *1 1155.6,0
+X$47 \$I139 \$I140 \$I57 VSS INV3D
+* cell instance $48 r0 *1 1188,0
+X$48 \$I140 \$I141 \$I57 VSS INV3D
+* cell instance $49 r0 *1 1220.4,0
+X$49 \$I141 \$I142 \$I57 VSS INV3D
+* cell instance $50 r0 *1 1252.8,0
+X$50 \$I142 \$I143 \$I57 VSS INV3D
+* cell instance $51 r0 *1 1285.2,0
+X$51 \$I143 \$I144 \$I57 VSS INV3D
+* cell instance $52 r0 *1 1317.6,0
+X$52 \$I144 \$I145 \$I57 VSS INV3D
+* cell instance $53 r0 *1 1350,0
+X$53 \$I145 \$I146 \$I57 VSS INV3D
+* cell instance $54 r0 *1 1382.4,0
+X$54 \$I146 \$I147 \$I57 VSS INV3D
+* cell instance $55 r0 *1 1414.8,0
+X$55 \$I147 \$I148 \$I57 VSS INV3D
+.ENDS INV48D
+
+* cell INV49
+* pin VSS
+* pin 
+* pin 
+* pin 
+.SUBCKT INV49 VSS \$I100 \$I99 \$I51
+* cell instance $1 r0 *1 1598.4,0
+X$1 \$I51 VSS FILL2
+* cell instance $3 r0 *1 10.8,0
+X$3 \$I148 VSS \$I100 \$I51 INV3
+* cell instance $5 r0 *1 43.2,0
+X$5 \$I101 VSS \$I148 \$I51 INV3
+* cell instance $6 r0 *1 75.6,0
+X$6 \$I102 VSS \$I101 \$I51 INV3
+* cell instance $7 r0 *1 108,0
+X$7 \$I103 VSS \$I102 \$I51 INV3
+* cell instance $8 r0 *1 140.4,0
+X$8 \$I104 VSS \$I103 \$I51 INV3
+* cell instance $9 r0 *1 172.8,0
+X$9 \$I105 VSS \$I104 \$I51 INV3
+* cell instance $10 r0 *1 205.2,0
+X$10 \$I106 VSS \$I105 \$I51 INV3
+* cell instance $11 r0 *1 237.6,0
+X$11 \$I107 VSS \$I106 \$I51 INV3
+* cell instance $12 r0 *1 270,0
+X$12 \$I108 VSS \$I107 \$I51 INV3
+* cell instance $13 r0 *1 302.4,0
+X$13 \$I109 VSS \$I108 \$I51 INV3
+* cell instance $14 r0 *1 334.8,0
+X$14 \$I110 VSS \$I109 \$I51 INV3
+* cell instance $15 r0 *1 367.2,0
+X$15 \$I111 VSS \$I110 \$I51 INV3
+* cell instance $16 r0 *1 399.6,0
+X$16 \$I112 VSS \$I111 \$I51 INV3
+* cell instance $17 r0 *1 432,0
+X$17 \$I113 VSS \$I112 \$I51 INV3
+* cell instance $18 r0 *1 464.4,0
+X$18 \$I114 VSS \$I113 \$I51 INV3
+* cell instance $19 r0 *1 496.8,0
+X$19 \$I115 VSS \$I114 \$I51 INV3
+* cell instance $20 r0 *1 529.2,0
+X$20 \$I116 VSS \$I115 \$I51 INV3
+* cell instance $21 r0 *1 561.6,0
+X$21 \$I117 VSS \$I116 \$I51 INV3
+* cell instance $22 r0 *1 594,0
+X$22 \$I118 VSS \$I117 \$I51 INV3
+* cell instance $23 r0 *1 626.4,0
+X$23 \$I119 VSS \$I118 \$I51 INV3
+* cell instance $24 r0 *1 658.8,0
+X$24 \$I120 VSS \$I119 \$I51 INV3
+* cell instance $25 r0 *1 691.2,0
+X$25 \$I121 VSS \$I120 \$I51 INV3
+* cell instance $26 r0 *1 723.6,0
+X$26 \$I122 VSS \$I121 \$I51 INV3
+* cell instance $27 r0 *1 756,0
+X$27 \$I123 VSS \$I122 \$I51 INV3
+* cell instance $28 r0 *1 788.4,0
+X$28 \$I124 VSS \$I123 \$I51 INV3
+* cell instance $29 r0 *1 820.8,0
+X$29 \$I125 VSS \$I124 \$I51 INV3
+* cell instance $30 r0 *1 853.2,0
+X$30 \$I126 VSS \$I125 \$I51 INV3
+* cell instance $31 r0 *1 885.6,0
+X$31 \$I127 VSS \$I126 \$I51 INV3
+* cell instance $32 r0 *1 918,0
+X$32 \$I128 VSS \$I127 \$I51 INV3
+* cell instance $33 r0 *1 950.4,0
+X$33 \$I129 VSS \$I128 \$I51 INV3
+* cell instance $34 r0 *1 982.8,0
+X$34 \$I130 VSS \$I129 \$I51 INV3
+* cell instance $35 r0 *1 1015.2,0
+X$35 \$I131 VSS \$I130 \$I51 INV3
+* cell instance $36 r0 *1 1047.6,0
+X$36 \$I132 VSS \$I131 \$I51 INV3
+* cell instance $37 r0 *1 1080,0
+X$37 \$I133 VSS \$I132 \$I51 INV3
+* cell instance $38 r0 *1 1112.4,0
+X$38 \$I134 VSS \$I133 \$I51 INV3
+* cell instance $39 r0 *1 1144.8,0
+X$39 \$I135 VSS \$I134 \$I51 INV3
+* cell instance $40 r0 *1 1177.2,0
+X$40 \$I136 VSS \$I135 \$I51 INV3
+* cell instance $41 r0 *1 1209.6,0
+X$41 \$I137 VSS \$I136 \$I51 INV3
+* cell instance $42 r0 *1 1242,0
+X$42 \$I138 VSS \$I137 \$I51 INV3
+* cell instance $43 r0 *1 1274.4,0
+X$43 \$I139 VSS \$I138 \$I51 INV3
+* cell instance $44 r0 *1 1306.8,0
+X$44 \$I140 VSS \$I139 \$I51 INV3
+* cell instance $45 r0 *1 1339.2,0
+X$45 \$I141 VSS \$I140 \$I51 INV3
+* cell instance $46 r0 *1 1371.6,0
+X$46 \$I142 VSS \$I141 \$I51 INV3
+* cell instance $47 r0 *1 1404,0
+X$47 \$I143 VSS \$I142 \$I51 INV3
+* cell instance $48 r0 *1 1436.4,0
+X$48 \$I144 VSS \$I143 \$I51 INV3
+* cell instance $49 r0 *1 1468.8,0
+X$49 \$I145 VSS \$I144 \$I51 INV3
+* cell instance $50 r0 *1 1501.2,0
+X$50 \$I146 VSS \$I145 \$I51 INV3
+* cell instance $51 r0 *1 1533.6,0
+X$51 \$I147 VSS \$I146 \$I51 INV3
+* cell instance $52 r0 *1 1566,0
+X$52 \$I99 VSS \$I147 \$I51 INV3
+.ENDS INV49
+
+* cell INV48
+* pin 
+* pin 
+* pin VSS
+* pin 
+* pin 
+* pin 
+.SUBCKT INV48 \$1 \$3 VSS \$I154 \$I108 \$I61
+* cell instance $1 r0 *1 1598.4,0
+X$1 \$3 \$1 \$I61 VSS INV_X1
+* cell instance $2 r0 *1 1479.6,0
+X$2 \$I107 VSS \$2 \$I61 INV3
+* cell instance $3 r0 *1 1447.2,0
+X$3 \$2 VSS \$I152 \$I61 INV3
+* cell instance $4 r0 *1 1512,0
+X$4 \$I107 \$I154 \$I61 \$3 VSS AND2_X1
+* cell instance $5 r0 *1 1533.6,0
+X$5 \$I61 VSS FILL2
+* cell instance $6 r0 *1 1544.4,0
+X$6 \$I61 VSS FILL2
+* cell instance $7 r0 *1 1555.2,0
+X$7 \$I61 VSS FILL2
+* cell instance $8 r0 *1 1566,0
+X$8 \$I61 VSS FILL2
+* cell instance $9 r0 *1 1576.8,0
+X$9 \$I61 VSS FILL2
+* cell instance $10 r0 *1 1587.6,0
+X$10 \$I61 VSS FILL2
+* cell instance $11 r0 *1 10.8,0
+X$11 \$I61 VSS FILL2
+* cell instance $14 r0 *1 21.6,0
+X$14 \$I109 VSS \$I108 \$I61 INV3
+* cell instance $15 r0 *1 54,0
+X$15 \$I110 VSS \$I109 \$I61 INV3
+* cell instance $16 r0 *1 86.4,0
+X$16 \$I111 VSS \$I110 \$I61 INV3
+* cell instance $17 r0 *1 118.8,0
+X$17 \$I112 VSS \$I111 \$I61 INV3
+* cell instance $18 r0 *1 151.2,0
+X$18 \$I113 VSS \$I112 \$I61 INV3
+* cell instance $19 r0 *1 183.6,0
+X$19 \$I114 VSS \$I113 \$I61 INV3
+* cell instance $20 r0 *1 216,0
+X$20 \$I115 VSS \$I114 \$I61 INV3
+* cell instance $21 r0 *1 248.4,0
+X$21 \$I116 VSS \$I115 \$I61 INV3
+* cell instance $22 r0 *1 280.8,0
+X$22 \$I117 VSS \$I116 \$I61 INV3
+* cell instance $23 r0 *1 313.2,0
+X$23 \$I118 VSS \$I117 \$I61 INV3
+* cell instance $24 r0 *1 345.6,0
+X$24 \$I119 VSS \$I118 \$I61 INV3
+* cell instance $25 r0 *1 378,0
+X$25 \$I120 VSS \$I119 \$I61 INV3
+* cell instance $26 r0 *1 410.4,0
+X$26 \$I121 VSS \$I120 \$I61 INV3
+* cell instance $27 r0 *1 442.8,0
+X$27 \$I122 VSS \$I121 \$I61 INV3
+* cell instance $28 r0 *1 475.2,0
+X$28 \$I123 VSS \$I122 \$I61 INV3
+* cell instance $29 r0 *1 507.6,0
+X$29 \$I124 VSS \$I123 \$I61 INV3
+* cell instance $30 r0 *1 540,0
+X$30 \$I125 VSS \$I124 \$I61 INV3
+* cell instance $31 r0 *1 572.4,0
+X$31 \$I126 VSS \$I125 \$I61 INV3
+* cell instance $32 r0 *1 604.8,0
+X$32 \$I127 VSS \$I126 \$I61 INV3
+* cell instance $33 r0 *1 637.2,0
+X$33 \$I128 VSS \$I127 \$I61 INV3
+* cell instance $34 r0 *1 669.6,0
+X$34 \$I129 VSS \$I128 \$I61 INV3
+* cell instance $35 r0 *1 702,0
+X$35 \$I130 VSS \$I129 \$I61 INV3
+* cell instance $36 r0 *1 734.4,0
+X$36 \$I131 VSS \$I130 \$I61 INV3
+* cell instance $37 r0 *1 766.8,0
+X$37 \$I132 VSS \$I131 \$I61 INV3
+* cell instance $38 r0 *1 799.2,0
+X$38 \$I133 VSS \$I132 \$I61 INV3
+* cell instance $39 r0 *1 831.6,0
+X$39 \$I134 VSS \$I133 \$I61 INV3
+* cell instance $40 r0 *1 864,0
+X$40 \$I135 VSS \$I134 \$I61 INV3
+* cell instance $41 r0 *1 896.4,0
+X$41 \$I136 VSS \$I135 \$I61 INV3
+* cell instance $42 r0 *1 928.8,0
+X$42 \$I137 VSS \$I136 \$I61 INV3
+* cell instance $43 r0 *1 961.2,0
+X$43 \$I138 VSS \$I137 \$I61 INV3
+* cell instance $44 r0 *1 993.6,0
+X$44 \$I139 VSS \$I138 \$I61 INV3
+* cell instance $45 r0 *1 1026,0
+X$45 \$I140 VSS \$I139 \$I61 INV3
+* cell instance $46 r0 *1 1058.4,0
+X$46 \$I141 VSS \$I140 \$I61 INV3
+* cell instance $47 r0 *1 1090.8,0
+X$47 \$I142 VSS \$I141 \$I61 INV3
+* cell instance $48 r0 *1 1123.2,0
+X$48 \$I143 VSS \$I142 \$I61 INV3
+* cell instance $49 r0 *1 1155.6,0
+X$49 \$I144 VSS \$I143 \$I61 INV3
+* cell instance $50 r0 *1 1188,0
+X$50 \$I145 VSS \$I144 \$I61 INV3
+* cell instance $51 r0 *1 1220.4,0
+X$51 \$I146 VSS \$I145 \$I61 INV3
+* cell instance $52 r0 *1 1252.8,0
+X$52 \$I147 VSS \$I146 \$I61 INV3
+* cell instance $53 r0 *1 1285.2,0
+X$53 \$I148 VSS \$I147 \$I61 INV3
+* cell instance $54 r0 *1 1317.6,0
+X$54 \$I149 VSS \$I148 \$I61 INV3
+* cell instance $55 r0 *1 1350,0
+X$55 \$I150 VSS \$I149 \$I61 INV3
+* cell instance $56 r0 *1 1382.4,0
+X$56 \$I151 VSS \$I150 \$I61 INV3
+* cell instance $57 r0 *1 1414.8,0
+X$57 \$I152 VSS \$I151 \$I61 INV3
+.ENDS INV48
+
+* cell INV3D
+* pin A
+* pin Y
+* pin vdd
+* pin gnd
+.SUBCKT INV3D A Y vdd gnd
+* device instance $1 r0 *1 4,53.2 PMOS
+XM$1 Y A vdd vdd PMOS L=1u W=10.2u AS=539.48p AD=28.56p PS=96.2u PD=26u
+* device instance $2 r0 *1 5.4,8.2 NMOS
+XM$2 gnd A Y gnd NMOS L=1u W=3.4u AS=9.52p AD=306.89p PS=12.4u PD=77.2u
+.ENDS INV3D
+
+* cell INV3
+* pin 
+* pin VSS
+* pin 
+* pin 
+.SUBCKT INV3 \$1 VSS \$I4 \$I2
+* cell instance $1 r0 *1 0,0
+X$1 \$I4 \$1 \$I2 VSS INV_X1
+* cell instance $2 r0 *1 21.6,0
+X$2 \$I2 VSS FILL2
+* cell instance $3 r0 *1 10.8,0
+X$3 \$I2 VSS FILL2
+.ENDS INV3
+
+* cell AND2_X1
+* pin A
+* pin B
+* pin vdd
+* pin Y
+* pin gnd
+.SUBCKT AND2_X1 A B vdd Y gnd
+* device instance $1 r0 *1 4,53.2 PMOS
+XM$1 vdd A \$1 vdd PMOS L=1u W=10.2u AS=28.56p AD=15.3p PS=26u PD=13.2u
+* device instance $2 r0 *1 8,53.2 PMOS
+XM$2 \$1 B vdd vdd PMOS L=1u W=10.2u AS=15.3p AD=15.3p PS=13.2u PD=13.2u
+* device instance $3 r0 *1 12,53.2 PMOS
+XM$3 vdd \$1 Y vdd PMOS L=1u W=10.2u AS=15.3p AD=28.56p PS=13.2u PD=26u
+* device instance $4 r0 *1 8.6,17.9 NMOS
+XM$4 gnd A \$7 gnd NMOS L=1u W=3.4u AS=9.52p AD=2.04p PS=12.4u PD=4.6u
+* device instance $5 r0 *1 10.8,17.9 NMOS
+XM$5 \$7 B \$1 gnd NMOS L=1u W=3.4u AS=2.04p AD=9.52p PS=4.6u PD=12.4u
+* device instance $6 r0 *1 16.2,9.4 NMOS
+XM$6 gnd \$1 Y gnd NMOS L=1u W=3.4u AS=35.36p AD=9.52p PS=27.6u PD=12.4u
+.ENDS AND2_X1
+
+* cell INV_X1
+* pin A
+* pin Y
+* pin vdd
+* pin gnd
+.SUBCKT INV_X1 A Y vdd gnd
+* device instance $1 r0 *1 4,53.2 PMOS
+XM$1 vdd A Y vdd PMOS L=1u W=10.2u AS=28.56p AD=28.56p PS=26u PD=26u
+* device instance $2 r0 *1 5.4,8.2 NMOS
+XM$2 gnd A Y gnd NMOS L=1u W=3.4u AS=9.52p AD=9.52p PS=12.4u PD=12.4u
+.ENDS INV_X1
+
+* cell FILL2
+* pin vdd
+* pin gnd
+.SUBCKT FILL2 vdd gnd
+* device instance $1 r0 *1 5.4,47.7 PMOS
+XM$1 vdd gnd vdd vdd PMOS L=3.2u W=21.2u AS=59.36p AD=59.36p PS=48u PD=48u
+* device instance $2 r0 *1 5.4,13.05 NMOS
+XM$2 gnd vdd gnd gnd NMOS L=3.2u W=13.1u AS=36.68p AD=36.68p PS=31.8u PD=31.8u
+.ENDS FILL2
