@@ -34,9 +34,9 @@
     "ring_osc_native_bbox_um": [-6.3, -120.0, 1626.3, 124.8],
     "absolute_footprint_um": [-816.3, -770.0, 816.3, -525.2],
     "overlaps_core": false,
-    "overlaps_PTECT": true,
+    "overlaps_PTECT": false,
     "ptect_box_um_measured": [-800.0, -800.0, 800.0, -150.0],
-    "ptect_note": "RING_OSC's absolute footprint at this origin is ENTIRELY inside the PTECT keepout area (layer 63/1) that all prior GIO<->core routing in this project has avoided (design_notes.md 78.x/79.x). Flagged to the user via AskUserQuestion 2026-08-31; user chose to proceed (originally at Y=-600, revised to Y=-650 in a later message -- 'Y=-650のことです。' -- both accept the same PTECT overlap). Also noted: the clear channel between PTECT's bottom edge (Y=-800) and the P9/P10 pad landing points (Y=-921.8) is only ~122um, less than RING_OSC's own height (244.8um), so shifting straight down to clear PTECT is not simply possible without a wider redesign.",
+    "ptect_note": "RING_OSC's absolute footprint at this origin WAS ENTIRELY inside the PTECT keepout area (layer 63/1) that all prior GIO<->core routing in this project has avoided (design_notes.md 78.x/79.x). Flagged to the user via AskUserQuestion 2026-08-31; user initially chose to proceed with the overlap accepted (originally at Y=-600, revised to Y=-650 in a later message -- 'Y=-650のことです。' -- both accepted the same PTECT overlap at the time). RESOLVED 2026-08-31: user removed the PTECT keepout geometry in this area on their own local layout/DRC deck (RING_OSC's own placement/origin is unchanged) and reports DRC/LVS is now clean: 'PTECTを消してDRC/LVSクリアーにしました。' ptect_box_um_measured is left as a historical record of where the keepout used to be.",
     "note_2026_08_31": "origin_y revised from -600.0 to -650.0 (user: '1. Yを-50します' clarified as 'Y=-650のことです。' after AskUserQuestion flagged that -50 would overlap the core cell itself); re-run via script/place_ring_osc.py, no core overlap, PTECT overlap unchanged in kind (still fully inside)."
   },
   "power_routing": {
