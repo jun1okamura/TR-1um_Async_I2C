@@ -81,7 +81,17 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # script/strip_orphan_cells.py's output -- see module docstring history
 # item (1). Geometry-identical to tr_1um_i2c_slave_async_ringosc_logo.gds
 # (verified via full-layer XOR diff), just with 5 dead orphan cells gone.
-SRC_GDS = PROJECT_ROOT / "ring_osc" / "tr_1um_i2c_slave_async_ringosc_clean.gds"
+# UPDATED 2026-09-01 (design_notes.md §104-105): re-pointed to the
+# current final chip GDS after the GIO pad reassignment (SCL/SDA moved
+# to P1/P2, tx_data/rx_data bit reshuffle) + OpenSUSI logo M2-dot
+# redesign, both DRC/LVS-clean-confirmed on real KLayout. Top-cell
+# structure (tr_1um_i2c_slave_async / OSS_FRAME_TEG / OSS_FRAME orphans,
+# real frame cell still named OSS_FRAME_GIO) is unchanged from
+# ringosc_clean.gds -- confirmed directly before switching this
+# constant, so transform_gds()'s orphan-drop + rename logic below still
+# applies unmodified. ringosc_clean.gds is left as-is (pre-reassignment
+# historical snapshot, README.md/design_notes.md now document this).
+SRC_GDS = PROJECT_ROOT / "ring_osc" / "tr_1um_i2c_slave_async_reassigned_logodots.gds"
 SRC_LVS_NETLIST = PROJECT_ROOT / "schematic" / "tr_1um_i2c_slave_async_ringosc_v9_lvs.spice"
 
 # ---- destination (OpenSUSI TR-1um_MPW_template-based submission repo) ----
