@@ -38,17 +38,17 @@ stepsize 20
 settle 50
 h Vdd
 l Gnd
-x P13
-h P2
+x P2
+h P1
 h P7
-l P12
 l P11
-l P5
-l P6
-l P4
-l P1
-l P3
+l P12
+l P13
 l P14
+l P6
+l P5
+l P4
+l P3
 l P15
 s 3000
 | check: slave held in reset -- busy/addr_match/rw/sda_oe must all
@@ -56,7 +56,7 @@ s 3000
 | pull-up), not X. If still X at this point, reset itself isn't
 | resolving (see design_notes.md 76.10) -- report back before
 | proceeding, since nothing downstream will make sense yet.
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 h P15
 s
 | DFFRB (the 33x-instantiated flip-flop cell) has the SAME cold-X
@@ -172,18 +172,17 @@ x x2.x_301_.QM
 s
 s 100
 | check: still defined immediately after release
-d SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 
-d P2 P13 SDA_O P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
-ana P2 P13 SDA_O P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
-ana x2.txreg[7] x2.txreg[6] x2.txreg[5] x2.txreg[4] x2.txreg[3] x2.txreg[2] x2.txreg[1] x2.txreg[0] 
+d P1 P2 NC_HIZ2 P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+ana P1 P2 NC_HIZ2 P15 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 
 | ==================== Scenario 1: write 0xA5 ====================
 | ---- START ----
-h P2
-x P13
+h P1
+x P2
 s
-l P13
+l P2
 s 40
 | check: busy asserted after START
 d NC_CORE_busy
@@ -232,7 +231,7 @@ x x2.x_284_.QM
 x x2.x_293_.QM
 s
 | check: sda_oe now holds a defined value instead of X
-d SDA_O
+d NC_HIZ2
 | The core's phase/bit_cnt/shreg/addr_ok/rw_bit register bank is
 | async-reset via a NOR2-derived net (gate-level Group-A RSTB,
 | "_008_") that is structurally intended to pulse briefly on every
@@ -364,126 +363,126 @@ d NC_CORE_rw NC_CORE_addr_match
 d NC_CORE_busy
 | ADDR+W = 0xA0
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: slave ACKed matching address (write)
-d P13
+d P2
 s
-l P2
+l P1
 | CHECK: addr_match asserted
 d NC_CORE_addr_match
 | CHECK: rw indicates WRITE
 d NC_CORE_rw
 | DATA byte = 0xA5
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: slave ACKed data byte
-d P13
+d P2
 s
-l P2
+l P1
 | CHECK: rx_data == 0xA5
-d NET_0 NET_1 NET_2 NET_3 NET_4 NET_5 NET_6 NET_7
+d NC_OUT11 NC_OUT12 NC_OUT13 NC_OUT14 NC_OUT6 NC_OUT5 NC_OUT4 NC_OUT3
 | STOP's edge-detect path routes through a real intentional delay
 | element (design_notes.md 76.10/76.13/76.20/76.21). A short
 | settle (500ns) is inserted first so any residual
@@ -496,10 +495,10 @@ d NET_0 NET_1 NET_2 NET_3 NET_4 NET_5 NET_6 NET_7
 | busy never clears (see design_notes.md 76.20/76.21 for the real
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
-l P13
-h P2
+l P2
+h P1
 s 8000
-x P13
+x P2
 | same real SDA pull-up RC recovery margin as send_bit() etc.
 | (76.39) -- give SDA time to actually finish rising under the
 | calibrated TR-1um.prm pull-up before checking busy below.
@@ -510,20 +509,20 @@ d NC_CORE_busy
 d NC_CORE_busy
 | ==================== Scenario 2: read 0x3C, then NACK ====================
 | preload tx_data = 0x3C (what the slave will transmit)
-l P12
 l P11
-h P5
+l P12
+h P13
+h P14
 h P6
-h P4
-h P1
+h P5
+l P4
 l P3
-l P14
 s 40
 | ---- START ----
-h P2
-x P13
+h P1
+x P2
 s
-l P13
+l P2
 s 40
 | check: busy asserted after START
 d NC_CORE_busy
@@ -675,144 +674,144 @@ s
 d NC_CORE_rw NC_CORE_addr_match
 | ADDR+R = 0xA1
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: slave ACKed matching address (read)
-d P13
+d P2
 s
-l P2
+l P1
 | CHECK: rw indicates READ
 d NC_CORE_rw
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 7 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 6 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 5 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 4 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 3 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 2 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 1 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: sample read-data bit 0 (MSB first)
-d P13
+d P2
 s
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 | STOP's edge-detect path routes through a real intentional delay
 | element (design_notes.md 76.10/76.13/76.20/76.21). A short
 | settle (500ns) is inserted first so any residual
@@ -825,10 +824,10 @@ x P13
 | busy never clears (see design_notes.md 76.20/76.21 for the real
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
-l P13
-h P2
+l P2
+h P1
 s 8000
-x P13
+x P2
 | same real SDA pull-up RC recovery margin as send_bit() etc.
 | (76.39) -- give SDA time to actually finish rising under the
 | calibrated TR-1um.prm pull-up before checking busy below.
@@ -839,10 +838,10 @@ d NC_CORE_busy
 d NC_CORE_busy
 | ==================== Scenario 3: wrong address -> NACK ====================
 | ---- START ----
-h P2
-x P13
+h P1
+x P2
 s
-l P13
+l P2
 s 40
 | check: busy asserted after START
 d NC_CORE_busy
@@ -994,62 +993,62 @@ s
 d NC_CORE_rw NC_CORE_addr_match
 | ADDR+W (WRONG) = 0x22
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s
 | CHECK: unmatched address -> NACK (no slave ack)
-d P13
+d P2
 s
-l P2
+l P1
 | CHECK: addr_match not asserted for foreign address
 d NC_CORE_addr_match
 | STOP's edge-detect path routes through a real intentional delay
@@ -1064,10 +1063,10 @@ d NC_CORE_addr_match
 | busy never clears (see design_notes.md 76.20/76.21 for the real
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
-l P13
-h P2
+l P2
+h P1
 s 8000
-x P13
+x P2
 | same real SDA pull-up RC recovery margin as send_bit() etc.
 | (76.39) -- give SDA time to actually finish rising under the
 | calibrated TR-1um.prm pull-up before checking busy below.

@@ -28,6 +28,8 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 | **V9**（DFFS許可・コア再配置配線、GIO再結線） | コアの配置配線をやり直し（`route_gio_core_v9.py`によるGIO⇔コア結線・電源メッシュ再構築）。DRC 0違反を達成した最終物理設計を`src/tr_1um_i2c_slave_async.gds`に確定（design_notes §79）。チップレベルLVS用SPICE生成（GIO実SPICE＋コアLVSクリーンSPICE＋`gio_connections.json`から機械生成、design_notes §80〜82）を経て、以下3つの実バグを発見・修正: (1) スキーマティック・レイアウト双方でチップTOP PIN（P1〜P7/VSS/P9〜P15/VDD、16本）が未宣言だった問題（design_notes §82〜83）、(2) `route_gio_core_v9.py`の電源配線書き直しでHIZ2/HIZ7/HIZ9/HIZ10/HIZ15/OUT13のVDD/VSS固定タイ結線が丸ごと欠落していた問題（design_notes §84）、(3) `gio_connections.json`のP11記載ミス（実際はcore.tx_data[1]に接続済みなのに誤って未接続と記載）でLVS参照ネットリストが実レイアウトと食い違っていた問題（design_notes §85）。**これら全ての修正後、ユーザー実機KLayoutでのチップレベルDRC/LVS確認で最終的にクリーンを達成**（design_notes §85.6, §86）。 |
 | **IRSIMチップレベル動作検証（V9最終チップnetlist）** | DRC/LVSクリーン済みの`tr_1um_i2c_slave_async.extracted`をトランジスタレベルまでフラット化（2077トランジスタ・845ノード、design_notes §87）。`DFFRB`のQM（マスタ）/QS（スレーブ）両記憶ノードをクロックHIGH時に強制する実行時リセット手法を確立し、READトランザクションの不具合を根本解決（design_notes §89〜96）。`src/i2c_slave_async_tb.v`と1対1対応する自己検証型IRSIMテストベンチ（WRITE 0xA5／READ 0x3C／誤アドレスNACKの3シナリオ・14チェック）を実チップ上で実行し、**Verilog版と完全一致する`All 14 checks PASSED`を実機IRSIMで確認**（design_notes §97〜100）。実行は`irsim/run_tb.sh`一発で完結（詳細は[`irsim/README.md`](./irsim/README.md)）。 |
 | **RING_OSC統合**（コア横に追加したリング発振器、チップ全体のDRC/LVSクリーンに統合済み） | コア（`i2c_slave_async_nrow_fm`）の隣に配置・VDD/VSS/信号配線・LVS用SPICE生成までを実施し、**実機KLayoutでのチップレベルDRC/LVSクリーンを確認**（design_notes §103.1〜103.13）。コア〜RING_OSC間の空きスペースにOpenSUSIロゴをM2デジタイズアートとして配置（DRC違反0で追加、§103.14）。標準セル配置レイアウト起因のPTECTキープアウト重複問題もユーザー側で解消（§103.15）。RING_OSC単体の自己検証用ngspiceテストベンチ（`ring_osc/TB/`）を作成し、実ローカルngspiceで発振を確認：`OUT`周期153.661ns/6.508MHz、`OUTB`周期641.844ns/1.558MHz（INV3Dのアンテナダイオード拡散が出力ノードに乗る影響で**約4.2倍遅い**、extracted netlistのAS/AD割り当て誤りを発見・シミュレーション用コピーのみ修正、§103.16〜103.22）。 |
+| **GIOパッド再割り当て**（SCL/SDAを隣接パッドP1/P2へ集約、tx_data/rx_data各ビットのパッド再配分） | `script/reroute_gio_pads_2026.py`で物理配線を実装。`tx_data[4]`の新レーン探索で見つかったM2平行配線の5.4umクリアランス要件を根拠に8ネットのレーン半径をカスケードシフト、`HIZ1_VDD_tie`はTIE_R反復（917.0→916.1）、`ENB_rst_n_via`を新設しRING_OSC.ENB⇔rst_n/P15の断線（GIOパッド再配線でrst_nの旧M1スタブごと消えたことが原因）を修正——**実機KLayoutでDRC 0違反を確認**（design_notes §104.1〜104.2）。`gio_connections.json`のP7/OUT2ネット欠落を修正しLVS参照SPICEを再生成、**LVSクリーンを確認**（§104.3）。IRSIM`.sim`のSDAプルアップ対象パッド（P13→P2への移設漏れ）、および`gen_irsim_cmd_v9.py`のSCL/SDA/SDA_OE/TX/RXノード名（パッド再割り当て前の旧マッピングのまま残存）という2件のステール参照バグを発見・修正した上で`irsim_tb.cmd`一式を再生成し、**実機IRSIMで`All 14 checks PASSED`を確認**（§104.4〜104.5）。 |
+| **OpenSUSIロゴのM2ドット化再デザイン** | 103.14の塗りつぶしブロック方式から、M2 3.0×3.0umの孤立正方形ドット（5.0umピッチグリッド中央配置、Wmin/Sminをちょうど満たす構造的DRC安全設計）へ再デザイン。サイズ・配置位置は現状維持、`OPENSUSI_LOGO`セルの中身のみ差し替え。ロゴ単体・チップ全体ともDRC自己検証0違反、**実機KLayoutでDRCクリーンを確認**（design_notes §105）。 |
 
 **最終レイアウト成果物（V9、トップレベル・チップ全体）**:
 [`src/tr_1um_i2c_slave_async.gds`](./src/tr_1um_i2c_slave_async.gds)
@@ -46,13 +48,22 @@ LVS用スキーマティック: [`schematic/i2c_slave_async_nrow_fm.sch`](./sche
 （`src/tr_1um_i2c_slave_async_routed.gds`はV7時代の成果物として履歴保存のため
 残置。V9以降の正式な最終成果物は上記`src/tr_1um_i2c_slave_async.gds`。）
 
-**RING_OSC統合成果物**:
-[`ring_osc/tr_1um_i2c_slave_async_ringosc_logo.gds`](./ring_osc/tr_1um_i2c_slave_async_ringosc_logo.gds)
-（コア＋RING_OSC＋OpenSUSIロゴまで統合したチップGDS、実機KLayoutでの
-DRC/LVSクリーン確認済み）。単体テストベンチ:
+**現行の正式最終成果物（RING_OSC統合＋GIOパッド再割り当て＋ロゴ
+ドット化、チップ全体）**:
+[`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds`](./ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds)
+（コア＋RING_OSC＋再割り当て後GIO配線＋M2ドット版OpenSUSIロゴまで
+統合したチップGDS、実機KLayoutでの**DRC/LVSクリーン**、および実機
+IRSIM(rsim)での**`All 14 checks PASSED`**を確認済み、design_notes
+§104〜105）。単体テストベンチ:
 [`ring_osc/TB/tb_ring_osc.spice`](./ring_osc/TB/tb_ring_osc.spice)
 （LVSクリーンな`ring_osc/RING_OSC.extracted`を使用、ローカルngspiceで
 発振周波数・電源電流を実測確認済み、design_notes §103）。
+
+（`ring_osc/tr_1um_i2c_slave_async_ringosc_clean.gds`・
+`tr_1um_i2c_slave_async_ringosc_logo.gds`（GIOパッド再割り当て前）・
+`tr_1um_i2c_slave_async_reassigned.gds`（ロゴドット化前）は開発過程の
+成果物として履歴保存のため残置。GIOパッド再割り当て後の正式な最終
+成果物は上記`tr_1um_i2c_slave_async_reassigned_logodots.gds`。）
 
 ## 構成
 
@@ -88,9 +99,17 @@ FRAME/
 ring_osc/
   RING_OSC.sch/.gds/.lef      RING_OSC本体（コア横に追加したリング発振器）
   RING_OSC.extracted          レイアウト抽出netlist（LVS用、xFILL2/INV3D等含む）
-  tr_1um_i2c_slave_async_ringosc_logo.gds
-                              コア+RING_OSC+OpenSUSIロゴまで統合した最終チップGDS
-                              （実機KLayoutでDRC/LVSクリーン確認済み、design_notes §103）
+  tr_1um_i2c_slave_async_reassigned_logodots.gds
+                              現行の正式最終成果物：コア+RING_OSC+GIOパッド
+                              再割り当て後配線+M2ドット版OpenSUSIロゴまで統合した
+                              チップGDS（実機KLayoutでDRC/LVSクリーン、実機IRSIM
+                              (rsim)でAll 14 checks PASSEDを確認済み、design_notes
+                              §104〜105）
+  tr_1um_i2c_slave_async_reassigned.gds
+                              GIOパッド再割り当て後・ロゴドット化前の中間成果物
+                              （履歴保存、design_notes §104）
+  tr_1um_i2c_slave_async_ringosc_clean.gds / _ringosc_logo.gds
+                              GIOパッド再割り当て前の成果物（履歴保存、design_notes §103）
   TB/
     RING_OSC_extracted_sim_ready.spice
                               RING_OSC.extractedのシミュレーション用コピー
@@ -107,8 +126,12 @@ script/
   gen_irsim_verilog_equiv_tb.py
                               Verilog版テストベンチと1対1対応する自己検証型IRSIM
                               テストベンチを生成（design_notes §98）
+  reroute_gio_pads_2026.py    GIOパッド再割り当て（SCL/SDAを隣接パッドP1/P2へ集約）の
+                              物理配線パッチスクリプト（design_notes §104）
+  place_opensusi_logo_dots.py OpenSUSIロゴをM2 3um角の孤立ドットとして再デザイン
+                              （design_notes §105）
   他、配置配線・DRC/接続性検証・LVS準備・IRSIM検証・RING_OSC統合スクリプト
-  一式（全59本、詳細は[`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複・
+  一式（全63本、詳細は[`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複・
   解消済みバグの一回限りデバッグスクリプトは削除済み（v7版のGDS/GIOルータ等、
   一部は現行v9パイプラインの前例・依存として残置）。
 irsim/                        IRSIMチップレベル動作検証一式（`.sim`/`.cmd`、自己検証型
@@ -118,7 +141,7 @@ references/                  UM10204仕様書、DRCサマリ資料
 TR1um_5_stdcell.lib          Yosys用Liberty（タイミング未特性化のプレースホルダ）
 logic_cells_mapping.md       RTL論理→スタンダードセル対応表（v9現行ネットリスト基準）
 design_notes.md              設計ノート本体（RTL設計からv9チップレベルIRSIM動作検証・
-                              RING_OSC統合まで全103節、詳細記録）
+                              RING_OSC統合・GIOパッド再割り当てまで全105節、詳細記録）
 ```
 
 ## 特徴 / 既知の制限（RTL）
@@ -296,8 +319,9 @@ cd irsim
 
 - 設計・実装の全記録（RTLのステートマシン設計、UM10204各節との対応、
   論理合成、配置配線の全試行錯誤、DRC/LVSクリア化、トップレベル統合、
-  v9チップレベルIRSIM動作検証、RING_OSC統合完了まで）は
-  [`design_notes.md`](./design_notes.md)（全103節）を参照。主な区切り:
+  v9チップレベルIRSIM動作検証、RING_OSC統合、GIOパッド再割り当て、
+  OpenSUSIロゴのドット化再デザインまで）は
+  [`design_notes.md`](./design_notes.md)（全105節）を参照。主な区切り:
   - §1〜11: RTL設計・検証・xschem回路図
   - §12〜38: 物理実装環境の構築、配置配線の試行錯誤（複数世代）
   - §39〜46: セル再構築、バッファ挿入、DRC/短絡の系統的解消
@@ -347,5 +371,18 @@ cd irsim
     （§103.15）、RING_OSC単体ngspiceテストベンチの作成・extracted
     netlistへの切替・INV3DのAS/AD割り当て誤りの発見と修正・実測での
     発振周波数確認（OUT=6.508MHz、OUTB=1.558MHz、§103.16〜103.22）
+  - §104: **GIOパッド再割り当て**（SCL/SDAを隣接パッドP1/P2へ集約、
+    tx_data/rx_data各ビットのパッド再配分）の物理配線
+    （`reroute_gio_pads_2026.py`、M2平行配線5.4umクリアランス要件に
+    基づく8ネットのレーンカスケードシフト、§104.1）、自前DRC自己
+    検証の分離距離計算バグの発見・修正（§104.1.1）、実DRCで発見した
+    RING_OSC.ENB⇔rst_n/P15断線の根本原因究明・修正（§104.2）、
+    LVS参照SPICE再生成・LVSクリーン達成（§104.3）、IRSIM`.sim`の
+    SDAプルアップ対象パッドのステール参照バグ修正（§104.4）、IRSIM
+    テストベンチのノード名ステール参照バグ発見・修正と実機
+    `All 14 checks PASSED`確認（§104.5）
+  - §105: OpenSUSIロゴを塗りつぶしブロック方式からM2 3um角の孤立
+    ドット方式へ再デザイン（サイズ・配置位置は現状維持）、実機DRC
+    クリーン確認
 - 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)（v9
   現行ネットリスト基準に更新済み）

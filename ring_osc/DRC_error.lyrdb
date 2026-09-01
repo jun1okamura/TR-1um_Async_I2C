@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <report-database>
  <description>TR-1um DRC(Drawing)</description>
- <original-file>tr_1um_i2c_slave_async_ringosc_signals.gds</original-file>
+ <original-file>tr_1um_i2c_slave_async_reassigned.gds</original-file>
  <generator>drc: script='/Users/okamura/Dropbox/91_OpenPDK/TR-1um/libs.tech/klayout/tech/drc/drc.lydrc'</generator>
  <top-cell>tr_1um_i2c_slave_async</top-cell>
  <tags>
@@ -1640,14 +1640,50 @@
  <items>
   <item>
    <tags/>
-   <category>'V1.CO:V1 overlap CO'</category>
+   <category>'M1.S1:M1 Smin &lt;  1.4'</category>
    <cell>tr_1um_i2c_slave_async</cell>
    <visited>false</visited>
    <multiplicity>1</multiplicity>
    <comment/>
    <image/>
    <values>
-    <value>polygon: (-797,-767.9;-797,-767.1;-796,-767.1;-796,-767.9)</value>
+    <value>edge-pair: (195.408,907.9;204.592,907.9)|(203.25,908.3;196.75,908.3)</value>
+   </values>
+  </item>
+  <item>
+   <tags/>
+   <category>'V1.S1:V1 Smin &lt;  1.5'</category>
+   <cell>tr_1um_i2c_slave_async</cell>
+   <visited>false</visited>
+   <multiplicity>1</multiplicity>
+   <comment/>
+   <image/>
+   <values>
+    <value>edge-pair: (199.3,913.7;200.7,913.7)|(200.7,914.3;199.3,914.3)</value>
+   </values>
+  </item>
+  <item>
+   <tags/>
+   <category>'GC.ANT:GC must electrically connect to Substrate (or text if not chip level)'</category>
+   <cell>tr_1um_i2c_slave_async</cell>
+   <visited>false</visited>
+   <multiplicity>1</multiplicity>
+   <comment/>
+   <image/>
+   <values>
+    <value>polygon: (709.5,-705;709.5,-679.1;712.3,-679.1;712.3,-660.2;713.3,-660.2;713.3,-681.7;710.5,-681.7;710.5,-705)</value>
+   </values>
+  </item>
+  <item>
+   <tags/>
+   <category>'GC.ANT:GC must electrically connect to Substrate (or text if not chip level)'</category>
+   <cell>tr_1um_i2c_slave_async</cell>
+   <visited>false</visited>
+   <multiplicity>1</multiplicity>
+   <comment/>
+   <image/>
+   <values>
+    <value>polygon: (712.3,-635;712.3,-616.1;709.5,-616.1;709.5,-590.2;710.5,-590.2;710.5,-613.5;713.3,-613.5;713.3,-635)</value>
    </values>
   </item>
  </items>

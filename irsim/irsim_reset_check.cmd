@@ -22,34 +22,34 @@ stepsize 20
 settle 50
 h Vdd
 l Gnd
-x P13
-h P2
+x P2
+h P1
 h P7
-l P12
 l P11
-l P5
-l P6
-l P4
-l P1
-l P3
+l P12
+l P13
 l P14
+l P6
+l P5
+l P4
+l P3
 l P15
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 s 100
 | ---- t=100ns since reset asserted ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 s 400
 | ---- t=500ns since reset asserted ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 s 500
 | ---- t=1000ns since reset asserted ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 s 2000
 | ---- t=3000ns since reset asserted ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 s 5000
 | ---- t=8000ns since reset asserted ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 h P15
 s
 | ---- Group-A DFFRBs (24 incl. rw/addr_match) force/release ----
@@ -153,7 +153,7 @@ x x2.x_301_.QM
 s
 s 100
 | ---- reset released ----
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 | (sda_oe stays a legitimate 0 here, not from resolving -- its own
 | DFFRB is in Group B (busy AND rst_n), still held in reset since
 | busy hasn't gone high yet. That group's force/release happens in

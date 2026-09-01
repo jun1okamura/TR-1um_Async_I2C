@@ -3,32 +3,32 @@
     {
       "label": null,
       "nodes": [
-        "P13",
-        "SDA_O",
-        "NC_CORE_busy",
-        "NC_CORE_rw",
-        "NC_CORE_addr_match"
-      ],
-      "expect": null,
-      "group": null
-    },
-    {
-      "label": null,
-      "nodes": [
-        "SDA_O",
-        "NC_CORE_busy",
-        "NC_CORE_rw",
-        "NC_CORE_addr_match"
-      ],
-      "expect": null,
-      "group": null
-    },
-    {
-      "label": null,
-      "nodes": [
         "P2",
-        "P13",
-        "SDA_O",
+        "NC_HIZ2",
+        "NC_CORE_busy",
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "NC_HIZ2",
+        "NC_CORE_busy",
+        "NC_CORE_rw",
+        "NC_CORE_addr_match"
+      ],
+      "expect": null,
+      "group": null
+    },
+    {
+      "label": null,
+      "nodes": [
+        "P1",
+        "P2",
+        "NC_HIZ2",
         "P15",
         "NC_CORE_busy",
         "NC_CORE_rw",
@@ -48,7 +48,7 @@
     {
       "label": null,
       "nodes": [
-        "SDA_O"
+        "NC_HIZ2"
       ],
       "expect": null,
       "group": null
@@ -75,10 +75,10 @@
     {
       "label": "slave ACKed matching address (write)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": null
     },
@@ -105,34 +105,34 @@
     {
       "label": "slave ACKed data byte",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": null
     },
     {
       "label": "rx_data == 0xA5",
       "nodes": [
-        "NET_0",
-        "NET_1",
-        "NET_2",
-        "NET_3",
-        "NET_4",
-        "NET_5",
-        "NET_6",
-        "NET_7"
+        "NC_OUT11",
+        "NC_OUT12",
+        "NC_OUT13",
+        "NC_OUT14",
+        "NC_OUT6",
+        "NC_OUT5",
+        "NC_OUT4",
+        "NC_OUT3"
       ],
       "expect": {
-        "NET_0": 1,
-        "NET_1": 0,
-        "NET_2": 1,
-        "NET_3": 0,
-        "NET_4": 0,
-        "NET_5": 1,
-        "NET_6": 0,
-        "NET_7": 1
+        "NC_OUT11": 1,
+        "NC_OUT12": 0,
+        "NC_OUT13": 1,
+        "NC_OUT14": 0,
+        "NC_OUT6": 0,
+        "NC_OUT5": 1,
+        "NC_OUT4": 0,
+        "NC_OUT3": 1
       },
       "group": null
     },
@@ -174,10 +174,10 @@
     {
       "label": "slave ACKed matching address (read)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": null
     },
@@ -194,80 +194,80 @@
     {
       "label": "sample read-data bit 7 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 6 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 5 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 1
+        "P2": 1
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 4 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 1
+        "P2": 1
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 3 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 1
+        "P2": 1
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 2 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 1
+        "P2": 1
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 1 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": "read_byte_0x3C"
     },
     {
       "label": "sample read-data bit 0 (MSB first)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 0
+        "P2": 0
       },
       "group": "read_byte_0x3C"
     },
@@ -309,10 +309,10 @@
     {
       "label": "unmatched address -> NACK (no slave ack)",
       "nodes": [
-        "P13"
+        "P2"
       ],
       "expect": {
-        "P13": 1
+        "P2": 1
       },
       "group": null
     },
@@ -350,7 +350,7 @@
       "label": "read byte == 0x3C",
       "target": 60,
       "bit_order": "msb_first",
-      "node": "P13"
+      "node": "P2"
     }
   }
 }

@@ -1,451 +1,216 @@
 {
  "_meta": {
-  "description": "GIO (OSS_FRAME_GIO) pad ring <-> i2c_slave_async_nrow_fm core connection map, reverse-engineered from schematic/tr_1um_i2c_slave_async.sch (instance x1=OSS_FRAME_GIO, x2=i2c_slave_async_nrow_fm) by cross-referencing each symbol's own pin-box coordinates (schematic/OSS_FRAME_GIO.sym, schematic/i2c_slave_async_nrow_fm.sym) against the instance placement transform, then matching against xschem net labels at the resulting absolute (x,y) positions. Pad-cell internal HIZ/OUT polarity was derived from simulations/OSS_FRAME_GIO.spice (transistor-level OSS_ESD_5V_DIO subcircuit), not assumed.",
+  "description": "GIO (OSS_FRAME_GIO) pad ring <-> i2c_slave_async_nrow_fm core connection map. Originally reverse-engineered from schematic/tr_1um_i2c_slave_async.sch; now tracks two later updates layered on top of that v9 baseline: (1) RING_OSC integration (P9/P10/P15, design_notes.md 103.x), (2) a user-requested data-pad reassignment (this session) moving SCL/SDA onto adjacent pads P1/P2. See pad_reassignment_2026_08_31 below for the reassignment itself and its routability check -- STATUS: logical/schematic-level plan only, NOT YET physically routed (script/route_gio_core_v9.py + schematic/v9_signal_routing_plan.json still reflect the pre-reassignment layout).",
   "source_schematic": "schematic/tr_1um_i2c_slave_async.sch",
-  "frame_cell": "OSS_FRAME_GIO (schematic/OSS_FRAME_GIO.sym, instance x1 at (280,-530))",
+  "frame_cell": "OSS_FRAME_GIO (schematic/OSS_FRAME_GIO.sym, instance x1 at (280,-530)); note the chip-level LVS export copy (TR-1um_I2C_2026) renames this cell OSS_FRAME -> OSS_FRAME (see script/export_to_mpw_submission.py) -- that rename is export-only and does not affect this project's own files, listed here only to avoid confusion if this JSON is read alongside that repo.",
   "core_cell": "i2c_slave_async_nrow_fm (schematic/i2c_slave_async_nrow_fm.sym, instance x2 at (780,-400))",
-  "generated_by": "manual derivation this session, see design_notes.md",
-  "cross_verified_against": "script/route_gio_core.py (v7's ACTUAL, LVS-corrected chip-level routing script -- physical ground truth, not just schematic intent). This resolved the DIS-net open question and independently confirmed the P9/P10, OUT2, and rx_valid/addr_match/rw/busy findings below -- see design_notes.md 78.4.",
+  "ring_osc_cell": "RING_OSC (instance x3, added design_notes.md 103.x -- OUT/OUTD/ENB pins go to P10/P9/P15 respectively, see below)",
+  "generated_by": "manual derivation, see design_notes.md; RING_OSC + pad-reassignment updates this session",
+  "cross_verified_against": "script/route_gio_core.py (v7's ACTUAL, LVS-corrected chip-level routing script) for the v9 baseline; schematic/tr_1um_i2c_slave_async_ringosc_v9_lvs.spice (actual chip-level LVS reference netlist, ground truth) for the RING_OSC update; LEF/OSS_FRAME_GIO.lef (real PIN RECT geometry) for the pad-reassignment routability check.",
   "pad_cell_behavior": {
    "source": "simulations/OSS_FRAME_GIO.spice -- OSS_FRAME_GIO instantiates one OSS_ESD_5V_DIO(VDD,PAD,VSS,HIZ,OUT) per pad",
    "HIZ": "HIZ=1 (tied VDD) => output driver disabled, pad is Hi-Z / input-only. HIZ=0 (tied VSS) => output driver enabled, pad is actively driven by OUT. Derived from transistor-level trace (MXM9-MXM20), not from a naming guess.",
    "OUT": "data driven onto PAD when HIZ=0 (driver enabled). Irrelevant (don't-care) when HIZ=1.",
-   "note_sda": "P13/HIZ13/OUT13 implement SDA as a correct open-drain I2C output: OUT13 is permanently tied to VSS (so the driver, when enabled, only ever pulls SDA LOW, matching I2C's open-drain convention -- SDA is never actively driven high by this device), and HIZ13 is dynamically driven by core.sda_oe. Net wiring shows HIZ13=sda_oe directly (no inverter drawn), which combined with the HIZ polarity above implies core.sda_oe is ACTIVE-LOW as an 'assert drive' signal (sda_oe=0 => actively pull SDA low, sda_oe=1 => release/Hi-Z). This should be cross-checked against the RTL's own intended sda_oe polarity before finalizing -- flagged in open_questions."
+   "note_sda": "The SDA pad implements a correct open-drain I2C output: its OUT<n> pin is permanently tied to VSS (so the driver, when enabled, only ever pulls SDA LOW -- SDA is never actively driven high by this device), and its HIZ<n> is dynamically driven by core.sda_oe. core.sda_oe is ACTIVE-LOW ('assert drive': sda_oe=0 => actively pull SDA low, sda_oe=1 => release/Hi-Z), confirmed against src/i2c_slave_async.v (see open_questions_resolved)."
   },
-  "dis_net_resolved": "RESOLVED via script/route_gio_core.py (v7's actual routing script, DIS_CHAIN_POINTS/DIS_LINKS): 'DIS' is a real, intentionally-used net -- P7's pad is daisy-chained together with HIZ1, HIZ3, HIZ4, HIZ5, HIZ6, HIZ11, HIZ12, HIZ14 (9 points, one shared net, routed as sequential links purely to save wire, not a directional 'P7 drives' relationship). It is NOT tied to VDD or VSS anywhere -- its logic level is set externally, by whatever the tester/board drives onto pad P7. This was previously an open question (see open_questions_resolved below); it does NOT need a VDD/VSS retie."
+  "dis_net_resolved": "'DIS' is a real, intentionally-used net: P7's pad is daisy-chained together with a fixed-COUNT set of HIZ pins (originally HIZ1,HIZ3,HIZ4,HIZ5,HIZ6,HIZ11,HIZ12,HIZ14 -- 9 points total including P7), one shared net, routed as sequential links purely to save wire (script/route_gio_core.py's DIS_CHAIN_POINTS/DIS_LINKS), not a directional 'P7 drives' relationship. Not tied to VDD or VSS anywhere -- its logic level is set externally by whatever the tester/board drives onto pad P7. Membership is NOT fixed silicon -- it's drawn metal (see route_gio_core_v9.py's own header), so it moves with whichever pads are assigned the 'plain bidirectional data pin' role; see pad_reassignment_2026_08_31 for the one-member swap (HIZ1 out, HIZ13 in) needed by the new pad assignment."
  },
  "core_ports": {
   "_comment": "from schematic/i2c_slave_async_nrow_fm.sym, in symbol pin order",
   "inputs": [
-   "rst_n",
-   "scl",
-   "sda_in",
-   "tx_data[0]",
-   "tx_data[1]",
-   "tx_data[2]",
-   "tx_data[3]",
-   "tx_data[4]",
-   "tx_data[5]",
-   "tx_data[6]",
-   "tx_data[7]"
+   "rst_n", "scl", "sda_in",
+   "tx_data[0]", "tx_data[1]", "tx_data[2]", "tx_data[3]",
+   "tx_data[4]", "tx_data[5]", "tx_data[6]", "tx_data[7]"
   ],
   "outputs": [
    "sda_oe",
-   "rx_data[0]",
-   "rx_data[1]",
-   "rx_data[2]",
-   "rx_data[3]",
-   "rx_data[4]",
-   "rx_data[5]",
-   "rx_data[6]",
-   "rx_data[7]",
-   "rx_valid",
-   "addr_match",
-   "rw",
-   "busy"
+   "rx_data[0]", "rx_data[1]", "rx_data[2]", "rx_data[3]",
+   "rx_data[4]", "rx_data[5]", "rx_data[6]", "rx_data[7]",
+   "rx_valid", "addr_match", "rw", "busy"
   ],
-  "power": [
-   "VDD",
-   "GND"
-  ]
+  "power": ["VDD", "GND"]
+ },
+ "ring_osc_ports": {
+  "_comment": "from schematic/tr_1um_i2c_slave_async_ringosc_v9_lvs.spice, .subckt RING_OSC OUT OUTD ENB VDD VSS",
+  "OUT": "faster ring (~6.508MHz free-running, INV_X1-based), drives GIO OUT10 -> pad P10",
+  "OUTD": "slower ring (~1.558MHz free-running, INV3D-based), drives GIO OUT9 -> pad P9",
+  "ENB": "shared with core.rst_n via pad P15 -- releasing reset also enables RING_OSC's oscillation loop"
  },
  "frame_pads": {
   "_comment": "from schematic/OSS_FRAME_GIO.sym: 14 bidirectional data pads (P1-P7, P9-P15 -- P8 does not exist in this frame block), each with its own HIZ<n>/OUT<n> control pair, plus dedicated VDD/VSS pads.",
-  "data_pads": [
-   "P1",
-   "P2",
-   "P3",
-   "P4",
-   "P5",
-   "P6",
-   "P7",
-   "P9",
-   "P10",
-   "P11",
-   "P12",
-   "P13",
-   "P14",
-   "P15"
-  ],
-  "power_pads": [
-   "VDD",
-   "VSS"
-  ]
+  "data_pads": ["P1","P2","P3","P4","P5","P6","P7","P9","P10","P11","P12","P13","P14","P15"],
+  "power_pads": ["VDD", "VSS"]
+ },
+ "pad_pin_coords": {
+  "_comment": "Real, authoritative (x,y) chip-coordinate center of every P<n>/HIZ<n>/OUT<n> pin, read directly this session from LEF/OSS_FRAME_GIO.lef's own PIN RECT geometry (chip_xy = lef_xy - 1250, the LEF's own declared ORIGIN). Supersedes any earlier hand-derived/pattern-guessed coordinates. All M2. Used for the pad_reassignment_2026_08_31 routability check below.",
+  "P1": [-270.0, 921.7], "HIZ1": [-220.0, 921.7], "OUT1": [-180.0, 921.7],
+  "P2": [-530.0, 921.7], "HIZ2": [-580.0, 921.7], "OUT2": [-620.0, 921.7],
+  "P3": [-921.7, 530.0], "HIZ3": [-921.7, 580.0], "OUT3": [-921.7, 620.0],
+  "P4": [-921.7, 270.0], "HIZ4": [-921.7, 220.0], "OUT4": [-921.7, 180.0],
+  "P5": [-921.7, -270.0], "HIZ5": [-921.7, -220.0], "OUT5": [-921.7, -180.0],
+  "P6": [-921.7, -530.0], "HIZ6": [-921.7, -580.0], "OUT6": [-921.7, -620.0],
+  "P7": [-530.0, -921.7], "HIZ7": [-580.0, -921.7], "OUT7": [-620.0, -921.7],
+  "P9": [270.0, -921.7], "HIZ9": [220.0, -921.7], "OUT9": [180.0, -921.7],
+  "P10": [530.0, -921.7], "HIZ10": [580.0, -921.7], "OUT10": [620.0, -921.7],
+  "P11": [921.7, -530.0], "HIZ11": [921.7, -580.0], "OUT11": [921.7, -620.0],
+  "P12": [921.7, -270.0], "HIZ12": [921.7, -220.0], "OUT12": [921.7, -180.0],
+  "P13": [921.7, 270.0], "HIZ13": [921.7, 220.0], "OUT13": [921.7, 180.0],
+  "P14": [921.7, 530.0], "HIZ14": [921.7, 580.0], "OUT14": [921.7, 620.0],
+  "P15": [530.0, 921.7], "HIZ15": [580.0, 921.7], "OUT15": [620.0, 921.7]
  },
  "connections": [
-  {
-   "pad": "P1",
-   "hiz": "HIZ1",
-   "out": "OUT1",
-   "core_signal": "tx_data[5]",
-   "direction": "core input",
-   "hiz_state": "HIZ1 on the DIS daisy-chain net (externally controlled, see dis_net_resolved) -- driver expected disabled while used as an input, but level is set off-chip",
-   "note": null
-  },
-  {
-   "pad": "P2",
-   "hiz": "HIZ2",
-   "out": "OUT2",
-   "core_signal": "scl",
-   "direction": "core input",
-   "hiz_state": "HIZ2 tied to VDD => Hi-Z/input-only (correct for a pure input like scl)",
-   "note": "OUT2 unconnected. Independently confirmed via route_gio_core.py's own fix history: an earlier round mistakenly shorted GIO's OUT2 to VSS; re-verified against the LVS-checked netlist and corrected to genuinely unconnected/no-connect, matching this schematic's intent."
-  },
-  {
-   "pad": "P3",
-   "hiz": "HIZ3",
-   "out": "OUT3",
-   "core_signal": "tx_data[6]",
-   "direction": "core input",
-   "hiz_state": "HIZ3 on the DIS daisy-chain net",
-   "note": null
-  },
-  {
-   "pad": "P4",
-   "hiz": "HIZ4",
-   "out": "OUT4",
-   "core_signal": "tx_data[4]",
-   "direction": "core input",
-   "hiz_state": "HIZ4 on the DIS daisy-chain net",
-   "note": null
-  },
-  {
-   "pad": "P5",
-   "hiz": "HIZ5",
-   "out": "OUT5",
-   "core_signal": "tx_data[2]",
-   "direction": "core input",
-   "hiz_state": "HIZ5 on the DIS daisy-chain net",
-   "note": null
-  },
-  {
-   "pad": "P6",
-   "hiz": "HIZ6",
-   "out": "OUT6",
-   "core_signal": "tx_data[3]",
-   "direction": "core input",
-   "hiz_state": "HIZ6 on the DIS daisy-chain net",
-   "note": null
-  },
-  {
-   "pad": "P7",
-   "hiz": "HIZ7",
-   "out": "OUT7",
-   "core_signal": null,
-   "direction": null,
+  {"pad": "P1", "hiz": "HIZ1", "out": "OUT1", "core_signal": "scl", "direction": "core input",
+   "hiz_state": "HIZ1 tied to VDD => Hi-Z/input-only (correct for a pure input like scl)",
+   "note": "REASSIGNED this session (was tx_data[5]/DIS-chain member) -- now carries scl, grouped adjacent to the new SDA pad P2. See pad_reassignment_2026_08_31."},
+  {"pad": "P2", "hiz": "HIZ2", "out": "OUT2", "core_signal": "sda_in / sda_oe", "direction": "bidirectional (I2C open-drain)",
+   "hiz_state": "HIZ2 dynamically driven by core.sda_oe",
+   "note": "REASSIGNED this session (was scl/HIZ2=VDD-always) -- now the SDA pad: OUT2 permanently tied to VSS (open-drain drive-low, moved from the old P13/OUT13). See pad_reassignment_2026_08_31."},
+  {"pad": "P3", "hiz": "HIZ3", "out": "OUT3", "core_signal": "tx_data[7]", "direction": "core input",
+   "hiz_state": "HIZ3 on the DIS daisy-chain net (unchanged membership)",
+   "note": "REASSIGNED this session (was tx_data[6]) -- pad itself and its DIS-chain HIZ role are unchanged, only the bit index changed."},
+  {"pad": "P4", "hiz": "HIZ4", "out": "OUT4", "core_signal": "tx_data[6]", "direction": "core input",
+   "hiz_state": "HIZ4 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[4])."},
+  {"pad": "P5", "hiz": "HIZ5", "out": "OUT5", "core_signal": "tx_data[5]", "direction": "core input",
+   "hiz_state": "HIZ5 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[2])."},
+  {"pad": "P6", "hiz": "HIZ6", "out": "OUT6", "core_signal": "tx_data[4]", "direction": "core input",
+   "hiz_state": "HIZ6 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[3])."},
+  {"pad": "P7", "hiz": "HIZ7", "out": "OUT7", "core_signal": null, "direction": null,
    "hiz_state": "HIZ7 tied to VDD => Hi-Z/input-only",
-   "note": "P7's own pad net IS the 'DIS' net itself (the daisy-chain's other 8 links are HIZ pins, not P7's HIZ7 -- HIZ7 is separately tied to VDD). OUT7 unconnected. P7 functions as the external control pad for the whole DIS chain; confirmed intentional via route_gio_core.py's DIS_CHAIN_POINTS."
-  },
-  {
-   "pad": "P9",
-   "hiz": "HIZ9",
-   "out": "OUT9",
-   "core_signal": null,
-   "direction": null,
+   "note": "Unchanged. P7's own pad net IS the shared 'DIS' net itself (external control pad for the whole DIS chain)."},
+  {"pad": "P9", "hiz": "HIZ9", "out": "OUT9", "core_signal": null, "direction": null,
    "hiz_state": "HIZ9 tied to VSS => output driver ENABLED",
-   "note": "P9/OUT9 unconnected with driver enabled -- confirmed this exact state also exists in v7's actual final routed chip (script/route_gio_core.py has no P9/OUT9 entry at all), so this is a carried-over spare-pad configuration from v7, not a v9-specific oversight. Still worth a deliberate decision (see open_questions) but not an integration bug."
-  },
-  {
-   "pad": "P10",
-   "hiz": "HIZ10",
-   "out": "OUT10",
-   "core_signal": null,
-   "direction": null,
+   "note": "RING_OSC integration (design_notes.md 103.12): OUT9 = RING_OSC.OUTD (the slower, INV3D-based ring, ~1.558MHz). Not connected to core. Unaffected by this session's data-pad reassignment."},
+  {"pad": "P10", "hiz": "HIZ10", "out": "OUT10", "core_signal": null, "direction": null,
    "hiz_state": "HIZ10 tied to VSS => output driver ENABLED",
-   "note": "Same as P9 -- confirmed carried over unchanged from v7's actual routed chip."
-  },
-  {
-   "pad": "P11",
-   "hiz": "HIZ11",
-   "out": "OUT11",
-   "core_signal": "rx_data[1]",
-   "direction": "core output",
-   "hiz_state": "HIZ11 on the DIS daisy-chain net -- driver expected enabled while used as an output, but level is set off-chip",
-   "note": "CORRECTED (design_notes.md §85, this session): the P-side (input path) of this pad is ALSO used, carrying tx_data[1] -- this entry previously said P11's P-side was unconnected, which was WRONG. Cross-checked and confirmed against schematic/v9_signal_routing_plan.json (the actual ground-truth routing plan used by script/route_gio_core_v9.py to physically draw the wire): its \"tx_data[1]\" entry has gio=(921.7,-530,RIGHT,M2), which lands exactly on P11's own real pin location (confirmed via direct GDS text-label lookup, dist=0.3um, well within label-vs-pin-center rounding). So P11 is bidirectional-like P13/sda_in+sda_oe: P-side=tx_data[1] (core input), OUT-side=rx_data[1] (core output), both real, both physically wired in v9."
-  },
-  {
-   "pad": "P12",
-   "hiz": "HIZ12",
-   "out": "OUT12",
-   "core_signal": "tx_data[0]",
-   "direction": "core input",
-   "hiz_state": "HIZ12 on the DIS daisy-chain net",
-   "note": "core_signal for P12/OUT12 is rx_data[0] (see OUT12 role); P12 pad itself carries tx_data[0] as INPUT. This pad's P-side and OUT-side connect to DIFFERENT core signals -- see per-terminal breakdown below."
-  },
-  {
-   "pad": "P13",
-   "hiz": "HIZ13",
-   "out": "OUT13",
-   "core_signal": "sda_in / sda_oe",
-   "direction": "bidirectional (I2C open-drain)",
-   "hiz_state": "HIZ13 dynamically driven by core.sda_oe (net SDA_O)",
-   "note": "OUT13 permanently tied to VSS (always-low drive data) -- correct open-drain I2C implementation, see pad_cell_behavior.note_sda above. P13 pad net also carries sda_in (core input) directly."
-  },
-  {
-   "pad": "P14",
-   "hiz": "HIZ14",
-   "out": "OUT14",
-   "core_signal": "tx_data[7]",
-   "direction": "core input",
-   "hiz_state": "HIZ14 on the DIS daisy-chain net",
-   "note": "OUT14 = rx_data[7] (core output) -- see per-terminal breakdown"
-  },
-  {
-   "pad": "P15",
-   "hiz": "HIZ15",
-   "out": "OUT15",
-   "core_signal": "rst_n",
-   "direction": "core input",
+   "note": "RING_OSC integration: OUT10 = RING_OSC.OUT (the faster, INV_X1-based ring, ~6.508MHz). Not connected to core. Unaffected by this session's data-pad reassignment."},
+  {"pad": "P11", "hiz": "HIZ11", "out": "OUT11", "core_signal": "tx_data[0]", "direction": "core input",
+   "hiz_state": "HIZ11 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[1])."},
+  {"pad": "P12", "hiz": "HIZ12", "out": "OUT12", "core_signal": "tx_data[1]", "direction": "core input",
+   "hiz_state": "HIZ12 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[0])."},
+  {"pad": "P13", "hiz": "HIZ13", "out": "OUT13", "core_signal": "tx_data[2]", "direction": "core input",
+   "hiz_state": "HIZ13 REASSIGNED this session: was dynamically driven by core.sda_oe, now joins the DIS daisy-chain net (plain data pin, like HIZ3/4/5/6/11/12/14).",
+   "note": "REASSIGNED this session (was sda_in/sda_oe, the SDA pad) -- SDA moved to P2. OUT13 no longer tied to VSS (that fixed-low tie moved to OUT2). Now a plain tx_data[2]/rx_data[2] pad."},
+  {"pad": "P14", "hiz": "HIZ14", "out": "OUT14", "core_signal": "tx_data[3]", "direction": "core input",
+   "hiz_state": "HIZ14 on the DIS daisy-chain net (unchanged)",
+   "note": "REASSIGNED this session (was tx_data[7])."},
+  {"pad": "P15", "hiz": "HIZ15", "out": "OUT15", "core_signal": "rst_n", "direction": "core input",
    "hiz_state": "HIZ15 tied to VDD => Hi-Z/input-only (correct for rst_n)",
-   "note": "OUT15 unconnected"
-  }
+   "note": "Unchanged by this session's reassignment. RING_OSC integration (design_notes.md 103.x): P15's net is ALSO RING_OSC.ENB (shared with core.rst_n) -- releasing reset also enables RING_OSC's oscillation. OUT15 unconnected."}
  ],
  "connections_per_terminal_detail": {
-  "_comment": "Each pad, HIZ, and OUT pin is a SEPARATE net in the schematic -- the 'connections' block above collapses them for readability but for pads used bidirectionally (input via P<n>, output via OUT<n>) the two roles are spelled out here explicitly.",
-  "P1": {
-   "net": "IN5",
-   "core_signal": "tx_data[5]"
-  },
-  "P2": {
-   "net": "SCL",
-   "core_signal": "scl"
-  },
-  "P3": {
-   "net": "IN6",
-   "core_signal": "tx_data[6]"
-  },
-  "P4": {
-   "net": "IN4",
-   "core_signal": "tx_data[4]"
-  },
-  "P5": {
-   "net": "IN2",
-   "core_signal": "tx_data[2]"
-  },
-  "P6": {
-   "net": "IN3",
-   "core_signal": "tx_data[3]"
-  },
-  "P7": {
-   "net": "DIS",
-   "core_signal": null,
-   "note": "unused/spare pad"
-  },
-  "P9": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected"
-  },
-  "P10": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected"
-  },
-  "P11": {
-   "net": "IN1",
-   "core_signal": "tx_data[1]",
-   "note": "CORRECTED (design_notes.md §85, this session): was wrongly marked unconnected/null. schematic/v9_signal_routing_plan.json (real physical routing ground truth) confirms P11's P-side carries tx_data[1] (gio coord 921.7,-530 exactly matches P11's own pin location). Net name 'IN1' chosen to match the legacy v7 net-naming convention for this exact pad (src/tr_1um_i2c_slave_async.cir's old x1 line used 'IN1' at this same position) -- gets renamed to the canonical 'P11' top-pin name by script/gen_lvs_spice_top_v9.py same as every other data pad."
-  },
-  "P12": {
-   "net": "IN0",
-   "core_signal": "tx_data[0]"
-  },
-  "P13": {
-   "net": "SDA",
-   "core_signal": "sda_in"
-  },
-  "P14": {
-   "net": "IN7",
-   "core_signal": "tx_data[7]"
-  },
-  "P15": {
-   "net": "RSTN",
-   "core_signal": "rst_n"
-  },
-  "OUT1": {
-   "net": "NET_5",
-   "core_signal": "rx_data[5]"
-  },
-  "OUT2": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected"
-  },
-  "OUT3": {
-   "net": "NET_6",
-   "core_signal": "rx_data[6]"
-  },
-  "OUT4": {
-   "net": "NET_4",
-   "core_signal": "rx_data[4]"
-  },
-  "OUT5": {
-   "net": "NET_2",
-   "core_signal": "rx_data[2]"
-  },
-  "OUT6": {
-   "net": "NET_3",
-   "core_signal": "rx_data[3]"
-  },
-  "OUT7": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected"
-  },
-  "OUT9": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected, but HIZ9 enables the driver -- see open_questions"
-  },
-  "OUT10": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected, but HIZ10 enables the driver -- see open_questions"
-  },
-  "OUT11": {
-   "net": "NET_1",
-   "core_signal": "rx_data[1]"
-  },
-  "OUT12": {
-   "net": "NET_0",
-   "core_signal": "rx_data[0]"
-  },
-  "OUT13": {
-   "net": "VSS",
-   "core_signal": null,
-   "note": "permanently tied low -- open-drain SDA drive data, see pad_cell_behavior.note_sda"
-  },
-  "OUT14": {
-   "net": "NET_7",
-   "core_signal": "rx_data[7]"
-  },
-  "OUT15": {
-   "net": null,
-   "core_signal": null,
-   "note": "unconnected"
-  },
-  "HIZ1": {
-   "net": "DIS"
-  },
-  "HIZ2": {
-   "net": "VDD",
-   "meaning": "Hi-Z / input-only"
-  },
-  "HIZ3": {
-   "net": "DIS"
-  },
-  "HIZ4": {
-   "net": "DIS"
-  },
-  "HIZ5": {
-   "net": "DIS"
-  },
-  "HIZ6": {
-   "net": "DIS"
-  },
-  "HIZ7": {
-   "net": "VDD",
-   "meaning": "Hi-Z / input-only"
-  },
-  "HIZ9": {
-   "net": "VSS",
-   "meaning": "output driver ENABLED"
-  },
-  "HIZ10": {
-   "net": "VSS",
-   "meaning": "output driver ENABLED"
-  },
-  "HIZ11": {
-   "net": "DIS"
-  },
-  "HIZ12": {
-   "net": "DIS"
-  },
-  "HIZ13": {
-   "net": "SDA_O",
-   "core_signal": "sda_oe",
-   "meaning": "dynamically controlled by core"
-  },
-  "HIZ14": {
-   "net": "DIS"
-  },
-  "HIZ15": {
-   "net": "VDD",
-   "meaning": "Hi-Z / input-only"
-  }
+  "_comment": "Each pad, HIZ, and OUT pin is a SEPARATE net in the schematic. This block reflects the NEW (this session) pad assignment -- tx/rx bit index N always shares one physical pad (P<n> in, OUT<n> out), matching the pre-existing project convention.",
+  "P1":  {"core_signal": "scl"},
+  "P2":  {"core_signal": "sda_in"},
+  "P3":  {"core_signal": "tx_data[7]"},
+  "P4":  {"core_signal": "tx_data[6]"},
+  "P5":  {"core_signal": "tx_data[5]"},
+  "P6":  {"core_signal": "tx_data[4]"},
+  "P7":  {"core_signal": null, "net": "DIS", "note": "unused/spare pad, DIS net's own external control point -- P7 IS the DIS net"},
+  "P9":  {"core_signal": null, "note": "unconnected to core; OUT9=RING_OSC.OUTD"},
+  "P10": {"core_signal": null, "note": "unconnected to core; OUT10=RING_OSC.OUT"},
+  "P11": {"core_signal": "tx_data[0]"},
+  "P12": {"core_signal": "tx_data[1]"},
+  "P13": {"core_signal": "tx_data[2]"},
+  "P14": {"core_signal": "tx_data[3]"},
+  "P15": {"core_signal": "rst_n", "note": "shared with RING_OSC.ENB"},
+  "OUT1":  {"core_signal": null, "note": "unconnected"},
+  "OUT2":  {"core_signal": null, "net": "VSS", "note": "permanently tied low (VSS) -- open-drain SDA drive data, moved here from old OUT13"},
+  "OUT3":  {"core_signal": "rx_data[7]"},
+  "OUT4":  {"core_signal": "rx_data[6]"},
+  "OUT5":  {"core_signal": "rx_data[5]"},
+  "OUT6":  {"core_signal": "rx_data[4]"},
+  "OUT7":  {"core_signal": null, "note": "unconnected"},
+  "OUT9":  {"core_signal": null, "note": "RING_OSC.OUTD"},
+  "OUT10": {"core_signal": null, "note": "RING_OSC.OUT"},
+  "OUT11": {"core_signal": "rx_data[0]"},
+  "OUT12": {"core_signal": "rx_data[1]"},
+  "OUT13": {"core_signal": "rx_data[2]", "note": "no longer the fixed-VSS SDA tie -- that moved to OUT2"},
+  "OUT14": {"core_signal": "rx_data[3]"},
+  "OUT15": {"core_signal": null, "note": "unconnected"},
+  "HIZ1":  {"net": "VDD", "meaning": "Hi-Z / input-only (moved here from HIZ2)"},
+  "HIZ2":  {"core_signal": "sda_oe", "meaning": "dynamically controlled by core (moved here from HIZ13)"},
+  "HIZ3":  {"net": "DIS"},
+  "HIZ4":  {"net": "DIS"},
+  "HIZ5":  {"net": "DIS"},
+  "HIZ6":  {"net": "DIS"},
+  "HIZ7":  {"net": "VDD", "meaning": "Hi-Z / input-only"},
+  "HIZ9":  {"net": "VSS", "meaning": "output driver ENABLED (RING_OSC.OUTD via OUT9)"},
+  "HIZ10": {"net": "VSS", "meaning": "output driver ENABLED (RING_OSC.OUT via OUT10)"},
+  "HIZ11": {"net": "DIS"},
+  "HIZ12": {"net": "DIS"},
+  "HIZ13": {"net": "DIS", "meaning": "moved here from being sda_oe's dynamic control -- now a plain DIS-chain member"},
+  "HIZ14": {"net": "DIS"},
+  "HIZ15": {"net": "VDD", "meaning": "Hi-Z / input-only"}
  },
- "core_outputs_not_connected_to_any_pad": [
-  "rx_valid",
-  "addr_match",
-  "rw",
-  "busy"
- ],
+ "core_outputs_not_connected_to_any_pad": ["rx_valid", "addr_match", "rw", "busy"],
  "power": {
   "core.VDD": "net VDD (tied directly to frame.VDD pad)",
   "core.GND": "net VSS (tied directly to frame.VSS pad)",
-  "note": "core symbol names its power pin 'GND' but the actual net threading through the whole chip schematic is named 'VSS' (matching the frame's own VSS pad name) -- purely a naming difference, same net."
+  "note": "core symbol names its power pin 'GND' but the actual net threading through the whole chip schematic is named 'VSS' -- same net, naming difference only."
+ },
+ "pad_reassignment_2026_08_31": {
+  "_comment": "User-requested reassignment (this session): 'P1<P2, P2<P13, P3<P14, P4<P3, P5<P1, P6<P4, P11<P12, P12<P11, P13<P5, P14<P6' -- read as 'new pad <- old pad's whole role (core signal + its HIZ/OUT behavior template)'. Net effect: SCL and SDA move from their old (non-adjacent) pads P2/P13 onto adjacent pads P1/P2; the 8 tx_data/rx_data bit pads get shuffled among P3/P4/P5/P6/P11/P12/P13/P14 (each bit's tx+rx pair always stays on ONE shared physical pad, matching the pre-existing convention). P7/P9/P10/P15 unaffected (not part of the user's list).",
+  "old_to_new_pad_map": {
+   "P1": "scl (was tx_data[5])",
+   "P2": "sda_in/sda_oe (was scl)",
+   "P3": "tx_data[7] (was tx_data[6])",
+   "P4": "tx_data[6] (was tx_data[4])",
+   "P5": "tx_data[5] (was tx_data[2])",
+   "P6": "tx_data[4] (was tx_data[3])",
+   "P11": "tx_data[0] (was tx_data[1])",
+   "P12": "tx_data[1] (was tx_data[0])",
+   "P13": "tx_data[2] (was sda_in/sda_oe)",
+   "P14": "tx_data[3] (was tx_data[7])"
+  },
+  "dis_chain_membership_change": "HIZ1 leaves the DIS chain (P1 is now the plain-Hi-Z-always SCL pad); HIZ13 joins it (P13 is now a plain DIS-chain data pad). Chain still has exactly 9 points (P7 + 8 HIZ pins), same as before -- just one member swapped. HIZ13 (921.7,220,RIGHT) sits naturally between HIZ14 (921.7,580) and HIZ12 (921.7,-220), already-adjacent chain members on the same RIGHT edge, so the chain's physical path needs only a small local edit, not a redesign.",
+  "routability_check": {
+   "method": "Re-ran route_gio_core_v9.py's own exact shared-pool lane-assignment algorithm (perimeter_s / unroll / greedy interval-to-lane packing, R_NOM=880, CUT=4625, PERI=7400, MARGIN=5.0) with the new gio-side endpoints substituted (core-side pin positions are fixed and never change -- only which physical pad/HIZ/OUT pin each signal targets changes). New endpoint coordinates read directly from LEF/OSS_FRAME_GIO.lef's real PIN RECT geometry (see pad_pin_coords above), not guessed. Verified the replicated algorithm reproduces the documented baseline (11 lanes) exactly before trusting its output on the new assignment.",
+   "result": "10 lanes needed for the new assignment (vs 11 for the current/old assignment) -- FEWER, not more. Max lane radius = 901.0um vs the hard physical ceiling NEAR_R=913.0um (12.0um of clearance, actually 6.0um MORE margin than the current design's own 6.0um). No lane-budget or geometry problem.",
+   "dis_chain": "Separate, uncongested radius (DIS_R=840.0, well below the signal-lane band 847-901) -- the one-member swap does not interact with or add pressure to the signal-lane budget at all.",
+   "conclusion": "ROUTABLE with the existing algorithm and infrastructure, and slightly MORE comfortable (fewer lanes, more margin) than today's layout. No blocking issue found.",
+   "not_yet_done": [
+    "schematic/v9_signal_routing_plan.json has NOT been regenerated with the new gio endpoints (still reflects the old assignment) -- route_gio_core_v9.py reads this file directly.",
+    "route_gio_core_v9.py's DIS_CHAIN_POINTS list has NOT been edited (still lists HIZ1, not HIZ13).",
+    "route_gio_core_v9.py's power/special-tie section has NOT been updated for the OUT2<->OUT13 fixed-VSS-tie swap or the HIZ2<->HIZ13 dynamic-sda_oe-tie swap (currently these fixed ties, if present at all in the script, target the OLD pins).",
+    "No new GDS has been drawn or DRC/LVS-checked yet -- this is a schematic/feasibility-level analysis only."
+   ]
+  }
  },
  "chip_top_pins": {
-  "_comment": "Chip-level LVS fix (see design_notes.md §82): the top subckt tr_1um_i2c_slave_async previously had NO declared ports on either side -- schematic (script/gen_lvs_spice_top_v9.py's old output, matching the stale pre-v9 src/tr_1um_i2c_slave_async.cir's own '.subckt tr_1um_i2c_slave_async' with no pins) AND layout (src/tr_1um_i2c_slave_async.extracted showed '.SUBCKT tr_1um_i2c_slave_async VSS', only one pin). Neither side exposed the chip's real bond pads as top-level ports, which left KLayout's strict-mode LVS pin/port alignment with nothing solid to anchor on and cascaded into OSS_FRAME_GIO-level pin mismatches (HIZ2/HIZ7/HIZ9/HIZ10/HIZ15/OUT13) seen in src/LVS_error.lvsdb. User-diagnosed root cause and fix instruction: add the 16 real bond-pad ports explicitly to the top subckt on the schematic/SPICE side.",
+  "_comment": "Chip-level LVS fix (design_notes.md §82): top subckt tr_1um_i2c_slave_async exposes all 16 real bond pads as top-level ports.",
   "top_pin_order": ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "VSS", "P9", "P10", "P11", "P12", "P13", "P14", "P15", "VDD"],
   "note_p8": "P8 does not exist in this frame block (14 data pads only: P1-P7, P9-P15) -- not an omission.",
-  "net_renames_applied": {
-   "_comment": "Each pad's pre-existing internal net name (an artifact of gen_lvs_spice_top_v9.py picking whichever GIO-side terminal name it saw first) was renamed to the pad's own canonical name P<n>, then declared as a real top-subckt port. VDD/VSS were already correctly named, so only the 14 data-pad nets needed renaming. This is a pure renaming of already-identical nodes -- no connectivity changed. P9/P10 were floating (NC_-prefixed) nets internally; they still become real top pins because they are real physical pads on the chip regardless of internal usage. P11's entry below is UPDATED (design_notes.md §85) since connections_per_terminal_detail.P11 was corrected from a stale 'unconnected' to its real net 'IN1' (tx_data[1]). Note P7 -> DIS: per dis_net_resolved above, P7's own pad net genuinely IS the shared 'DIS' net (daisy-chained with HIZ1/HIZ3/HIZ4/HIZ5/HIZ6/HIZ11/HIZ12/HIZ14), so this rename correctly relabels all 9 of those occurrences to P7 as well -- same physical node, not a new connection.",
-   "P1": "IN5 -> P1",
-   "P2": "SCL -> P2",
-   "P3": "IN6 -> P3",
-   "P4": "IN4 -> P4",
-   "P5": "IN2 -> P5",
-   "P6": "IN3 -> P6",
-   "P7": "DIS -> P7 (also relabels HIZ1/HIZ3/HIZ4/HIZ5/HIZ6/HIZ11/HIZ12/HIZ14, same shared node)",
-   "P9": "NC_P9 -> P9 (was floating, remains floating, now a named top port)",
-   "P10": "NC_P10 -> P10 (was floating, remains floating, now a named top port)",
-   "P11": "IN1 -> P11 (real net, ties to core tx_data[1] -- CORRECTED this session, was wrongly NC_P11 before)",
-   "P12": "IN0 -> P12",
-   "P13": "SDA -> P13",
-   "P14": "IN7 -> P14",
-   "P15": "RSTN -> P15",
-   "VDD": "already VDD, no rename",
-   "VSS": "already VSS, no rename"
-  },
+  "note_reassignment": "This pin ORDER (which pad is which top-level port position) is unaffected by pad_reassignment_2026_08_31 -- only WHICH CORE SIGNAL each pad carries changes, not the pad's own identity/position/port order.",
   "generated_by": "script/gen_lvs_spice_top_v9.py",
-  "output_files": [
-   "schematic/tr_1um_i2c_slave_async_v9_lvs.spice",
-   "simulations/tr_1um_i2c_slave_async.spice"
-  ],
-  "layout_side_status": "DONE (see design_notes.md §83). src/tr_1um_i2c_slave_async.gds now has 16 M2PIN(49,1) 3x3um boxes + TXM2(49,0) text labels added directly to the top cell 'tr_1um_i2c_slave_async', following the same convention already established/LVS-verified for the core cell (design_notes §75.4/§68/§77.44: 3x3um box, label at box center). DRC re-checked, no new violations (the pre-existing M2 width=1/space=5 findings are identical before and after this edit -- confirmed against layout/step8/v9_top_routed.gds baseline, unrelated to this change since M2PIN/TXM2 (layer 49) are not evaluated by drc_check_nrow_fm.py's M2 check (layer 20,0))."
+  "layout_side_status": "src/tr_1um_i2c_slave_async.gds has 16 M2PIN(49,1)+TXM2(49,0) top-level pin markers, per design_notes.md §83."
  },
  "chip_top_pin_layout_coords": {
-  "_comment": "Physical (x,y) location of each top-level pin marker added to src/tr_1um_i2c_slave_async.gds per chip_top_pins above. Derived from OSS_FRAME_GIO's own PO layer (14,0; tech/TR-1um.lyp comment '# PAD') marker shapes -- 16 of the 20 PO shapes in OSS_FRAME_GIO are 80x80um squares, one per bond pad, centered exactly on that pad's M2 metal (independently verified: every one of the 16 centers falls inside a real M2(20,0) shape when read recursively through the layout hierarchy). The other 4 PO shapes are large VDD/VSS bus-bar markers (2500x45um / 45x2500um at the four chip edges), not per-pad, and were excluded. OSS_FRAME_GIO is instantiated in the top cell at (0,0)/r0/mag1 (pure identity transform, confirmed via klayout.db), so these local PO-layer coordinates equal absolute chip coordinates directly.",
-  "labeling_order": "User instruction: starting at (-200,1040), assign P1-P7/VSS/P9-P15/VDD walking counterclockwise (standard math convention, x right/y up, increasing atan2(y,x) angle from chip center).",
+  "_comment": "Physical (x,y) location of each top-level pin marker on the FINAL ASSEMBLED CHIP (src/tr_1um_i2c_slave_async.gds top-cell absolute coords -- a DIFFERENT, larger coordinate frame/scale than pad_pin_coords above, which is OSS_FRAME_GIO's own local frame used during GIO<->core routing; both share the same relative pad ordering). Derived from OSS_FRAME_GIO's own PO layer (14,0) pad markers -- see design_notes.md for the derivation. Unaffected by pad_reassignment_2026_08_31 (pad identity/position doesn't change, only its assigned core signal does).",
+  "labeling_order": "Counterclockwise from (-200,1040), P1-P7/VSS/P9-P15/VDD.",
   "units": "um, chip top-cell absolute coordinates",
   "pin_marker_convention": "3.0 x 3.0um box on M2PIN(49,1), TEXT label on TXM2(49,0) at box center",
   "coords": {
-   "P1":  [-200.0, 1040.0],
-   "P2":  [-600.0, 1040.0],
-   "P3":  [-1040.0, 600.0],
-   "P4":  [-1040.0, 200.0],
-   "P5":  [-1040.0, -200.0],
-   "P6":  [-1040.0, -600.0],
-   "P7":  [-600.0, -1040.0],
-   "VSS": [-200.0, -1040.0],
-   "P9":  [200.0, -1040.0],
-   "P10": [600.0, -1040.0],
-   "P11": [1040.0, -600.0],
-   "P12": [1040.0, -200.0],
-   "P13": [1040.0, 200.0],
-   "P14": [1040.0, 600.0],
-   "P15": [600.0, 1040.0],
-   "VDD": [200.0, 1040.0]
+   "P1": [-200.0, 1040.0], "P2": [-600.0, 1040.0], "P3": [-1040.0, 600.0], "P4": [-1040.0, 200.0],
+   "P5": [-1040.0, -200.0], "P6": [-1040.0, -600.0], "P7": [-600.0, -1040.0], "VSS": [-200.0, -1040.0],
+   "P9": [200.0, -1040.0], "P10": [600.0, -1040.0], "P11": [1040.0, -600.0], "P12": [1040.0, -200.0],
+   "P13": [1040.0, 200.0], "P14": [1040.0, 600.0], "P15": [600.0, 1040.0], "VDD": [200.0, 1040.0]
   },
   "generated_by": "script/add_top_pins_gio_v9.py",
   "output_file": "src/tr_1um_i2c_slave_async.gds"
  },
  "open_questions_resolved": [
-  "[RESOLVED, cross-verified against script/route_gio_core.py] Meaning of the 'DIS' net: it is a real, intentionally-used net -- P7's pad plus 8 HIZ pins (HIZ1, HIZ3, HIZ4, HIZ5, HIZ6, HIZ11, HIZ12, HIZ14), daisy-chained as one shared net purely for wire efficiency (see DIS_CHAIN_POINTS/DIS_LINKS in route_gio_core.py). It is genuinely NOT tied to VDD or VSS anywhere -- its logic level is meant to be set externally (off-chip, via whatever is driven onto pad P7), not baked into this schematic or resolved by a chip-side tie. No action needed; do not retie to VDD/VSS.",
-  "[RESOLVED, RTL confirmed] core.sda_oe polarity: src/i2c_slave_async.v line 101-104/278-282 explicitly documents sda_oe as ACTIVE-LOW by deliberate v3 design fix ('0 = drive SDA low, 1 = release (Hi-Z)'), matching HIZ13's pad convention (HIZ=L->drive, HIZ=H->release) with NO inverter needed. `assign sda_oe = ~sda_oe_r;` -- direct wire core.sda_oe -> frame.HIZ13 is correct as-is.",
-  "[RESOLVED, user decision this session] P9/P10: keep v7's exact as-is state (HIZ9/HIZ10 tied VSS/driver-enabled, P<n>/OUT<n> unconnected) -- no change for v9.",
-  "[RESOLVED, user decision this session] rx_valid/addr_match/rw/busy: all 4 remain unwired to any GIO pad in v9, matching v7's behavior exactly -- no new pad assignment."
+  "[RESOLVED] Meaning of the 'DIS' net: real, intentionally-used, externally-controlled daisy chain -- see dis_net_resolved above.",
+  "[RESOLVED] core.sda_oe polarity: ACTIVE-LOW by deliberate RTL design (src/i2c_slave_async.v), matching the SDA pad's HIZ convention directly, no inverter needed.",
+  "[RESOLVED, v9] P9/P10 kept unconnected in v9 (pre-RING_OSC) -- superseded: RING_OSC now uses both (see connections above).",
+  "[RESOLVED, v9] rx_valid/addr_match/rw/busy remain unwired to any GIO pad -- still true, unaffected by RING_OSC or this session's reassignment.",
+  "[RESOLVED, this session] pad_reassignment_2026_08_31's routability: confirmed feasible (10 lanes needed, vs 11 today) via the real ring-lane algorithm -- see routability_check above."
  ],
- "open_questions": []
+ "open_questions": [
+  "pad_reassignment_2026_08_31 is a logical plan only -- the physical routing (v9_signal_routing_plan.json regeneration, DIS_CHAIN_POINTS edit, OUT2/OUT13 and HIZ2/HIZ13 special-tie swap in route_gio_core_v9.py, then a fresh route + DRC + LVS pass) still needs to be implemented and verified before this reassignment is real."
+ ]
 }

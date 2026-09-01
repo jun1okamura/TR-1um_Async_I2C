@@ -1,99 +1,28 @@
 {
  "_meta": {
-  "purpose": "Optimized v9 NETS dict for route_gio_core.py's successor: core-side coords are v9's REAL, GDS-extracted BBOX-edge pin positions (from schematic/v7_v9_pin_migration.json); GIO-side coords are REUSED UNCHANGED from v7's NETS dict (fixed by the frame's own schematic, independent of core version). Direction (CW/CCW) and lane assignment computed fresh via the SAME algorithm as route_gio_core.py (R_NOM=880.0, LANE_R0=847.0, LANE_PITCH=6.0, CUT=4625.0, PERI=7400.0).",
-  "lanes_needed": 11,
-  "v7_lanes_needed_reference": 11
+  "purpose": "v9 NETS dict, REASSIGNED (this session): SCL/SDA moved to P1/P2, tx/rx data bits reshuffled across P3/P4/P5/P6/P11/P12/P13/P14. Core-side coords unchanged (same physical core pins). GIO-side coords are the NEW target pad/HIZ pin locations, read from LEF/OSS_FRAME_GIO.lef (see schematic/gio_connections.json pad_pin_coords). Lane assignment recomputed fresh via the same algorithm as before (R_NOM=880.0, LANE_R0=847.0, LANE_PITCH=6.0, CUT=4625.0, PERI=7400.0).",
+  "lanes_needed": 10,
+  "previous_lanes_needed": 11,
+  "superseded_file": "this file's pre-reassignment content is preserved in git history (schematic/gio_connections.json's pad_reassignment_2026_08_31 documents the mapping)."
  },
  "nets": {
-  "rx_data[0]": {
+  "rst_n": {
    "core": {
-    "x": -40.5,
+    "x": 305.1,
     "y": 794.6,
     "edge": "TOP",
     "layer": "M2"
    },
    "gio": {
-    "x": 921.7,
-    "y": -180,
-    "edge": "RIGHT",
-    "layer": "M2"
-   },
-   "direction": "CW",
-   "lane": 0,
-   "R": 847.0,
-   "edge_changed_from_v7": false
-  },
-  "rx_data[3]": {
-   "core": {
-    "x": -808.5,
-    "y": 433.0,
-    "edge": "LEFT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": -620,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CCW",
-   "lane": 0,
-   "R": 847.0,
-   "edge_changed_from_v7": false
-  },
-  "rx_data[5]": {
-   "core": {
-    "x": -808.5,
-    "y": 443.8,
-    "edge": "LEFT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -180,
+    "x": 530.0,
     "y": 921.7,
     "edge": "TOP",
     "layer": "M2"
    },
    "direction": "CW",
-   "lane": 0,
-   "R": 847.0,
-   "edge_changed_from_v7": false
-  },
-  "tx_data[3]": {
-   "core": {
-    "x": 808.5,
-    "y": 330.4,
-    "edge": "RIGHT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": -530,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CW",
-   "lane": 1,
-   "R": 853.0,
-   "edge_changed_from_v7": true
-  },
-  "tx_data[2]": {
-   "core": {
-    "x": 808.5,
-    "y": 335.8,
-    "edge": "RIGHT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": -270,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CW",
-   "lane": 2,
-   "R": 859.0,
-   "edge_changed_from_v7": true
+   "lane": 3,
+   "R": 867.8,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
   "scl": {
    "core": {
@@ -103,15 +32,15 @@
     "layer": "M2"
    },
    "gio": {
-    "x": -530,
+    "x": -270.0,
     "y": 921.7,
     "edge": "TOP",
     "layer": "M2"
    },
-   "direction": "CCW",
-   "lane": 3,
-   "R": 865.0,
-   "edge_changed_from_v7": false
+   "direction": "CW",
+   "lane": 6,
+   "R": 884.0,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
   "sda_in": {
    "core": {
@@ -121,51 +50,33 @@
     "layer": "M2"
    },
    "gio": {
-    "x": 921.7,
-    "y": 270,
-    "edge": "RIGHT",
+    "x": -530.0,
+    "y": 921.7,
+    "edge": "TOP",
     "layer": "M2"
    },
-   "direction": "CW",
-   "lane": 3,
-   "R": 865.0,
-   "edge_changed_from_v7": false
+   "direction": "CCW",
+   "lane": 4,
+   "R": 873.2,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
-  "rx_data[2]": {
+  "sda_oe": {
    "core": {
-    "x": -808.5,
-    "y": 427.6,
-    "edge": "LEFT",
-    "layer": "M1"
+    "x": 13.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
    },
    "gio": {
-    "x": -921.7,
-    "y": -180,
-    "edge": "LEFT",
+    "x": -580.0,
+    "y": 921.7,
+    "edge": "TOP",
     "layer": "M2"
    },
    "direction": "CCW",
    "lane": 3,
-   "R": 865.0,
-   "edge_changed_from_v7": false
-  },
-  "rx_data[6]": {
-   "core": {
-    "x": -808.5,
-    "y": 449.2,
-    "edge": "LEFT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": 620,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CW",
-   "lane": 3,
-   "R": 865.0,
-   "edge_changed_from_v7": false
+   "R": 867.8,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
   "tx_data[0]": {
    "core": {
@@ -176,68 +87,13 @@
    },
    "gio": {
     "x": 921.7,
-    "y": -270,
+    "y": -530.0,
     "edge": "RIGHT",
     "layer": "M2"
    },
    "direction": "CW",
-   "lane": 4,
-   "R": 871.0,
-   "edge_changed_from_v7": false
-  },
-  "tx_data[6]": {
-   "core": {
-    "x": 429.3,
-    "y": 794.6,
-    "edge": "TOP",
-    "layer": "M2"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": 530,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CCW",
-   "lane": 4,
-   "R": 871.0,
-   "edge_changed_from_v7": false
-  },
-  "tx_data[7]": {
-   "core": {
-    "x": 526.5,
-    "y": 794.6,
-    "edge": "TOP",
-    "layer": "M2"
-   },
-   "gio": {
-    "x": 921.7,
-    "y": 530,
-    "edge": "RIGHT",
-    "layer": "M2"
-   },
-   "direction": "CW",
-   "lane": 4,
-   "R": 871.0,
-   "edge_changed_from_v7": true
-  },
-  "rx_data[4]": {
-   "core": {
-    "x": -808.5,
-    "y": 438.4,
-    "edge": "LEFT",
-    "layer": "M1"
-   },
-   "gio": {
-    "x": -921.7,
-    "y": 180,
-    "edge": "LEFT",
-    "layer": "M2"
-   },
-   "direction": "CCW",
-   "lane": 4,
-   "R": 871.0,
-   "edge_changed_from_v7": false
+   "lane": 1,
+   "R": 853.0
   },
   "tx_data[1]": {
    "core": {
@@ -248,14 +104,47 @@
    },
    "gio": {
     "x": 921.7,
-    "y": -530,
+    "y": -270.0,
     "edge": "RIGHT",
     "layer": "M2"
    },
    "direction": "CW",
-   "lane": 5,
-   "R": 877.0,
-   "edge_changed_from_v7": false
+   "lane": 2,
+   "R": 862.4
+  },
+  "tx_data[2]": {
+   "core": {
+    "x": 808.5,
+    "y": 335.8,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 270.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 3,
+   "R": 867.8
+  },
+  "tx_data[3]": {
+   "core": {
+    "x": 808.5,
+    "y": 330.4,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 530.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 0,
+   "R": 847.0
   },
   "tx_data[4]": {
    "core": {
@@ -266,32 +155,85 @@
    },
    "gio": {
     "x": -921.7,
-    "y": 270,
+    "y": -530.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 10,
+   "R": 857.0,
+   "note": "REVISED TWICE this session. (1) lane 1/R=853.0 (the greedy packing algorithm's original assignment) collided with a real, permanent, previously-undocumented core-boundary structure at R~852-854 along the TOP edge -- moved to R=907 (6um beyond the previous highest lane at 901). (2) The real klayout DRC deck (drc.lydrc, run locally by the user against tr_1um_i2c_slave_async_reassigned.gds) then found an M1.S1 (Smin<1.4) violation at R=907: this net's TOP-edge sweep (x=-907 to 494.1) passes directly under ANOTHER permanent structure, a wide M1 block at (50,908.3)-(350,950) near the GIO_VDD_PIN area, with only 0.4um clearance to its y=908.3 bottom edge (908.3-907.9). Confirmed this permanent block's x-range (50-350) falls inside this net's own path range, and that no OTHER lane in 850-901 is free of it either (the block extends up to y=950, so the only option is passing BELOW its y=908.3 floor with real clearance). Moved to R=905.5: clearance to the block's floor = 908.3-(905.5+0.9)=1.9um (>=1.4 minimum); clearance to lane9/R=901 (rx_data[3], which independently sweeps the whole TOP edge too, at a different radius -- fine, since lane separation only needs adequate RADIAL clearance, not disjoint angular intervals, once nets are on different radii) = 905.5-901-0.9-0.9=2.7um. Re-verified via direct db.Region overlap AND proper edge-to-edge separation_check (not naive endpoint-distance, which understated the true gap in the first DRC-caught violation) against the permanent ground truth and all other 29 tracked nets -- clean. REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
+  },
+  "tx_data[5]": {
+   "core": {
+    "x": 461.7,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -270.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 2,
+   "R": 862.4,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
+  },
+  "tx_data[6]": {
+   "core": {
+    "x": 429.3,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 270.0,
     "edge": "LEFT",
     "layer": "M2"
    },
    "direction": "CCW",
    "lane": 5,
-   "R": 877.0,
-   "edge_changed_from_v7": false
+   "R": 878.6,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
-  "rx_data[7]": {
+  "tx_data[7]": {
    "core": {
-    "x": -808.5,
-    "y": 416.8,
+    "x": 526.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 530.0,
     "edge": "LEFT",
-    "layer": "M1"
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 0,
+   "R": 847.0
+  },
+  "rx_data[0]": {
+   "core": {
+    "x": -40.5,
+    "y": 794.6,
+    "edge": "TOP",
+    "layer": "M2"
    },
    "gio": {
     "x": 921.7,
-    "y": 620,
+    "y": -620.0,
     "edge": "RIGHT",
     "layer": "M2"
    },
    "direction": "CW",
-   "lane": 6,
-   "R": 883.0,
-   "edge_changed_from_v7": false
+   "lane": 4,
+   "R": 873.2,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
   "rx_data[1]": {
    "core": {
@@ -302,68 +244,119 @@
    },
    "gio": {
     "x": 921.7,
-    "y": -620,
+    "y": -180.0,
     "edge": "RIGHT",
     "layer": "M2"
    },
-   "direction": "CCW",
+   "direction": "CW",
    "lane": 7,
-   "R": 889.0,
-   "edge_changed_from_v7": false
+   "R": 889.4,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   },
-  "tx_data[5]": {
+  "rx_data[2]": {
    "core": {
-    "x": 461.7,
-    "y": 794.6,
-    "edge": "TOP",
-    "layer": "M2"
-   },
-   "gio": {
-    "x": -270,
-    "y": 921.7,
-    "edge": "TOP",
-    "layer": "M2"
-   },
-   "direction": "CCW",
-   "lane": 8,
-   "R": 895.0,
-   "edge_changed_from_v7": false
-  },
-  "sda_oe": {
-   "core": {
-    "x": 13.5,
-    "y": 794.6,
-    "edge": "TOP",
-    "layer": "M2"
+    "x": -808.5,
+    "y": 427.6,
+    "edge": "LEFT",
+    "layer": "M1"
    },
    "gio": {
     "x": 921.7,
-    "y": 220,
+    "y": 180.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   },
+   "direction": "CW",
+   "lane": 8,
+   "R": 895.0
+  },
+  "rx_data[3]": {
+   "core": {
+    "x": -808.5,
+    "y": 433.0,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 620.0,
     "edge": "RIGHT",
     "layer": "M2"
    },
    "direction": "CW",
    "lane": 9,
-   "R": 901.0,
-   "edge_changed_from_v7": true
+   "R": 901.0
   },
-  "rst_n": {
+  "rx_data[4]": {
    "core": {
-    "x": 305.1,
-    "y": 794.6,
-    "edge": "TOP",
-    "layer": "M2"
+    "x": -808.5,
+    "y": 438.4,
+    "edge": "LEFT",
+    "layer": "M1"
    },
    "gio": {
-    "x": 530,
-    "y": 921.7,
-    "edge": "TOP",
+    "x": -921.7,
+    "y": -620.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 0,
+   "R": 847.0
+  },
+  "rx_data[5]": {
+   "core": {
+    "x": -808.5,
+    "y": 443.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -180.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 3,
+   "R": 867.8,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
+  },
+  "rx_data[6]": {
+   "core": {
+    "x": -808.5,
+    "y": 449.2,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 180.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   },
+   "direction": "CCW",
+   "lane": 4,
+   "R": 873.2,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
+  },
+  "rx_data[7]": {
+   "core": {
+    "x": -808.5,
+    "y": 416.8,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 620.0,
+    "edge": "LEFT",
     "layer": "M2"
    },
    "direction": "CW",
-   "lane": 10,
-   "R": 907.0,
-   "edge_changed_from_v7": false
+   "lane": 6,
+   "R": 884.0,
+   "note": "REVISED (this session, 3rd pass): the real klayout DRC deck found that tx_data[4]'s R=907 'extra lane' fix (see its own note) collided with rx_data[3] (R=901) on the LEFT edge where their paths run parallel on M2 for ~470um (y=430-900) -- M2 parallel runs need >=5.4um radial clearance (3.4um wire + 2.0um min space), but 907-901=6 minus the two half-widths only left 1.1um. Retreating below 901 collided with rx_data[2] (895) the same way, and every gap in the standard 847-901 lane stack is only 6.0um wide (0.6um of slack over the 5.4um minimum) -- too narrow to insert an entirely new, always-conflicting 11th lane anywhere. The real fix: tx_data[4] gets its own dedicated R=857.0 (just above the R~852-854 permanent obstruction, with 9um/5.6um-edge-gap clearance to tx_data[0]'s R=853 -- fine since tx_data[0]'s own path is RIGHT-edge-only and never angularly overlaps tx_data[4]'s TOP+LEFT-edge path, so no radial-clearance requirement applies between them at all), and lanes 2-7 (859->862.4, 865->867.8, 871->873.2, 877->878.6, 883->884.0, 889->889.4) each shift up just enough to keep 5.4um clearance from the lane immediately below; lanes 8-9 (895, 901) already had enough slack and are unchanged. Re-verified via direct db.Region separation_check (proper edge-to-edge distance, not endpoint-distance) against the permanent ground truth and all 29 other nets."
   }
  }
 }

@@ -16817,3 +16817,247 @@ INV_X1比で約22倍（PMOS: 539.48p/28.56p、NMOS: 306.89p/9.52pの単純和
 （推定値に700ns超の余裕を持たせた）。
 
 出力：`ring_osc/TB/tb_ring_osc.spice`（更新）。
+
+## 104 GIOパッド再割り当て（2026-08-31〜09-01）：物理実装・
+## DRC/LVS/IRSIM再検証
+
+ユーザー要望（`gio_connections.json`の`pad_reassignment_2026_08_31`に
+論理プラン・ルータビリティ検証のみ先行して記録済み——「新パッド <- 旧
+パッドの役割」対応: P1<P2, P2<P13, P3<P14, P4<P3, P5<P1, P6<P4,
+P11<P12, P12<P11, P13<P5, P14<P6。SCL/SDAを隣接パッドP1/P2上に
+まとめ、tx_data/rx_data各ビットの物理パッドをシャッフルする再割り当て）
+を、実際に`script/reroute_gio_pads_2026.py`で物理配線し、DRC/LVS/
+IRSIM(rsim)の3段階すべてで実機検証まで完了させたセッション。
+
+### 104.1 物理実装（`reroute_gio_pads_2026.py`）
+
+既存の`route_shared_pool(name, v, lane)`（内部で`R = LANE_R0 +
+lane*LANE_PITCH`を計算）を`route_shared_pool(name, v, R)`に変更し、
+`R`を`schematic/v9_signal_routing_plan.json`の`"R"`フィールドから直接
+渡す方式に変更（標準グリッドに乗らない半径——857.0、862.4、905.5等
+——も扱えるようにするため）。
+
+**`tx_data[4]`の新レーン探索**：元のlane1(R=853)が、事前の厳密な
+overlap/separation_check（後述104.1.1のバグ修正後の版）で、コア〜
+GIO_VDD_PIN付近に存在する未記録の恒久構造物（R〜852-854の薄い
+コア境界構造、およびGIO_VDD_PIN付近のM1ブロック）と衝突すると判明。
+「11番目のレーン」を新設して逃がす方針でR=907に一旦移動したが、
+実DRCで別のM1ブロックとの`M1.S1`違反が発覚しR=905.5へ再移動。さらに
+自前の再検証（後述の分離距離バグ修正後）で、R=905.5/907いずれも
+`rx_data[3]`（R=901）とM2上で約470umにわたり角度方向に重なる新規
+衝突を検出——M2同士の平行配線に必要なクリアランスは
+`M2_WIRE_W(3.4)+M2_MIN_S(2.0)=5.4um`であり、単純なM1基準の見積もり
+（当初想定）より厳しいことが根本原因。**最終的に**「独立した新設
+レーン」方式を放棄し、`tx_data[4]`専用にR=857.0（obstruction-1回避
+かつ`tx_data[0]`のR=853とは経路上の角度重複が無いため無衝突）を
+割り当て、lane2〜7の8ネットを必要最小限だけ上方にカスケードシフト
+（R: 859.0→862.4 [`tx_data[1]`/`tx_data[5]`, lane2]、865.0→867.8
+[`rst_n`/`sda_oe`/`tx_data[2]`/`rx_data[5]`, lane3]、871.0→873.2
+[`sda_in`/`rx_data[0]`/`rx_data[6]`, lane4]、877.0→878.6
+[`tx_data[6]`, lane5]、883.0→884.0 [`scl`/`rx_data[7]`, lane6]、
+889.0→889.4 [`rx_data[1]`, lane7]、lane8/9は既存の6.0um余裕で
+吸収でき変更不要）。`v9_signal_routing_plan.json`への反映で
+`tx_data[1]`/`tx_data[2]`を最初の一括更新で取りこぼし、レーン番号と
+R値の整合性を全ネットで機械チェックして事後に発見・修正した
+（`fixed missed entries: [('tx_data[1]', 2, 859.0, 862.4),
+('tx_data[2]', 3, 865.0, 867.8)]`）。
+
+**`HIZ1_VDD_tie`**：TIE_R=917.0（初期）→915.0（HIZ1側M1スタブの
+1.3umクリアランス問題を修正、するとVDD_PIN側でV1-V1間隔問題が発覚）
+→916.4（V1-V1間隔を修正、するとHIZ1側・VDD_PIN側の両方で新たな
+M2フィル間隔問題が発覚）→**916.1**（V1-V1下限916.0とM2フィル上限
+916.3の交差で定まる有効窓`[915.9, 916.3]`内の最終値）。
+
+**`OUT2_VSS_tie`**：当初の長い`connect_gio_to_gio()`スイープ方式が
+左辺で8信号ネット＋DIS4リンクと衝突すると判明したため方針転換し、
+`add_hiz_vss_ties_v9.py`のOUT13→VSSパッチと同じ様式の**局所M2
+パッチ**（OUT2自身のM2ピンスタブ`(-621.7,920.0)-(-618.3,923.4)`から
+近傍のパッドセル内蔵フィル`(-621.7,922.5)-(-618.3,927.0)`へ橋渡し
+するだけの小片）に変更。
+
+### 104.1.1 自前DRC自己検証の方法論バグ（endpoint距離 vs 真の
+### 分離距離）の発見・修正
+
+上記の検証過程で、独自に書いた「2エッジ間の4隅の端点間ユークリッド
+距離の最小値」で分離をチェックするヘルパー（`edge_dist()`）が、
+平行かつY方向にオフセットしX方向に重なる2エッジの組では**真の
+（垂線）最小距離より大きい値を返す**という欠陥を発見——ある箇所を
+「1.4003um（適合）」と誤判定していたが、実際のklayout DRCでは
+`M1.S1`の実違反として検出された。**修正**：自作の距離計算をやめ、
+`klayout.db.Region.separation_check(other, min_distance)`の結果を
+直接信頼する方式に切替え、完全に同一座標の端点対（同一ネットの
+意図的な接触/マージ）だけを除外するフィルタ
+（`edges_identical(e1,e2)`：2エッジの端点座標集合が完全一致するかで
+判定）を導入。以降の全DRC自己検証はこの修正版メソドロジーを使用。
+
+### 104.2 実DRC確認：`DRC_error.lyrdb`とENB-RSTN未接続の発見・修正
+
+ユーザーがローカルKLayoutで実行した`DRC_error.lyrdb`（4件）を確認：
+`M1.S1`（195.408,907.9;204.592,907.9|203.25,908.3;196.75,908.3）、
+`V1.S1`（199.3,913.7;200.7,913.7|200.7,914.3;199.3,914.3）——この
+2件は104.1の`HIZ1_VDD_tie`TIE_R反復（917.0→915.0→916.4→916.1）で
+解消。残る`GC.ANT`2件（RING_OSC付近のポリゴン）はレイアウト上
+元々存在していた（`ring_osc/tr_1um_i2c_slave_async_ringosc_clean.
+gds`の同一箇所に同一形状が既に存在することを直接クエリで確認）が、
+ユーザーが真因を指摘：「GC.AAはRING_OSCのENBがRSTN（P15）に
+つながって無いからです。」
+
+**根本原因**：`route_ring_osc_signals_v9.py`の元々のENB配線は、
+rst_nの**旧**M1パッドスタブ（(528.3,905.3)-(531.7,908.7)）へ同一
+レイヤM1-M1マージで（via無しで）着地し、rst_n自身の別途既存の
+via＋M2ライザーで完成する設計だった。`reroute_gio_pads_2026.py`の
+STEP1がrst_nを新しいレーン半径（R=867.8）で削除・再描画する際、
+この旧M1スタブ＋via＋M2ライザーごと消してしまい、ENBの接続が
+物理的に途切れていた。
+
+**修正**：新規STEP5として橋渡し用viaを追加（`via(530.0, 907.0)`、
+ネット名`ENB_rst_n_via`）。初回試行(530.85,907.0)はvia自身のM2
+パッドがENB自身の別系統M2ライザー（x=534.3-537.7）から1.75um
+（Smin=2.0未満）しか離れず新規違反——rst_nの新M2ライザー幅
+（528.3-531.7）に正確に中心を合わせた(530.0,907.0)へ変更し、
+ENB自身のM2ライザーからは2.6umの間隔を確保しつつ、ENBのM1着地線
+（530.0-537.7）とは1.7um重なりM1マージを維持。
+
+出力：`ring_osc/tr_1um_i2c_slave_async_reassigned.gds`（新規、
+DRC 0違反をユーザーローカルKLayoutで確認）。
+
+### 104.3 LVS用SPICE再生成
+
+`gio_connections.json`の`connections_per_terminal_detail`に2件の
+データ欠落を発見（`gen_lvs_spice_top_v9.py`は`info.get("net")`のみで
+GIO側ネットを解決するため、この欠落があるとピンが浮きとして誤生成
+される）：P7（`net: "DIS"`——DISネット自身の外部制御ポイント）と
+OUT2（`net: "VSS"`——open-drain SDAドライブの恒久VSSタイ、旧OUT13
+から移設）。両方追加後、`gen_lvs_spice_top_v9.py`→
+`gen_lvs_spice_ringosc_v9.py`を再実行（トップピンリネーム14件、
+うち`DIS`→`P7`を含む）。RING_OSC統合部の重複チェックも正常
+（`INV_X1`/`AND2_X1`/`FILL2`は既存定義と一致しスキップ、`INV3D`は
+新規追加）。生成結果のx1/x2/x3インスタンス行を全ポート位置ごとに
+手動照合し、P7＋HIZ3/4/5/6/11/12/13/14が全て`"P7"`、`OUT2`が
+`"VSS"`、`HIZ2`<->`sda_oe`が共に`"NC_HIZ2"`、`rst_n`/`P15`/
+RING_OSC.ENBが全て`"P15"`であることを確認。
+
+出力：`schematic/tr_1um_i2c_slave_async_v9_lvs.spice`・
+`schematic/tr_1um_i2c_slave_async_ringosc_v9_lvs.spice`・
+`simulations/tr_1um_i2c_slave_async.spice`（全て再生成）。ユーザーが
+ローカルLVSツールで実行し**LVSクリーンを確認**。
+
+### 104.4 IRSIM用`.sim`再生成：SDAプルアップ対象パッドのステール
+### 参照バグ修正
+
+`gen_irsim_sim_v9.py`の`find_pad_pullup_gate_node(devices,
+pad_net="P13")`のデフォルト引数と`PULLUP_NODE = "P13"`が、今回の
+パッド再割り当て前（SDAが旧P13パッドだった頃）の値のまま残存して
+いたステールな参照だと発見——修正せずに使うと、合成プルアップが
+今や無関係なP13パッドに付き、実際のSDAパッド（新P2）にはプルアップ
+無しという、設計バグとは無関係な誤ったシミュレーションモデルを
+黙って生成するところだった。両箇所を`"P2"`に修正。
+
+再生成結果：592インスタンス、2884トランジスタ（ESDダイオード28個は
+IRSIMプリミティブ非対応のためスキップ）、SDAパッドのドライブゲート
+ノードは構造的探索で`x1.x4.NG`と判明（ハードコードではなく
+`find_pad_pullup_gate_node()`による実配線からの探索）、合成プルアップ
+のデバイス行`p x1.x4.NG Vdd P2 1 1.9`で正しくP2に接続されている
+ことを確認。RING_OSC自身の内部ノード（`x3.D[92]`等）も含まれている
+ことを確認（統合済み参照SPICEから生成しているため）。
+
+出力：`irsim/tr_1um_i2c_slave_async.sim`（更新、2910行）。
+
+### 104.5 IRSIMテストベンチのノード名ステール参照バグ発見・修正、
+### 実機14チェック全PASS
+
+ユーザーから「rsimテストベンチのコマンドを提示ください。実行します。」
+との依頼を受け、`script/gen_irsim_cmd_v9.py`を精査したところ、
+`SCL`/`SDA`/`SDA_OE`/`TX`/`RX`の各ノード名定数が、**今回のパッド
+再割り当て前**の古いマッピング（`SCL="P2"`, `SDA="P13"`,
+`SDA_OE="SDA_O"`, `TX=[P12,P11,P5,P6,P4,P1,P3,P14]`,
+`RX=[NET_0..NET_7]`——後者は実在しない仮名）のまま残存しているのを
+発見。`RST_N`/`DIS`/`BUSY`/`RW`/`ADDR_MATCH`、および全33個の
+`DFFRB`インスタンス名・クロックネット名（`x2.scl_row0`等）は
+コア内部構造でありパッド再割り当ての影響を受けないため元々正しい
+ままだった（実際に現行SPICEと突き合わせて確認）。
+
+**再導出**：`schematic/tr_1um_i2c_slave_async_ringosc_v9_lvs.spice`
+自身のx1（OSS_FRAME_GIO）/x2（i2c_slave_async_nrow_fm）インスタンス
+行を、両セルの`.subckt`形式引数リストと位置的に突き合わせて再導出
+（推測ではなく直接読み取り）：`scl=P1`（旧P2）、`sda_in=P2`（旧
+P13、SDAパッド自身）、`sda_oe=NC_HIZ2`（旧`SDA_O`という存在しない
+仮名——HIZ2ピンの実ネット名、x1側HIZ2->NC_HIZ2とx2側sda_oe->NC_HIZ2
+が同一ネットであることを確認）、
+`tx_data[0..7]=P11,P12,P13,P14,P6,P5,P4,P3`（旧
+`P12,P11,P5,P6,P4,P1,P3,P14`）、
+`rx_data[0..7]=NC_OUT11,NC_OUT12,NC_OUT13,NC_OUT14,NC_OUT6,NC_OUT5,
+NC_OUT4,NC_OUT3`（旧`NET_0..NET_7`という存在しない仮名）。
+
+修正後、`gen_irsim_cmd_v9.py`→`gen_irsim_verilog_equiv_tb.py`を
+再実行し`irsim_test_main.cmd`/`irsim_test_negative.cmd`/
+`irsim_reset_check.cmd`/`irsim_test_main_noforce.cmd`/`irsim_tb.cmd`
+＋`irsim_tb_expected.json`を全て再生成。生成された4本の`.cmd`
+ファイルが参照する全96個の相異なるノード名を、104.4で再生成した
+`.sim`のデバイス行から抽出した全1040ノード名の集合と突き合わせ、
+未存在ノード0件を確認（機械的チェック、目視ではない）。
+
+`irsim/run_tb.sh`はこの`irsim_tb.cmd`（`gen_irsim_verilog_equiv_tb.
+py`が`script/gen_irsim_cmd_v9.py`の定数をそのままimportして使う
+ため、修正が自動的に反映される）を実行する既存の一発実行スクリプト
+——ユーザーがローカルで実行し、Verilog版と同じ14チェック全てで
+**`All 14 checks PASSED`**を実機IRSIMで確認（write 0xA5→read 0x3C→
+誤アドレスNACKの3シナリオ、`[t=3300.000]`〜`[t=55700.000]`の
+タイムスタンプで全チェックOK）。
+
+出力：`irsim/irsim_test_main.cmd`・`irsim_test_negative.cmd`・
+`irsim_reset_check.cmd`・`irsim_test_main_noforce.cmd`・
+`irsim_tb.cmd`・`irsim_tb_expected.json`（全て更新）。
+
+**総括**：104.1〜104.5で、GIOパッド再割り当てはDRC・LVS・IRSIM
+(rsim)の3段階すべてで実機クリーン/PASSを確認済み。最終GDSは
+`ring_osc/tr_1um_i2c_slave_async_reassigned.gds`。
+
+## 105 OpenSUSIロゴのM2ドット化再デザイン（2026-09-01）
+
+ユーザー要望：「OpenSUSIのロゴを修正します。M2の3um角のドットで
+PNGファイルを表現したロゴを作成して配置してください。大きさは現状の
+サイズで大丈夫です。」——103.14で作成した既存の`OPENSUSI_LOGO`セルは
+ONセル1個につき5.0×5.0umの**塗りつぶし**正方形を生成する方式で、
+隣接ONセル同士が結合し見た目がブロック状（ドット状ではない）に
+なっていた点の修正依頼。
+
+**再デザイン**：同じ源画像・同じデジタイズグリッド（319列×65行、
+PITCH=Wmin+Smin=5.0um）・同じ配置エンベロープ・中央配置（＝
+全体サイズ・位置は現状維持、ユーザーの「大きさは現状のサイズで
+大丈夫」通り）を保ったまま、ONセル1個の描画方式だけを、5.0um角の
+塗りつぶしから、5.0umピッチセルの中央に配置した**3.0×3.0umの孤立
+正方形ドット**（各辺1.0umマージン）に変更。DRC安全性は構造的に
+（クリック調整なしで）成立：孤立ドット単体の幅は3.0umちょうどで
+Wmin=3.0umを満たし（`width_check(<3.0um)`は厳密未満のみ違反と
+判定するため、ちょうど3.0umは違反にならない——このプロジェクトの
+他のルール定義でも「最小値ちょうどは適合」という規約を一貫して
+採用している）、直交隣接ONセル間のギャップはちょうど2.0um
+（=Smin）、斜め隣接ONセル間の角-角距離は約2.83um（Smin超過）——
+旧方式で必要だった斜めタッチのパッチ処理も、ドット方式では不要
+（パッチ無しの生グリッドを再デジタイズし直したところ斜めタッチは
+1箇所のみで、103.14の記録と一致することも確認）。
+
+**実装**：`script/place_opensusi_logo_dots.py`を新規作成
+（`place_opensusi_logo.py`のデジタイズロジックを流用しつつ、描画部分
+のみドット方式に変更）。既存の`OPENSUSI_LOGO`セルの中身だけを
+差し替え（トップレベルのインスタンス変換行列は無変更、セル自身の
+ローカル座標系も同じ0原点基準のため配置位置・サイズは自動的に
+維持）。入力は現行のDRC/LVS/rsim検証済み
+`ring_osc/tr_1um_i2c_slave_async_reassigned.gds`（103.14当時の
+`ringosc_clean.gds`ではなく、104でのパッド再割り当て後の最新ファイル
+を使用し、その配線を保持）。
+
+**検証**：(1) ロゴ単体の`width_check(<3.0um)`/`space_check(<2.0um)`
+——ともに0違反。(2) チップ全体M2の`width_check`/`separation_check`
+（104.1.1で確立した`edges_identical`フィルタ付きの厳密版）を
+ロゴ差し替え前後で実行し完全一致（`width_viol=1`（既存の無関係な
+違反、ロゴと無関係）・`space_viol(real)=0`、両方とも新規違反ゼロ）。
+(3) ロゴのインスタンスとチップ全体M2（ロゴ自身を除く）との重なり
+面積0um²（ショートなし）。(4) ロゴのインスタンスグローバルbbox
+(-791.5,-493.45)-(791.5,-180.45)が配置エンベロープ内に収まることを
+確認。(5) ラスタプレビュー画像で「OPENSUSI」のロゴマーク・文字が
+ドット柄として判読可能であることを目視確認。
+
+出力：`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds`
+（新規）。ユーザーがローカルKLayoutで実行し**DRCクリーンを確認**。

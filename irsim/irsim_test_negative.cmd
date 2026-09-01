@@ -27,17 +27,17 @@ stepsize 20
 settle 50
 h Vdd
 l Gnd
-x P13
-h P2
+x P2
+h P1
 h P7
-l P12
 l P11
-l P5
-l P6
-l P4
-l P1
-l P3
+l P12
+l P13
 l P14
+l P6
+l P5
+l P4
+l P3
 l P15
 s 3000
 | check: slave held in reset -- busy/addr_match/rw/sda_oe must all
@@ -45,7 +45,7 @@ s 3000
 | pull-up), not X. If still X at this point, reset itself isn't
 | resolving (see design_notes.md 76.10) -- report back before
 | proceeding, since nothing downstream will make sense yet.
-d P13 SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d P2 NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 h P15
 s
 | DFFRB (the 33x-instantiated flip-flop cell) has the SAME cold-X
@@ -161,16 +161,16 @@ x x2.x_301_.QM
 s
 s 100
 | check: still defined immediately after release
-d SDA_O NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
+d NC_HIZ2 NC_CORE_busy NC_CORE_rw NC_CORE_addr_match
 
-d P2 P13 SDA_O NC_CORE_addr_match NC_CORE_busy
-ana P2 P13 SDA_O NC_CORE_addr_match NC_CORE_busy
+d P1 P2 NC_HIZ2 NC_CORE_addr_match NC_CORE_busy
+ana P1 P2 NC_HIZ2 NC_CORE_addr_match NC_CORE_busy
 
 | ---- START ----
-h P2
-x P13
+h P1
+x P2
 s
-l P13
+l P2
 s 40
 | check: busy asserted after START
 d NC_CORE_busy
@@ -219,7 +219,7 @@ x x2.x_284_.QM
 x x2.x_293_.QM
 s
 | check: sda_oe now holds a defined value instead of X
-d SDA_O
+d NC_HIZ2
 | The core's phase/bit_cnt/shreg/addr_ok/rw_bit register bank is
 | async-reset via a NOR2-derived net (gate-level Group-A RSTB,
 | "_008_") that is structurally intended to pulse briefly on every
@@ -349,55 +349,55 @@ s
 d NC_CORE_rw NC_CORE_addr_match
 | ADDR+W (WRONG) = 0x22
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
 s
-l P2
-x P13
+l P1
+x P2
 s 500
-h P2
+h P1
 s 40
 s
+l P1
 l P2
-l P13
 s 500
-h P2
+h P1
 s 40
-l P2
-x P13
+l P1
+x P2
 | same SDA pull-up RC recovery margin as send_bit()/read_ack() etc.
 | (500ns, not just one 20ns stepsize) -- this inline
 | NACK check previously used a single stepsize here (carried over
@@ -408,14 +408,14 @@ x P13
 | time to rise yet, even though addr_match itself already correctly
 | read 0 (foreign address correctly not matched).
 s 500
-h P2
+h P1
 s
 | check: unmatched address -> NACK, i.e. SDA stays HIGH (no slave pulldown)
-d P13
+d P2
 | check: addr_match NOT asserted for foreign address
 d NC_CORE_addr_match
 s
-l P2
+l P1
 | STOP's edge-detect path routes through a real intentional delay
 | element (design_notes.md 76.10/76.13/76.20/76.21). A short
 | settle (500ns) is inserted first so any residual
@@ -428,10 +428,10 @@ l P2
 | busy never clears (see design_notes.md 76.20/76.21 for the real
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
-l P13
-h P2
+l P2
+h P1
 s 8000
-x P13
+x P2
 | same real SDA pull-up RC recovery margin as send_bit() etc.
 | (76.39) -- give SDA time to actually finish rising under the
 | calibrated TR-1um.prm pull-up before checking busy below.

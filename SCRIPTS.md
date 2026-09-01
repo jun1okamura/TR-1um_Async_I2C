@@ -1,6 +1,6 @@
 # script/ ガイド
 
-`script/`配下の現行スクリプト（全59本）の説明資料。RTL設計からIRSIMチップ
+`script/`配下の現行スクリプト（全63本）の説明資料。RTL設計からIRSIMチップ
 レベル動作検証までの再現可能なパイプラインを構成するスクリプトを中心に、
 v7→v8→v9の版遺産として今も参照される一部の旧版スクリプトも残している
 （該当箇所に明記）。開発過程で使われた真に一回限りのデバッグ・実験用
@@ -99,7 +99,7 @@ v8/v9はこの一気通貫スクリプトを持たず、§5の各スクリプト
 | `gen_schematic_v7.py` | v7ネットリスト（`src/i2c_slave_async_net_v7.v`）からLVS用xschemスキーマティック（`schematic/i2c_slave_async_nrow_fm.sch`）を生成。DFFRB/BUFTHは`LEF/`配下のプロジェクト固有sch/symを、他は`TR-1um_5_stdcell`を参照。`verify_schematic_v7.py`が動的importで直接依存しているため現役。 |
 | `verify_schematic_v7.py` | xschem不要の独立幾何学的接続検証。生成された`.sch`が元のVerilogネットリストと接続等価であることを確認。 |
 | `gen_lvs_spice_v9.py` | v9版の直接生成アプローチ：`src/i2c_slave_async_net_v9_rowbuf.v`から、xschemを経由せず直接フラットな構造SPICEネットリスト（コア単体、トップセル`i2c_slave_async_nrow_fm`）を生成。RING_OSC統合後のLVSでコアのVDD/GNDピン不一致（`FILL2`がレイアウト側では36個のサブサーキットインスタンス、スキーマティック側はバラ素子表記で不一致）が発覚し、FILL2のみサブサーキット呼び出し（`xFILL2_i VDD GND FILL2`）で生成するよう修正（FILL3はバラ素子表記のまま、design_notes §103.13）。 |
-| `gen_lvs_spice_top_v9.py` | チップレベル（コア＋GIOフレーム）のLVS参照ネットリストを、コアLVSクリーン済みspice＋GIOスキーマティック＋`schematic/gio_connections.json`から合成生成。 |
+| `gen_lvs_spice_top_v9.py` | チップレベル（コア＋GIOフレーム）のLVS参照ネットリストを、コアLVSクリーン済みspice＋GIOスキーマティック＋`schematic/gio_connections.json`から合成生成。GIOパッド再割り当て後、`connections_per_terminal_detail`のP7/OUT2に`"net"`フィールドが欠落しておりピンが浮きとして誤生成されるところだったのを発見・修正（design_notes §104.3）。 |
 
 コアセル単体のLVS実行そのもの（実機xschem/KLayout環境）、およびトップレベル
 （`tr_1um_i2c_slave_async`）のLVSクリーン化の経緯は design_notes.md §60〜86
@@ -117,6 +117,7 @@ HIZ端子未結線の修正を含む、チップレベルDRC/LVSクリーン確�
 | `set_top_pin_text_size.py` | チップレベル16トップピンラベル（TXM2レイヤ49/0）のテキストサイズを20umに設定するレイアウト可読性向上の小ユーティリティ。位置・文字列・レイヤは変更しない。 |
 | `reassemble_top.py` | FRAME GDS編集後に、トップレベルGDS内のOSS_FRAME_GIOインスタンスを最新のFRAME GDSのものに差し替える（v7版の`route_gio_core.py`実行前に使用）。 |
 | `route_gio_core.py` | （v7版、歴史的）GIO⇔コア間の20信号＋VDD/VSSを結線する独自ルータ。`route_gio_core_v9.py`の設計上の前例として参照されている（コードとしては現行v9パイプラインから直接呼ばれない）。 |
+| `reroute_gio_pads_2026.py` | GIOパッド再割り当て（SCL/SDAを隣接パッドP1/P2へ集約、tx_data/rx_data各ビットのパッド再配分、`gio_connections.json`の`pad_reassignment_2026_08_31`に対応）の物理配線パッチ。`schematic/v9_signal_routing_plan.json`の`"R"`フィールドから直接半径を受け取る方式に変更し、標準グリッド外の半径も扱える。M2平行配線同士に必要な`M2_WIRE_W+M2_MIN_S=5.4um`のクリアランス要件（M1基準の見積もりより厳しい）を根拠に`tx_data[4]`用の専用レーン新設＋隣接8ネットのレーン半径カスケードシフトを実施。`HIZ1_VDD_tie`（TIE_R反復による最終917.0→916.1への収束）、`OUT2_VSS_tie`（局所M2パッチ方式への変更）、`ENB_rst_n_via`（GIOパッド再配線でrst_nの旧M1スタブが消え途切れたRING_OSC.ENB⇔rst_n/P15接続の復元）も同スクリプト内で処理。実機KLayoutでDRC 0違反を確認（design_notes §104.1〜104.2）。 |
 
 v9の再現手順:
 ```sh
@@ -125,14 +126,15 @@ python3 assemble_top_v9.py       # コア+GIO+PTECT配置（配線前で停止�
 python3 route_gio_core_v9.py     # GIO⇔コア結線
 python3 add_top_pins_gio_v9.py   # チップレベルTOP PIN追加
 python3 add_hiz_vss_ties_v9.py   # 欠落VDD/VSSタイの復元
+python3 reroute_gio_pads_2026.py # GIOパッド再割り当て（SCL/SDAをP1/P2へ集約）
 ```
 
 ## 10. IRSIMチップレベル動作検証（v9）
 
 | スクリプト | 役割 |
 |---|---|
-| `gen_irsim_sim_v9.py` | `src/tr_1um_i2c_slave_async.extracted`（チップ全体、DRC/LVSクリーン済みv9）を再帰的にトランジスタレベルまでフラット化し、IRSIM用`.sim`（`irsim/tr_1um_i2c_slave_async.sim`、2077トランジスタ・845ノード）を生成。BUFTHはIRSIMのternaryスイッチレベルソルバでは正しく解けない恒久的制限があるため、`.sim`生成時のみBUF_X1へ機械的置換（`substitute_bufth_with_buf_x1()`、実レイアウトは変更なし、logic_cells_mapping.md §1参照）。SDAパッドへの外付けプルアップ抵抗も追加。 |
-| `gen_irsim_cmd_v9.py` | v9の`.sim`ノード名に対応したIRSIM刺激スクリプト生成の共通基盤（`CmdGen`クラス）。`send_byte`/`read_ack`/`recv_bit`/`stop`等のバス手順に加え、`DFFRB`のQM（マスタ）/QS（スレーブ）両ノードをクロックHIGH時に強制する`force_release_gated()`（実行時リセット、design_notes §89-96で確立）を提供。`gen_main()`/`gen_negative()`/`gen_reset_check()`で`irsim_test_main.cmd`/`irsim_test_negative.cmd`/`irsim_reset_check.cmd`/`irsim_test_main_noforce.cmd`を生成。 |
+| `gen_irsim_sim_v9.py` | `schematic/tr_1um_i2c_slave_async_ringosc_v9_lvs.spice`（チップ全体+RING_OSC統合、DRC/LVSクリーン済み）を再帰的にトランジスタレベルまでフラット化し、IRSIM用`.sim`（`irsim/tr_1um_i2c_slave_async.sim`、592インスタンス・2884トランジスタ）を生成。BUFTHはIRSIMのternaryスイッチレベルソルバでは正しく解けない恒久的制限があるため、`.sim`生成時のみBUF_X1へ機械的置換（`substitute_bufth_with_buf_x1()`、実レイアウトは変更なし、logic_cells_mapping.md §1参照）。SDAパッドへの外付けプルアップ抵抗も追加（ゲートは`find_pad_pullup_gate_node()`による実配線からの構造的探索、ハードコードではない）。GIOパッド再割り当て（SCL/SDAがP1/P2へ移動）に伴い、プルアップ対象パッド指定`pad_net`/`PULLUP_NODE`のステール参照（旧SDAパッドP13のまま）を発見・`"P2"`へ修正（design_notes §104.4）。 |
+| `gen_irsim_cmd_v9.py` | v9の`.sim`ノード名に対応したIRSIM刺激スクリプト生成の共通基盤（`CmdGen`クラス）。`send_byte`/`read_ack`/`recv_bit`/`stop`等のバス手順に加え、`DFFRB`のQM（マスタ）/QS（スレーブ）両ノードをクロックHIGH時に強制する`force_release_gated()`（実行時リセット、design_notes §89-96で確立）を提供。`gen_main()`/`gen_negative()`/`gen_reset_check()`で`irsim_test_main.cmd`/`irsim_test_negative.cmd`/`irsim_reset_check.cmd`/`irsim_test_main_noforce.cmd`を生成。GIOパッド再割り当て後、`SCL`/`SDA`/`SDA_OE`/`TX`/`RX`のノード名定数が旧パッドマッピングのまま残存していたステール参照バグを発見——現行LVS SPICEのx1/x2インスタンス行から位置的に再導出し修正（`RST_N`/`DIS`/`BUSY`/`RW`/`ADDR_MATCH`とDFFRBインスタンス群・クロックネット名はコア内部構造でパッド再割り当ての影響を受けないため元々正しかった）。修正後、生成した4本の`.cmd`が参照する全96ノードが`.sim`に実在することを機械的に確認済み（design_notes §104.5）。 |
 | `gen_irsim_verilog_equiv_tb.py` | `src/i2c_slave_async_tb.v`と1対1対応する3シナリオ・14チェックを1本の`.cmd`にまとめた自己検証型テストベンチ`irsim/irsim_tb.cmd`＋期待値`irsim_tb_expected.json`を生成（design_notes §98）。`gen_irsim_cmd_v9.py`の`CmdGen.checked_dump()`を使用。 |
 | `check_irsim_tb_log.py` | `irsim_tb.cmd`実行後の実ログを`irsim_tb_expected.json`と自動照合し、Verilogテストベンチの`$display("[t=%0t] %s: %s", ...)`と同じ書式でPASS/FAILレポートを出力（design_notes §98/§100）。IRSIM自体の`.cmd`言語に条件分岐・算術演算が無いため、この照合はオフライン後処理として実装。`-v`で個別ビットサンプルも表示。 |
 | `gen_prm_characterize.py` | IRSIM公式のキャリブレーション手順（irsimソースツリー`lib/calibrate_spice3/`）に基づき、実TR-1um BSIM3モデルをngspiceで特性化するためのSPICEデッキを生成（実行はローカルのngspiceで行う）。 |
@@ -165,7 +167,8 @@ cd ../irsim
 | `route_ring_osc_power_v9.py` | コア両端のTAP2 M2ストラップをRING_OSCまで延伸するVDD/VSS電源配線。当初案にあったRING_OSC上下M1(10um)バスは実DRCでショートが発覚しユーザー指示で撤去済み（design_notes §103.3）。 |
 | `route_ring_osc_signals_v9.py` | RING_OSCのOUT/OUTD/ENB信号配線。実DRC39件（M2幅1.8um誤り等）を`gen_lef_ring_osc.py`のLEF導入とM1/M2/PAD幅統一（3.4um、via_1ランドパッド幅に合わせフラットな接続に）で解消。以降複数ラウンドの実DRC/目視確認でP15配線・ENB-VSSショート等を修正（design_notes §103.5〜103.8）。 |
 | `gen_lvs_spice_ringosc_v9.py` | RING_OSC統合後のチップ全体LVS参照SPICEを生成。RING_OSC/INV3D/FILL2を独立サブサーキットとして保持するネスト構造（実LVS比較で正しいことを確認済み、design_notes §103.9〜103.12）。 |
-| `place_opensusi_logo.py` | コア〜RING_OSC間の空きスペースに、添付PNGをピクセルアート的にデジタイズしたOpenSUSIロゴをM2アートとして配置。PITCH=Wmin+Sminのグリッドで幅・スペースDRCを構造的に満たし、スペースをはみ出さない最大サイズ（319×65セル）で中央配置。配置前後でDRC違反差分0を自己検証（design_notes §103.14）。 |
+| `place_opensusi_logo.py` | コア〜RING_OSC間の空きスペースに、添付PNGをピクセルアート的にデジタイズしたOpenSUSIロゴをM2アートとして配置。PITCH=Wmin+Sminのグリッドで幅・スペースDRCを構造的に満たし、スペースをはみ出さない最大サイズ（319×65セル）で中央配置。配置前後でDRC違反差分0を自己検証（design_notes §103.14）。**後継: `place_opensusi_logo_dots.py`（下記）** |
+| `place_opensusi_logo_dots.py` | `OPENSUSI_LOGO`セルの描画方式を、ONセル1個=5.0×5.0um塗りつぶし（隣接セルが結合しブロック状に見える）から、5.0umピッチセル中央の3.0×3.0um孤立正方形ドットへ再デザイン（ユーザー要望：「M2の3um角のドットでPNGファイルを表現したロゴ」）。同じデジタイズグリッド・配置エンベロープ・中央配置を維持（＝サイズ・位置は現状維持）、既存セルの中身のみ差し替え。孤立ドット幅3.0um・直交隣接ギャップ2.0umはいずれもWmin/Sminをちょうど満たす構造的DRC安全設計のため、旧方式で必要だった斜めタッチパッチも不要。入力はGIOパッド再割り当て後の`tr_1um_i2c_slave_async_reassigned.gds`。ロゴ単体・チップ全体（差し替え前後の完全一致）・重なり面積0um²を自己検証。実機KLayoutでDRCクリーンを確認（design_notes §105）。 |
 | `gen_ring_osc_tb.py` | RING_OSC単体の自己検証用ngspiceテストベンチ（`ring_osc/TB/`）を生成。LVSクリーンな`ring_osc/RING_OSC.extracted`（レイアウト抽出netlist）を使用し、実行はローカルngspiceで行う。INV3DのAS/AD抽出誤り（アンテナダイオード拡散が実レイアウトでは出力ノード側なのに抽出netlistでは電源側になっていた）を発見し、シミュレーション用コピー`RING_OSC_extracted_sim_ready.spice`のみ修正（マスタの`.extracted`は無改変、design_notes §103.16〜103.22）。 |
 
 実測確認済み（ローカルngspice、`.tran`3us）: `OUT`周期153.661ns/6.508MHz、

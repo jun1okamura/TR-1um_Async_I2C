@@ -24,27 +24,44 @@ the 24-group) that the workarounds depend on -- confirmed by direct
 inspection (design_notes.md 88.x).
 
 ---- Node mapping, all derived directly from schematic/
-tr_1um_i2c_slave_async_v9_lvs.spice (the same file gen_irsim_sim_v9.py
-reads), NOT by trial and error: ----
+tr_1um_i2c_slave_async_ringosc_v9_lvs.spice (the same file
+gen_irsim_sim_v9.py reads), NOT by trial and error: ----
+
+RE-DERIVED 2026-09-01 after this session's GIO pad reassignment
+(SCL/SDA moved P2->P1 / P13->P2, tx_data bits reshuffled across
+P3/P4/P5/P6/P11/P12/P13/P14) -- the values below through v-1 of this
+file were stale (still reflected the PRE-reassignment pad map) and
+would have silently driven/watched the WRONG pads. Re-read positionally
+off the current source's own x1 (OSS_FRAME_GIO)/x2
+(i2c_slave_async_nrow_fm) instantiation lines (now at lines
+1169-1178 of the ringosc-integrated file) -- no guessing:
 
 Top-level signals (design_notes.md 87.4): the top subckt's own formal
 pin list is already literal (P1..P15/VDD/VSS, from design_notes.md 82's
 TOP_PIN_ORDER fix), and its instantiation lines (x1=OSS_FRAME_GIO,
-x2=i2c_slave_async_nrow_fm, lines 753-762 of the source) bind actual
-nets to both cells' formal pin lists positionally -- reading straight
-off those two instantiation lines (no probing/simulation needed) gives:
-  rst_n=P15  scl=P2  sda_in=P13(=SDA pad itself, same node)
-  sda_oe=SDA_O (internal, watch-only)
+x2=i2c_slave_async_nrow_fm) bind actual nets to both cells' formal pin
+lists positionally -- reading straight off those two instantiation
+lines (no probing/simulation needed) gives:
+  rst_n=P15  scl=P1  sda_in=P2(=SDA pad itself, same node)
+  sda_oe=NC_HIZ2 (the real net name of OSS_FRAME_GIO's HIZ2 pin, which
+    core.sda_oe drives directly -- confirmed via x1's own instantiation
+    line binding HIZ2->NC_HIZ2 and x2's binding sda_oe->NC_HIZ2, same
+    net both sides)
   DIS=P7 (GIO's shared HIz control net for the 8 other bidirectional pads)
-  tx_data[0..7] (bit0..bit7) = P12 P11 P5 P6 P4 P1 P3 P14 (bond-pad
+  tx_data[0..7] (bit0..bit7) = P11 P12 P13 P14 P6 P5 P4 P3 (bond-pad
     nodes themselves, sampled combinationally -- not registers)
-  rx_data[0..7] (bit0..bit7) = NET_0..NET_7
+  rx_data[0..7] (bit0..bit7) = NC_OUT11 NC_OUT12 NC_OUT13 NC_OUT14
+    NC_OUT6 NC_OUT5 NC_OUT4 NC_OUT3 (each rx_data[n] binds to
+    OSS_FRAME_GIO's OUT<pad> pin for whichever pad now carries bit n;
+    NC_ = no chip pin connects that OUT pin further, but it's still a
+    real top-scope net name, directly watchable)
   rx_valid/addr_match/rw/busy: these ARE formal ports of
     i2c_slave_async_nrow_fm in this source (unlike the old .extracted
     file, where they were internal-only) -- brought out to the top
     subckt as NC_CORE_rx_valid/addr_match/rw/busy (NC_ = no chip pin
     connects them, but they're still real top-scope net names,
-    directly watchable, no instance-path prefix needed).
+    directly watchable, no instance-path prefix needed). Unaffected by
+    the pad reassignment (not pad-facing) -- unchanged from before.
 
 Internal-only DFFRB reset-group nodes (design_notes.md 88.x): grepped
 every "... DFFRB" instance line inside i2c_slave_async_nrow_fm (33
@@ -75,17 +92,19 @@ inferred from the spice source.
 VDD = "Vdd"
 GND = "Gnd"
 RST_N = "P15"
-SCL = "P2"
-SDA = "P13"
-SDA_OE = "SDA_O"
+SCL = "P1"
+SDA = "P2"
+SDA_OE = "NC_HIZ2"
 # P7/DIS: shared HIZ control for the 8 OTHER genuinely-bidirectional GIO
-# pads (P1/P3/P4/P5/P6/P11/P12/P14) -- same role/net identity as the old
-# design's "N2" (design_notes.md 76.19/76.25), just under this source's
-# own literal top-level pin name. DIS=H (this script's default) lets TX
-# be forced externally without contention; NEVER force TX while DIS=L.
+# pads (P3/P4/P5/P6/P11/P12/P13/P14 -- P1 left the DIS chain this
+# session, now the plain-Hi-Z-always SCL pad) -- same role/net identity
+# as the old design's "N2" (design_notes.md 76.19/76.25), just under
+# this source's own literal top-level pin name. DIS=H (this script's
+# default) lets TX be forced externally without contention; NEVER force
+# TX while DIS=L.
 DIS = "P7"
-TX = ["P12", "P11", "P5", "P6", "P4", "P1", "P3", "P14"]  # bit0..bit7 -- pad P nodes, not a register
-RX = ["NET_0", "NET_1", "NET_2", "NET_3", "NET_4", "NET_5", "NET_6", "NET_7"]  # bit0..bit7
+TX = ["P11", "P12", "P13", "P14", "P6", "P5", "P4", "P3"]  # bit0..bit7 -- pad P nodes, not a register
+RX = ["NC_OUT11", "NC_OUT12", "NC_OUT13", "NC_OUT14", "NC_OUT6", "NC_OUT5", "NC_OUT4", "NC_OUT3"]  # bit0..bit7
 BUSY = "NC_CORE_busy"
 RW = "NC_CORE_rw"
 ADDR_MATCH = "NC_CORE_addr_match"
