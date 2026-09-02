@@ -22,8 +22,12 @@ gen_schematic.py) used and validated earlier in this project. Pin nets
 returned by parse_netlist() are already canonicalized.
 """
 import re
+from pathlib import Path
 
-NET_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net.v"
+# 2026-09-02: made portable (was a hardcoded Claude-sandbox absolute
+# path, broke the first time this chain was run locally on the user's
+# own Mac -- see lef_parser.py's LEF_PATH for the same fix).
+NET_PATH = str(Path(__file__).resolve().parent.parent / "src" / "i2c_slave_async_net.v")
 
 _SKIP_TYPES = {"module", "endmodule", "input", "output", "wire", "assign", "reg", "inout"}
 

@@ -45,13 +45,22 @@ calling.
 """
 import json
 import re
+from pathlib import Path
 
-BASE = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C"
-GIO_SPICE = "/sessions/dreamy-ecstatic-heisenberg/mnt/simulations/OSS_FRAME_GIO.spice"
+# 2026-09-02: made portable (was hardcoded to a Claude-sandbox absolute
+# path -- see lef_parser.py's LEF_PATH for the same fix).
+import os
+
+BASE = str(Path(__file__).resolve().parent.parent)
+# XSCHEM_SIM_DIR env var override -- see gen_lvs_spice_v9.py's identical
+# comment (Claude's sandbox mounts ~/.xschem/simulations at a path that
+# isn't literally Path.home()/".xschem"/"simulations").
+_XSCHEM_SIM_DIR = os.environ.get("XSCHEM_SIM_DIR", str(Path.home() / ".xschem" / "simulations"))
+GIO_SPICE = _XSCHEM_SIM_DIR + "/OSS_FRAME_GIO.spice"
 CORE_SPICE = BASE + "/schematic/i2c_slave_async_nrow_fm_v9.spice"
 CONN_JSON = BASE + "/schematic/gio_connections.json"
 OUT_SCHEMATIC = BASE + "/schematic/tr_1um_i2c_slave_async_v9_lvs.spice"
-OUT_SIMULATIONS = "/sessions/dreamy-ecstatic-heisenberg/mnt/simulations/tr_1um_i2c_slave_async.spice"
+OUT_SIMULATIONS = _XSCHEM_SIM_DIR + "/tr_1um_i2c_slave_async.spice"
 
 TOP_NAME = "tr_1um_i2c_slave_async"
 

@@ -12,8 +12,15 @@ routing scripts -- geometry should come from here, not by re-deriving
 positions from each cell's GDS every time.
 """
 import re
+from pathlib import Path
 
-LEF_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/TR-1um_STDCELL.lef"
+# 2026-09-02: was hardcoded to a Claude-sandbox absolute path
+# (/sessions/dreamy-ecstatic-heisenberg/mnt/...), which only ever
+# happened to work when this script was run from inside that sandbox --
+# broke the first time the user ran the yosys->netlist chain locally on
+# their own Mac. Made portable (relative to this file's own location,
+# same pattern already used by insert_row_buffers.py's _REPO_ROOT).
+LEF_PATH = str(Path(__file__).resolve().parent.parent / "LEF" / "TR-1um_STDCELL.lef")
 
 
 def parse_lef(path=LEF_PATH):

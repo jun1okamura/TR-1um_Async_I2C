@@ -181,7 +181,18 @@ module i2c_slave_async_tb;
         #T;
         check(rx_data == 8'hA5, "rx_data == 0xA5");
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6): drive SDA low
+        // BEFORE raising SCL (was: scl=1 first, then m_oe=1 2ns later --
+        // that briefly changes SDA while SCL is already high, a protocol
+        // violation UM10204 3.1.3 forbids except for a genuine START/STOP,
+        // and it also confuses the new transparent-latch sda_d detector
+        // (section 108.5), which freezes at whatever SDA was AT THE INSTANT
+        // SCL rose and only re-arms once SCL next goes low -- with the old
+        // ordering it froze at "released/high" a moment too early, then
+        // never re-latched onto the intentionally-driven-low value, so the
+        // later real STOP transition went undetected). Same safe ordering
+        // send_bit() already uses: SDA changes while SCL=0, then SCL rises.
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP (SDA 0->1 while SCL=1)
         #(2*T);
         check(!busy, "busy cleared after STOP");
@@ -203,7 +214,10 @@ module i2c_slave_async_tb;
         check(rd_byte == 8'h3C, "read byte == 0x3C");
         send_ack(1'b1);                 // master NACKs -> ends read
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6): see the identical
+        // fix's comment earlier in this file (first STOP sequence) -- SDA
+        // must be driven low BEFORE SCL rises, not after.
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP
         #(2*T);
         check(!busy, "busy cleared after final STOP");
@@ -218,7 +232,10 @@ module i2c_slave_async_tb;
         check(ack_bit == 1'b1, "unmatched address -> NACK (no slave ack)");
         check(!addr_match, "addr_match not asserted for foreign address");
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6): see the identical
+        // fix's comment earlier in this file (first STOP sequence) -- SDA
+        // must be driven low BEFORE SCL rises, not after.
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP
         #(2*T);
         check(!busy, "busy cleared after STOP following NACK");

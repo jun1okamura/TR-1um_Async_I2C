@@ -164,6 +164,22 @@ module DFFR (input CK, D, RSTB, output reg Q, output QB, input VDD, input GND);
         else       Q <= D;
 endmodule
 
+// Async-reset D flip-flop, RSTB active-LOW, custom cell (see
+// ~/.xschem/simulations/DFFRB.spice / design_notes.md #107 系 for the
+// real transistor-level topology: QB is the master/slave latch's own
+// output, forced to 1 asynchronously when RSTB=0; Q is a further static
+// inversion of QB, so Q<=0 on reset and Q<=D on posedge CK, functionally
+// identical to DFFR above -- this stub only exists because the gate-level
+// netlist (i2c_slave_async_net_v9*.v) instantiates DFFRB by name and
+// stdcell_behavioral_stubs.v had never been updated to include it,
+// causing iverilog's "Unknown module type: DFFRB" (2026-09-02).
+module DFFRB (input CK, D, RSTB, output reg Q, output QB, input VDD, input GND);
+    assign #1 QB = ~Q;
+    always @(posedge CK or negedge RSTB)
+        if (!RSTB) Q <= 1'b0;
+        else       Q <= D;
+endmodule
+
 // Reset-less D flip-flop (no async reset pin at all -- see design_notes.md
 // section 39.1 / DFFR-minimization discussion). Same CK/D/Q/QB pinout as
 // DFFR minus RSTB.

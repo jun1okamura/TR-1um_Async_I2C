@@ -62,7 +62,21 @@ module i2c_slave_async_net_tb;
         .rw         (rw),
         .busy       (busy)
     );
-    assign sda = s_oe ? 1'b0 : 1'bz;
+    // 2026-09-02 fix: sda_oe is active-low (0 = drive low, 1 = release) as
+    // of RTL v3 (section 77.3, matching the real HIZ13 pad convention) --
+    // this file still had the pre-v3 (active-high) sense, which was never
+    // updated when the RTL's sda_oe polarity flipped. Consequence: sda_oe_r
+    // resets to 0 -> sda_oe=~0=1 -> under the OLD (wrong) sense here that
+    // read as "drive low", so the slave held SDA low from just after reset,
+    // masking the real START condition's 1->0 transition and preventing
+    // start_pulse from ever firing (busy/addr_ok/rw_bit then never update,
+    // matching the observed 6/14 failure signature). i2c_slave_async_tb.v
+    // (RTL-level) already had the correct sense; only this netlist-level
+    // copy was stale. The real DUT/netlist was never at fault -- confirmed
+    // separately via SPICE (tr_1um_i2c_slave_async_sim_ready.spice) and
+    // IRSIM (irsim_tb.cmd, 14/14 PASS), both of which use the correct
+    // electrical/switch-level sense natively.
+    assign sda = s_oe ? 1'bz : 1'b0;
 
     task check(input cond, input [511:0] msg);
         begin
@@ -171,7 +185,14 @@ module i2c_slave_async_net_tb;
         #T;
         check(rx_data == 8'hA5, "rx_data == 0xA5");
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6, same fix applied
+        // to i2c_slave_async_tb.v): drive SDA low BEFORE raising SCL, not
+        // after -- the old ordering briefly changed SDA while SCL was
+        // already high (a protocol violation except for genuine START/
+        // STOP), which also breaks the new transparent-latch sda_d
+        // detector (section 108.5) once this netlist is resynthesized from
+        // the v6 RTL.
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP (SDA 0->1 while SCL=1)
         #(2*T);
         check(!busy, "busy cleared after STOP");
@@ -193,7 +214,9 @@ module i2c_slave_async_net_tb;
         check(rd_byte == 8'h3C, "read byte == 0x3C");
         send_ack(1'b1);                 // master NACKs -> ends read
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6): see the identical
+        // fix's comment earlier in this file (first STOP sequence).
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP
         #(2*T);
         check(!busy, "busy cleared after final STOP");
@@ -208,7 +231,9 @@ module i2c_slave_async_net_tb;
         check(ack_bit == 1'b1, "unmatched address -> NACK (no slave ack)");
         check(!addr_match, "addr_match not asserted for foreign address");
 
-        scl = 1; #2 m_oe = 1; #(T-2);
+        // 2026-09-02 fix (design_notes.md section 108.6): see the identical
+        // fix's comment earlier in this file (first STOP sequence).
+        m_oe = 1; #2 scl = 1; #(T-2);
         m_oe = 0;                       // STOP
         #(2*T);
         check(!busy, "busy cleared after STOP following NACK");

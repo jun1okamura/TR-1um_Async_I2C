@@ -1,0 +1,183 @@
+* tb_dffrb_isolated.spice -- DFFRB単体スタンドアロン検証テストベンチ
+*
+* 目的 (design_notes.md #107 系の追加調査, 2026-09-02):
+*   フルチップ検証(tb_chip_i2c.spice)で見つかった「bit_cnt_0がedge1->edge2間
+*   で1回だけトグルを欠落させ、その後は正常にトグルする」という非単調な挙動
+*   が、DFFRB単体の内部レース(マスタは正しく保持されているのにスレーブ側
+*   QS/net5がCK立下りの瞬間だけ一時的に反転し、次の立上りエッジで自己修復
+*   する)だけで再現するかどうかを、周辺のRTL/カウンタ論理を一切介さず直接
+*   確認する。
+*
+*   DFFRB 1個だけを D=NOT(Q) のトグルフリップフロップ構成にし、実チップの
+*   bit_cnt_0と同じ「D=NOT(Q)による自己フィードバック」を持たせた上で、
+*   RTLのリセットストレッチ修正(v5)と同じ条件 -- CK=0の状態でRSTBを解除する
+*   -- を与える。これによりマスタ側の不定値レース(既に修正済みの問題)は
+*   最初から起こらないようにし、スレーブ側だけの挙動を切り分けて見る。
+*
+* 使い方:
+*   cd ngspice/TB && ngspice -b tb_dffrb_isolated.spice
+*
+.include '~/Dropbox/91_OpenPDK/TR-1um/libs.tech/spice/models/ip62_models'
+
+* DFFRB本体 -- ~/.xschem/simulations/DFFRB.spice の内容をそのまま埋め込み、
+* 素のM行(MMxx ...)だけをX行(XMxx ...)に変換したローカルコピー。
+* models_IP62_mos_v2.lib の PMOS/NMOS は生の.modelプリミティブではなく
+* ".subckt PMOS d g s b" / ".subckt NMOS d g s b" というサブサーキット
+* ラッパーなので(実プリミティブはPMOS_mst/NMOS_mst)、素のM行では
+* "could not find a valid modelname" になる -- gen_chip_sim_ready_v9.py が
+* フルチップ側で全358個のM行をX行へ機械変換しているのと全く同じ理由・同じ
+* 変換で、電気的内容は一切変更していない(トポロジー・W/L・ノード名は
+* DFFRB.spiceと完全に同一)。DFFRB.spice自体(STDCELLソース)は一切変更して
+* いない -- このテストベンチ内だけのローカルコピー。
+.subckt DFFRB VDD QB D Q RSTB GND CK
+*.PININFO VDD:B GND:B D:I QB:O CK:I Q:O RSTB:I
+XM2 net1 D VDD VDD PMOS w=5.2u l=1u
+XM1 net2 CKP net1 VDD PMOS w=5.2u l=1u
+XM7 net2 CKB net3 GND NMOS w=3.4u l=1u
+XM8 net3 D GND GND NMOS w=3.4u l=1u
+XM10 QM net2 VDD VDD PMOS w=5.2u l=1u
+XM11 QM net2 GND GND NMOS w=3.4u l=1u
+XM13 net4 QM GND GND NMOS w=3.4u l=1u
+XM15 net4 CKP net2 GND NMOS w=3.4u l=1u
+XM22 QB QS VDD VDD PMOS w=10.4u l=1u
+XM3 net4 QM VDD VDD PMOS w=5.2u l=1u
+XM4 net2 CKB net4 VDD PMOS w=5.2u l=1u
+XM5 QS CKP QM GND NMOS w=3.4u l=1u
+XM6 QM CKB QS VDD PMOS w=5.2u l=1u
+XM9 net5 QB GND GND NMOS w=3.4u l=1u
+XM12 net5 QB VDD VDD PMOS w=5.2u l=1u
+XM14 net5 CKB QS GND NMOS w=3.4u l=1u
+XM16 QS CKP net5 VDD PMOS w=5.2u l=1u
+XM17 QB RSTB net6 GND NMOS w=3.4u l=1u
+XM18 Q QB VDD VDD PMOS w=10.4u l=1u
+XM19 Q QB GND GND NMOS w=3.4u l=1u
+XM20 CKB CK VDD VDD PMOS w=10.4u l=1u
+XM21 CKB CK GND GND NMOS w=3.4u l=1u
+XM23 CKP CKB VDD VDD PMOS w=10.4u l=1u
+XM24 CKP CKB GND GND NMOS w=3.4u l=1u
+XM25 net6 QS GND GND NMOS w=3.4u l=1u
+XM26 QB RSTB VDD VDD PMOS w=10.4u l=1u
+.ends
+
+.param vdd_val=5.0
+
+vvdd  VDD 0 DC {vdd_val}
+* NOTE: no "vgnd GND 0 DC 0" here -- ngspice treats the literal net name
+* "GND" as an automatic alias for ground (node 0), so that line would be
+* a 0V source shorting node 0 to itself ("instance vgnd is a shorted
+* VSRC", the fatal error from the previous run). GND already IS node 0.
+
+* ---- RSTB: reset stretch modeling --------------------------------------
+* RSTBは t=0 でLow(reset asserted), t=0.5us でHighへ解除 (release)。
+* CKは t=2us まで0のままなので、v5 RTL修正と同じ「CK=0の状態でRSTB解除」
+* という条件を満たす -- マスタ側の不定値レース(既に対処済み)はここでは
+* 再現しない設計。
+vrstb RSTB 0 PULSE(0 {vdd_val} 0.5u 1n 1n 999u 1000u)
+
+* ---- CK: 実チップのscl_gated相当のクロック ------------------------------
+* t=0では0V(reset解除がCK=0の間に起こることを保証)。最初の立上りは
+* t=2us -- reset解除(0.5us)から十分マージンを取っている。
+* 周期10us (SCL=100kHz相当), duty 50% (High5us/Low5us), 立上り/立下り
+* 1ns (実チップのバッファ出力並みに速い遷移)。
+vck   CK 0 PULSE(0 {vdd_val} 2u 1n 1n 4.999u 10u)
+
+* ---- D = NOT(Q) : bit_cnt_0と同じトグルフリップフロップ構成 -------------
+* 理想的なインバータをbehavioralソースで実装(DFFRB自体の内部レースだけを
+* 見たいので、外部インバータの遅延・レースは意図的に排除する)。
+bdinv D 0 V='5.0 - V(Q)'
+
+* ---- DFFRB本体 (.subckt DFFRB VDD QB D Q RSTB GND CK) -------------------
+x1 VDD QB D Q RSTB GND CK DFFRB
+
+.tran 1n 65u
+
+* ---- edge-by-edge crossing times (standalone WHEN measures -- no
+* inter-measure parameter chaining, so these work fine in batch mode).
+* NOTE: .measure is a netlist-level directive, NOT a .control interactive
+* command (that's `meas`, used earlier interactively) -- it must appear
+* HERE, before .control, exactly like tb_chip_i2c.spice does. Putting it
+* inside .control (as an earlier version of this file mistakenly did)
+* produces "no such command available in ngspice" for every line. ----
+.measure tran ck_x1  WHEN v(CK)=2.5 RISE=1   $ edge1 (first real rising edge)
+.measure tran ck_x2  WHEN v(CK)=2.5 RISE=2   $ edge2
+.measure tran ck_x3  WHEN v(CK)=2.5 RISE=3   $ edge3
+.measure tran ck_x4  WHEN v(CK)=2.5 RISE=4   $ edge4
+.measure tran ck_x5  WHEN v(CK)=2.5 RISE=5   $ edge5
+.measure tran ck_x6  WHEN v(CK)=2.5 RISE=6   $ edge6
+
+.measure tran q_x1 WHEN v(Q)=2.5 CROSS=1
+.measure tran q_x2 WHEN v(Q)=2.5 CROSS=2
+.measure tran q_x3 WHEN v(Q)=2.5 CROSS=3
+.measure tran q_x4 WHEN v(Q)=2.5 CROSS=4
+.measure tran q_x5 WHEN v(Q)=2.5 CROSS=5
+.measure tran q_x6 WHEN v(Q)=2.5 CROSS=6
+
+.measure tran qs_x1 WHEN v(x1.qs)=2.5 CROSS=1
+.measure tran qs_x2 WHEN v(x1.qs)=2.5 CROSS=2
+.measure tran qs_x3 WHEN v(x1.qs)=2.5 CROSS=3
+.measure tran qs_x4 WHEN v(x1.qs)=2.5 CROSS=4
+
+.measure tran qm_x1 WHEN v(x1.qm)=2.5 CROSS=1
+.measure tran qm_x2 WHEN v(x1.qm)=2.5 CROSS=2
+
+* ---- point samples right after each real edge (2us margin, same
+* convention as the chip TB's edge measures) ----
+.measure tran q_edge1  FIND v(Q)  AT=4u    $ Q, 2us after edge1(2u)
+.measure tran q_edge2  FIND v(Q)  AT=14u   $ Q, 2us after edge2(12u)
+.measure tran q_edge3  FIND v(Q)  AT=24u   $ Q, 2us after edge3(22u)
+.measure tran q_edge4  FIND v(Q)  AT=34u   $ Q, 2us after edge4(32u)
+.measure tran q_edge5  FIND v(Q)  AT=44u   $ Q, 2us after edge5(42u)
+.measure tran q_edge6  FIND v(Q)  AT=54u   $ Q, 2us after edge6(52u)
+
+* ---- fine sweep of the CK-low window right after edge1 (7us-12us,
+* where the chip-level bit_cnt_0 race was seen) -- Q, D, QM/net2
+* (master), QS/net5 (slave), QB ----
+.measure tran f_q_t0  FIND v(Q)      AT=7.1u
+.measure tran f_q_t1  FIND v(Q)      AT=7.5u
+.measure tran f_q_t2  FIND v(Q)      AT=8u
+.measure tran f_q_t3  FIND v(Q)      AT=9u
+.measure tran f_q_t4  FIND v(Q)      AT=10u
+.measure tran f_q_t5  FIND v(Q)      AT=11u
+.measure tran f_q_t6  FIND v(Q)      AT=11.9u
+
+.measure tran f_qs_t0  FIND v(x1.qs)   AT=7.1u
+.measure tran f_qs_t1  FIND v(x1.qs)   AT=7.5u
+.measure tran f_qs_t2  FIND v(x1.qs)   AT=8u
+.measure tran f_qs_t3  FIND v(x1.qs)   AT=9u
+.measure tran f_qs_t4  FIND v(x1.qs)   AT=10u
+.measure tran f_qs_t5  FIND v(x1.qs)   AT=11u
+.measure tran f_qs_t6  FIND v(x1.qs)   AT=11.9u
+
+.measure tran f_qm_t0  FIND v(x1.qm)   AT=7.1u
+.measure tran f_qm_t1  FIND v(x1.qm)   AT=7.5u
+.measure tran f_qm_t2  FIND v(x1.qm)   AT=8u
+.measure tran f_qm_t3  FIND v(x1.qm)   AT=9u
+.measure tran f_qm_t4  FIND v(x1.qm)   AT=10u
+.measure tran f_qm_t5  FIND v(x1.qm)   AT=11u
+.measure tran f_qm_t6  FIND v(x1.qm)   AT=11.9u
+
+.control
+  save all
+  run
+
+  print ck_x1 ck_x2 ck_x3 ck_x4 ck_x5 ck_x6
+  print q_x1 q_x2 q_x3 q_x4 q_x5 q_x6
+  print qs_x1 qs_x2 qs_x3 qs_x4
+  print qm_x1 qm_x2
+  print q_edge1 q_edge2 q_edge3 q_edge4 q_edge5 q_edge6
+  print f_q_t0 f_q_t1 f_q_t2 f_q_t3 f_q_t4 f_q_t5 f_q_t6
+  print f_qs_t0 f_qs_t1 f_qs_t2 f_qs_t3 f_qs_t4 f_qs_t5 f_qs_t6
+  print f_qm_t0 f_qm_t1 f_qm_t2 f_qm_t3 f_qm_t4 f_qm_t5 f_qm_t6
+
+  set filetype=ascii
+  write tb_dffrb_isolated.raw v(CK) v(RSTB) v(D) v(Q) v(QB) v(x1.qm) v(x1.net2) v(x1.qs) v(x1.net5)
+
+  * interactive viewing: `ngspice tb_dffrb_isolated.spice` (no -b), or
+  * `ngspice -r tb_dffrb_isolated.raw` then re-issue these plot lines.
+  plot v(CK) v(Q) xlimit 0 65u
+  plot v(x1.qm) v(x1.net2) xlimit 0 65u
+  plot v(x1.qs) v(x1.net5) xlimit 0 65u
+  plot v(CK) v(x1.qm) v(x1.qs) v(Q) xlimit 6u 13u
+.endc
+
+.end

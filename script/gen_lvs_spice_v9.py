@@ -73,13 +73,29 @@ body directly from `simulations/<TYPE>.spice` (verbatim, transistor-
 level, byte-for-byte) rather than re-deriving/assuming content.
 """
 import json
+import os
 import re
+from pathlib import Path
 
-NET_PATH = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/src/i2c_slave_async_net_v9_rowbuf.v"
-OUT_PATH_PROJECT = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/schematic/i2c_slave_async_nrow_fm_v9.spice"
-OUT_PATH_SIM = "/sessions/dreamy-ecstatic-heisenberg/mnt/simulations/i2c_slave_async_nrow_fm.spice"
-LIB_DIR = "/sessions/dreamy-ecstatic-heisenberg/mnt/simulations"
-PLACEMENT_JSON = "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/LEF/placement_nrow_fm_v9.json"
+# 2026-09-02: made portable (was hardcoded to a Claude-sandbox absolute
+# path, broke the first time this chain was run locally on the user's
+# own Mac -- see lef_parser.py's LEF_PATH for the same fix). NET_PATH/
+# OUT_PATH_PROJECT/PLACEMENT_JSON are relative to this repo; OUT_PATH_SIM/
+# LIB_DIR are relative to the user's home (~/.xschem/simulations is
+# xschem's fixed netlist-export location, not inside this repo at all).
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+# XSCHEM_SIM_DIR env var override: Claude's own sandbox mounts
+# ~/.xschem/simulations at a path that isn't simply Path.home()/".xschem"
+# /"simulations" (it's bind-mounted to .../mnt/simulations directly,
+# flattening the ~/.xschem/ prefix) -- Path.home() is still the correct,
+# portable default for the user's real Mac.
+_XSCHEM_SIM_DIR = Path(os.environ.get("XSCHEM_SIM_DIR", str(Path.home() / ".xschem" / "simulations")))
+
+NET_PATH = str(_REPO_ROOT / "src" / "i2c_slave_async_net_v9_rowbuf.v")
+OUT_PATH_PROJECT = str(_REPO_ROOT / "schematic" / "i2c_slave_async_nrow_fm_v9.spice")
+OUT_PATH_SIM = str(_XSCHEM_SIM_DIR / "i2c_slave_async_nrow_fm.spice")
+LIB_DIR = str(_XSCHEM_SIM_DIR)
+PLACEMENT_JSON = str(_REPO_ROOT / "LEF" / "placement_nrow_fm_v9.json")
 
 # FILL2/FILL3 decap devices (design_notes.md 77.47): the user's real
 # KLayout LVS run flagged exactly 2 net mismatches, VDD and GND, traced
@@ -190,6 +206,81 @@ for _i in range(8):
 SCALAR_ALIAS = {"rw_bit": "rw", "addr_ok": "addr_match"}
 BUS_ALIAS_PREFIX = {"rx_data_r": "rx_data"}
 
+# 2026-09-02: general "assign A = B;" scalar-alias resolver (union-find,
+# same algorithm as netlist_parser.py's _build_alias_resolver -- kept as
+# a separate copy here since this script intentionally doesn't share
+# netlist_parser.py's instance-parsing, per its own module docstring).
+# Added after v5's rst_scl_domain-stretch fix introduced "assign
+# scl_gated = _156_;" (a real, load-bearing alias -- scl_gated is the
+# literal net every DFFRB's .CK() now names, while _156_ is Yosys's own
+# name for the AND gate that actually drives it): the OLD hardcoded-3
+# SCALAR_ALIAS/BUS_ALIAS_PREFIX dict silently dropped this connection
+# entirely (scl_gated ended up undriven in the emitted SPICE, no error,
+# no warning -- confirmed by a real ngspice run's `.measure` results all
+# reading ~0V for a scl_gated-clocked flop and by direct grep of the
+# generated file showing zero drivers for that net). The old dict's
+# comment "the only 3 non-bookkeeping assigns... confirmed via direct
+# grep" was a one-time manual audit of the netlist AS IT EXISTED AT THE
+# TIME -- it silently goes stale the moment new RTL introduces a new
+# alias, exactly netlist_parser.py's own documented alias-resolution
+# rationale. This general resolver is now the primary mechanism; the
+# hardcoded dict is kept ONLY to force the human-readable port name
+# (rw/addr_match/rx_data) to win as canonical instead of whatever
+# internal _NNN_ name the union-find happens to pick.
+_alias_resolve = None  # set by load_netlist_text() / main() before first resolve_net() call
+
+
+def _build_alias_resolver(text, prefer=frozenset()):
+    """Union-find alias resolver, biased so a name in `prefer` (top-level
+    port names) always wins as the canonical/root representative of its
+    group, regardless of which side of the "assign LHS = RHS;" it
+    appeared on. Without this bias the plain union-find (parent[ra]=rb,
+    i.e. whichever side's root was found SECOND wins) can silently
+    rename a PORT itself away to some internal Yosys _NNN_ name -- this
+    actually happened for "sda_oe" after the v5 resynthesis: the emitted
+    SPICE subckt declared "sda_oe" as a port but nothing internally
+    connected to it (confirmed by direct grep: the literal string
+    "sda_oe" appeared only in the .subckt/PININFO lines, zero instance
+    pins), because the general resolver picked some other net as
+    canonical for that alias group and rewrote every real connection to
+    use THAT name instead -- leaving the port floating and, downstream,
+    the DUT's real sda_oe permanently undriven/disconnected from the pad
+    ring (see design_notes.md: this produced the "SDA never reaches a
+    real HIGH level" symptom, unrelated to the scl_gated fanout fix)."""
+    parent = {}
+
+    def find(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return
+        a_pref, b_pref = ra in prefer, rb in prefer
+        if a_pref and not b_pref:
+            parent[rb] = ra
+        elif b_pref and not a_pref:
+            parent[ra] = rb
+        else:
+            # neither (or both) preferred -- fall back to the original
+            # arbitrary direction; if both are preferred port names this
+            # would be a genuine problem (two ports aliased together),
+            # but that hasn't occurred in this design.
+            parent[ra] = rb
+
+    for m in re.finditer(r"assign\s+(.+?)\s*=\s*(.+?);", text):
+        lhs, rhs = m.group(1).strip(), m.group(2).strip()
+        if "{" in lhs or "{" in rhs or "'" in rhs:
+            continue  # bus-concat / literal assigns -- not simple aliases
+        if re.match(r"^\w+(\[\d+\])?$", lhs) and re.match(r"^\w+(\[\d+\])?$", rhs):
+            union(lhs, rhs)
+
+    return find
+
 
 def resolve_net(net):
     net = net.strip()
@@ -198,9 +289,13 @@ def resolve_net(net):
         base, idx = m.group(1), m.group(2)
         if base in BUS_ALIAS_PREFIX:
             base = BUS_ALIAS_PREFIX[base]
+        elif _alias_resolve is not None:
+            base = _alias_resolve(base)
         return base + idx
     if net in SCALAR_ALIAS:
         return SCALAR_ALIAS[net]
+    if _alias_resolve is not None:
+        return _alias_resolve(net)
     return net
 
 
@@ -322,7 +417,9 @@ def build_fill_decap_lines(counts):
 
 
 def main():
+    global _alias_resolve
     text = open(NET_PATH).read()
+    _alias_resolve = _build_alias_resolver(text, prefer=set(build_top_ports()))
     instances = parse_instances(text)
 
     unknown_types = sorted({t for t, _, _ in instances if t not in SPICE_PIN_ORDER})

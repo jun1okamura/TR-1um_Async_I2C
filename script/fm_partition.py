@@ -27,8 +27,12 @@ escape). Repeat passes until a pass finds no improving prefix.
 """
 import sys
 from collections import defaultdict
+from pathlib import Path
 
-sys.path.insert(0, "/sessions/dreamy-ecstatic-heisenberg/mnt/TR-1um_Async_I2C/script")
+# 2026-09-02: made portable (was a hardcoded Claude-sandbox absolute
+# path, broke the first time this chain was run locally on the user's
+# own Mac -- see lef_parser.py's LEF_PATH for the same fix).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lef_parser import parse_lef  # noqa: E402
 from netlist_parser import parse_netlist  # noqa: E402
 

@@ -352,53 +352,62 @@ d NC_CORE_rw NC_CORE_addr_match
 | ADDR+W = 0xA0
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -411,53 +420,62 @@ d NC_CORE_addr_match NC_CORE_rw
 | DATA byte = 0xA5
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -481,6 +499,7 @@ d NC_OUT11 NC_OUT12 NC_OUT13 NC_OUT14 NC_OUT6 NC_OUT5 NC_OUT4 NC_OUT3
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
 l P2
+s 300
 h P1
 s 8000
 x P2
@@ -658,53 +677,62 @@ d NC_CORE_rw NC_CORE_addr_match
 | ADDR+R = 0xA1
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -716,6 +744,7 @@ l P1
 d NC_CORE_rw
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -725,6 +754,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -734,6 +764,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -743,6 +774,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -752,6 +784,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -761,6 +794,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -770,6 +804,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -779,6 +814,7 @@ d P2
 s
 s
 l P1
+s 300
 x P2
 s 500
 h P1
@@ -790,11 +826,13 @@ s
 | SDA samples logged above)
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 l P1
+s 300
 x P2
 | STOP's edge-detect path routes through a real intentional delay
 | element (design_notes.md 76.10/76.13/76.20/76.21). A short
@@ -809,6 +847,7 @@ x P2
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
 l P2
+s 300
 h P1
 s 8000
 x P2

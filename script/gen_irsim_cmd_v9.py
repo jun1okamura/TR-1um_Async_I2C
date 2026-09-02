@@ -200,6 +200,29 @@ SETTLE_NS = 50
 # the bus's capacitance, not of any specific net name -- unchanged here.
 SDA_RELEASE_SETTLE_NS = 500
 
+# 2026-09-02 root-cause fix (design_notes.md #107 系): margin inserted
+# AFTER forcing SCL low (or high), BEFORE changing SDA, so the two force
+# commands are never queued for the same simulated instant. Before this
+# fix, send_bit()/read_ack()/recv_bit()/send_ack_from_master() all did
+# `self.l(SCL); self.l(SDA)` (or self.x(SDA)) back-to-back with no `s()`
+# between them -- i.e. exactly the same zero-margin, same-instant
+# SCL/SDA stimulus pattern that design_notes.md section 19 already
+# identified and fixed (with a 2ns stagger) in the Verilog netlist
+# testbenches (i2c_slave_async_tb.v / i2c_slave_async_net_tb.v), and
+# that ngspice/TB/tb_start_pulse_isolated.spice + gen_chip_tb_v9.py's
+# T_HOLD fix independently re-confirmed at the real SPICE transistor
+# level (start_pulse = scl & sda_d & ~sda_in has essentially zero
+# margin at dt=0; real gate/buffer skew pushes it negative and glitches
+# rst_scl_domain/RSTB). That 2ns Verilog-level margin was calibrated
+# against a ~1ns-per-gate unit-delay model and is NOT necessarily large
+# enough at the real transistor-delay scale confirmed in SPICE, so this
+# IRSIM stimulus uses the same 300ns value chosen for the SPICE
+# testbench (matching NXP UM10204's own historical guidance: "a device
+# must internally provide a hold time of at least 300 ns...to bridge
+# the undefined region of the falling edge of SCL"). This IRSIM
+# generator had never been updated with either margin.
+SDA_HOLD_NS = 300
+
 SLAVE_ADDR = 0x50
 
 
@@ -508,6 +531,7 @@ class CmdGen:
     def send_bit(self, bitval):
         self.s()
         self.l(SCL)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment
         if bitval:
             self.x(SDA)
         else:
@@ -522,6 +546,7 @@ class CmdGen:
 
     def read_ack(self, label):
         self.l(SCL)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment
         self.x(SDA)
         self.s(SDA_RELEASE_SETTLE_NS)
         self.h(SCL)
@@ -534,6 +559,7 @@ class CmdGen:
     def recv_bit(self, idx):
         self.s()
         self.l(SCL)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment
         self.x(SDA)
         self.s(SDA_RELEASE_SETTLE_NS)
         self.h(SCL)
@@ -545,6 +571,7 @@ class CmdGen:
     def send_ack_from_master(self, ack):
         self.s()
         self.l(SCL)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment
         if ack == 0:
             self.l(SDA)
         else:
@@ -553,6 +580,7 @@ class CmdGen:
         self.h(SCL)
         self.s(2 * T)
         self.l(SCL)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment
         self.x(SDA)
 
     def stop(self, label, settle_before_ns=500, sda_low_hold_ns=8000):
@@ -569,6 +597,9 @@ class CmdGen:
         self.note("run that found this on the OLD .sim's same DEL1-based topology).")
         self.s(settle_before_ns)
         self.l(SDA)
+        self.s(SDA_HOLD_NS)   # 2026-09-02: see SDA_HOLD_NS's comment --
+                               # SDA must be settled low BEFORE SCL rises,
+                               # not simultaneously with it.
         self.h(SCL)
         self.s(sda_low_hold_ns)
         self.x(SDA)          # SDA 0->1 while SCL=1 : STOP

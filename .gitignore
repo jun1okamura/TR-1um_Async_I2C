@@ -15,3 +15,18 @@ src/sim
 # regenerated locally on every run and not worth tracking. Scoped to
 # ring_osc/TB/ only so the existing irsim/*.raw precedent is unaffected.
 ring_osc/TB/*.raw
+
+# 2026-09-02: same reasoning applied to ngspice/TB/ -- rx_capture_trace.txt
+# (24MB, a `wrdata` full-waveform dump) and spice.log (2.3MB) are large,
+# fully regeneratable simulation byproducts, not source.
+ngspice/TB/*.raw
+ngspice/TB/rx_capture_trace.txt
+ngspice/TB/spice.log
+
+# iverilog/vvp compiled outputs and their build logs are binaries, not
+# source -- regenerate with `iverilog -o <name> ...`.
+src/sim_dbg9
+src/sim_net
+src/sim_net9
+src/sim_rtl
+src/Verilog.log

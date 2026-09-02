@@ -1,0 +1,361 @@
+* tb_start_pulse_isolated.spice -- start_pulse検出回路 単体レース確認
+*
+* 目的 (design_notes.md #107 系, 2026-09-02):
+*   フルチップ検証で見つかった bit_cnt_0/bit_cnt_1 の一時的なグリッチが、
+*   実は DFFRB 自体のレースではなく、i2c_slave_async.v の START 条件検出
+*   回路 (完全な組み合わせ回路、レジスタなし):
+*
+*       wire sda_d;
+*       DEL1 u_del_sda (.A(sda_in), .Y(sda_d), ...);
+*       wire start_pulse = scl &  sda_d & ~sda_in;   // SDA 1->0 while SCL=1
+*
+*   に起因するという仮説を、周辺のRTL/カウンタ論理を一切介さず、この検出
+*   回路だけを取り出して直接確認する。
+*
+*   ゲートレベルネットリスト (tr_1um_i2c_slave_async_sim_ready.spice) から
+*   実際に合成された素子を逆引きした対応関係 (電気的内容そのまま、ローカル
+*   コピーのみ、STDCELL/RTLは一切変更していない):
+*     xu_bufth_scl        : SCL_PAD  -> scl_buf        (BUFTH)
+*     xu_buf_scl_row2      : scl_buf  -> scl_row2        (BUF_X1)
+*     xu_bufth_sda_in      : SDA_PAD  -> sda_in_buf      (BUFTH)
+*     xu_buf_sda_in_row2   : sda_in_buf -> sda_in_row2   (BUF_X1)
+*     xu_del_sda           : sda_in_row2 -> sda_d        (DEL1)
+*     x_384_  (NAND2)      : n083 = NAND(scl_row2, sda_d)
+*     x_385_  (NOR2)       : sp   = NOR(sda_in_row2, n083)   = start_pulse (_167_)
+*     x_382_  (INV_X1)     : n081 = NOT(rst_n)
+*     x_386_  (OR2)        : raw  = OR(n081, sp)              = rst_scl_domain_raw (_143_)
+*     x_470_  (NOR2)       : clr  = NOR(n081, scl_row2)        = rst_stretch_clr (_144_)
+*     xu_rst_stretch_q/qn  : held/qn_stretch = クロス結合NOR2ラッチ (SET=raw, CLR=clr)
+*     x_387_  (NOR2)       : rstb = NOR(held, raw)             = RSTB (_016_)
+*
+*   rst_n はテスト対象外なので DC High(非活性)に固定し、start_pulse の
+*   純粋な組み合わせレースだけを見る。
+*
+* FIX TRIAL (2026-09-02): scl_row2 -> DEL1 -> scl_d をNAND2(x_384)の入力に
+* 追加し、sda_d(sda_in_row2をDEL1で遅延させたもの)と遅延段数を揃える
+* トライアル修正を検証する。RTL変更前にSPICE単体でこの対策の効果を
+* 確認するのが目的 (STDCELL/RTL本体は一切変更していない、あくまで
+* このテストベンチ内だけの仮挿入)。
+*
+* NOTE (2026-09-02, 2回目の修正): この環境のngspiceは ".step param" 未実装
+* ("unimplemented dot command '.step'") のため、dtスイープは1本の.tran内に
+* dt値ごとの独立な回路コピーを並べる方式(お互い干渉しない別ノード名)に
+* 変更した。1回の実行で全dt値を同時に評価できる。
+*
+* 駆動方法: 各コピーkについて、SCL_PAD_kは常にT0でLowへ、SDA_PAD_kは
+* T0+dt_kでLowへ落ちる。dt>0は「SCLをLowにした後でSDAを次のビット値に
+* 変える」という、RTLのゼロ遅延モデルでは安全なはずの通常のI2Cタイミング。
+*
+* 使い方:
+*   cd ngspice/TB && ngspice -b tb_start_pulse_isolated.spice
+*
+.include '~/Dropbox/91_OpenPDK/TR-1um/libs.tech/spice/models/ip62_models'
+
+* ---- 素子ローカルコピー (tr_1um_i2c_slave_async_sim_ready.spice より
+* 電気的内容を一切変更せず抜粋。既にX行/PMOS,NMOSサブサーキット形式) ----
+.subckt DEL1 VDD A Y GND
+XM9 net3 A VDD VDD PMOS w=10.2u l=1u
+XM2 Y net1 VDD VDD PMOS w=10.2u l=1u m=2
+XM8 net3 A GND GND NMOS w=3.4u l=1u
+XM1 Y net1 GND GND NMOS w=3.4u l=1u m=2
+XM4 net2 net3 VDD VDD PMOS w=10.2u l=2u
+XM6 net1 net2 VDD VDD PMOS w=10.2u l=2u
+XM7 net2 net3 GND GND NMOS w=3.4u l=2u
+XM3 net1 net2 GND GND NMOS w=3.4u l=2u
+.ends
+
+.subckt INV_X1 VDD A Y GND
+XM7 Y A VDD VDD PMOS w=10.2u l=1u
+XM2 Y A GND GND NMOS w=3.4u l=1u
+.ends
+
+.subckt NAND2 VDD Y A B GND
+XM7 Y A VDD VDD PMOS w=10.2u l=1u
+XM1 Y B VDD VDD PMOS w=10.2u l=1u
+XM2 Y B net1 GND NMOS w=3.4u l=1u
+XM3 net1 A GND GND NMOS w=3.4u l=1u
+.ends
+
+.subckt NOR2 VDD Y A B GND
+XM7 net1 A VDD VDD PMOS w=10.2u l=1u
+XM1 Y B net1 VDD PMOS w=10.2u l=1u
+XM2 Y A GND GND NMOS w=3.4u l=1u
+XM3 Y B GND GND NMOS w=3.4u l=1u
+.ends
+
+.subckt OR2 VDD Y A B GND
+XM7 net2 B VDD VDD PMOS w=10.2u l=1u
+XM2 net1 A net2 VDD PMOS w=10.2u l=1u
+XM4 Y net1 VDD VDD PMOS w=10.2u l=1u
+XM1 net1 B GND GND NMOS w=3.4u l=1u
+XM3 net1 A GND GND NMOS w=3.4u l=1u
+XM5 Y net1 GND GND NMOS w=3.4u l=1u
+.ends
+
+.subckt BUFTH VDD A Y GND
+XM9 MID A net1 VDD PMOS w=5.1u l=1u
+XM2 Y MID VDD VDD PMOS w=10.2u l=1u
+XM8 MID A net2 GND NMOS w=3.4u l=1u
+XM1 Y MID GND GND NMOS w=3.4u l=1u
+XM6 GND MID net1 VDD PMOS w=10.2u l=1u
+XM3 VDD MID net2 GND NMOS w=6.8u l=1u
+XM5 net2 A GND GND NMOS w=3.4u l=1u
+XM4 net1 A VDD VDD PMOS w=5.1u l=1u
+.ends
+
+.subckt BUF_X1 VDD A Y GND
+XM7 net1 A VDD VDD PMOS w=10.2u l=1u
+XM1 Y net1 VDD VDD PMOS w=10.2u l=1u
+XM3 net1 A GND GND NMOS w=3.4u l=1u
+XM2 Y net1 GND GND NMOS w=3.4u l=1u
+.ends
+
+* ---- 1個のdt値分の検出回路チェーンをまとめたサブサーキット ----
+* ポート: SCL_PAD SDA_PAD RST_N VDD GND sp raw held rstb (観測用に外出し)
+.subckt SPDET SCL_PAD SDA_PAD RST_N VDD GND sp raw held rstb
+xu_bufth_scl      VDD SCL_PAD scl_buf     GND BUFTH
+xu_buf_scl_row2   VDD scl_buf scl_row2    GND BUF_X1
+xu_bufth_sda      VDD SDA_PAD sda_in_buf  GND BUFTH
+xu_buf_sda_row2   VDD sda_in_buf sda_in_row2 GND BUF_X1
+xu_del_sda VDD sda_in_row2 sda_d GND DEL1
+* ---- FIX TRIAL (2026-09-02) 結果: scl_row2側にDEL1を1段追加してNAND2への
+* 入力をscl_dに置き換える対策は、危険窓をdt=0付近からdt=+5ns付近へシフト/
+* 拡大させるだけでレースを解消しないことがSPICEで確認された(数式でも
+* 「scl側をどう遅延させても境界はdt=0からさらに危険側へ動くだけ」と
+* 説明がつく)。この検出回路自体の修正では根本解決できないため、
+* 2026-09-02 の方針転換によりRTL/検出回路は元のまま(この行の直下)に戻し、
+* 対策はテストベンチ側の出力ホールドマージン(T_HOLD=300ns,
+* I2C UM10204のtHD;DAT/"bridge the undefined region"ガイダンスに準拠)に
+* 変更した (script/gen_chip_tb_v9.py の master_bit/release_bit/
+* master_ack_bit/stop_condition 参照)。
+x_384      VDD n083 scl_row2 sda_d GND NAND2
+x_385      VDD sp   sda_in_row2 n083 GND NOR2
+x_382 VDD RST_N n081 GND INV_X1
+x_386 VDD raw n081 sp GND OR2
+x_470 VDD clr n081 scl_row2 GND NOR2
+x_stretch_q  VDD held clr qn_stretch GND NOR2
+x_stretch_qn VDD qn_stretch raw held GND NOR2
+x_387 VDD rstb held raw GND NOR2
+.ends
+
+.param vdd_val=5.0
+.param T0=10u
+
+vvdd    VDD 0 DC {vdd_val}
+vrstn   RST_N 0 DC {vdd_val}
+
+* ---- copy 1: dt=-100n (SDA falls -100n relative to SCL's fall at T0) ----
+vsclpad_d1 SCL_PAD_d1 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d1 SDA_PAD_d1 0 PULSE({vdd_val} 0 {T0-100n} 1n 1n 999u 2000u)
+xdet_d1 SCL_PAD_d1 SDA_PAD_d1 RST_N VDD GND sp_d1 raw_d1 held_d1 rstb_d1 SPDET
+
+* ---- copy 2: dt=-50n (SDA falls -50n relative to SCL's fall at T0) ----
+vsclpad_d2 SCL_PAD_d2 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d2 SDA_PAD_d2 0 PULSE({vdd_val} 0 {T0-50n} 1n 1n 999u 2000u)
+xdet_d2 SCL_PAD_d2 SDA_PAD_d2 RST_N VDD GND sp_d2 raw_d2 held_d2 rstb_d2 SPDET
+
+* ---- copy 3: dt=-30n (SDA falls -30n relative to SCL's fall at T0) ----
+vsclpad_d3 SCL_PAD_d3 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d3 SDA_PAD_d3 0 PULSE({vdd_val} 0 {T0-30n} 1n 1n 999u 2000u)
+xdet_d3 SCL_PAD_d3 SDA_PAD_d3 RST_N VDD GND sp_d3 raw_d3 held_d3 rstb_d3 SPDET
+
+* ---- copy 4: dt=-20n (SDA falls -20n relative to SCL's fall at T0) ----
+vsclpad_d4 SCL_PAD_d4 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d4 SDA_PAD_d4 0 PULSE({vdd_val} 0 {T0-20n} 1n 1n 999u 2000u)
+xdet_d4 SCL_PAD_d4 SDA_PAD_d4 RST_N VDD GND sp_d4 raw_d4 held_d4 rstb_d4 SPDET
+
+* ---- copy 5: dt=-10n (SDA falls -10n relative to SCL's fall at T0) ----
+vsclpad_d5 SCL_PAD_d5 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d5 SDA_PAD_d5 0 PULSE({vdd_val} 0 {T0-10n} 1n 1n 999u 2000u)
+xdet_d5 SCL_PAD_d5 SDA_PAD_d5 RST_N VDD GND sp_d5 raw_d5 held_d5 rstb_d5 SPDET
+
+* ---- copy 6: dt=-5n (SDA falls -5n relative to SCL's fall at T0) ----
+vsclpad_d6 SCL_PAD_d6 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d6 SDA_PAD_d6 0 PULSE({vdd_val} 0 {T0-5n} 1n 1n 999u 2000u)
+xdet_d6 SCL_PAD_d6 SDA_PAD_d6 RST_N VDD GND sp_d6 raw_d6 held_d6 rstb_d6 SPDET
+
+* ---- copy 7: dt=0 (SDA falls 0 relative to SCL's fall at T0) ----
+vsclpad_d7 SCL_PAD_d7 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d7 SDA_PAD_d7 0 PULSE({vdd_val} 0 {T0+0} 1n 1n 999u 2000u)
+xdet_d7 SCL_PAD_d7 SDA_PAD_d7 RST_N VDD GND sp_d7 raw_d7 held_d7 rstb_d7 SPDET
+
+* ---- copy 8: dt=5n (SDA falls 5n relative to SCL's fall at T0) ----
+vsclpad_d8 SCL_PAD_d8 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d8 SDA_PAD_d8 0 PULSE({vdd_val} 0 {T0+5n} 1n 1n 999u 2000u)
+xdet_d8 SCL_PAD_d8 SDA_PAD_d8 RST_N VDD GND sp_d8 raw_d8 held_d8 rstb_d8 SPDET
+
+* ---- copy 9: dt=10n (SDA falls 10n relative to SCL's fall at T0) ----
+vsclpad_d9 SCL_PAD_d9 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d9 SDA_PAD_d9 0 PULSE({vdd_val} 0 {T0+10n} 1n 1n 999u 2000u)
+xdet_d9 SCL_PAD_d9 SDA_PAD_d9 RST_N VDD GND sp_d9 raw_d9 held_d9 rstb_d9 SPDET
+
+* ---- copy 10: dt=15n (SDA falls 15n relative to SCL's fall at T0) ----
+vsclpad_d10 SCL_PAD_d10 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d10 SDA_PAD_d10 0 PULSE({vdd_val} 0 {T0+15n} 1n 1n 999u 2000u)
+xdet_d10 SCL_PAD_d10 SDA_PAD_d10 RST_N VDD GND sp_d10 raw_d10 held_d10 rstb_d10 SPDET
+
+* ---- copy 11: dt=20n (SDA falls 20n relative to SCL's fall at T0) ----
+vsclpad_d11 SCL_PAD_d11 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d11 SDA_PAD_d11 0 PULSE({vdd_val} 0 {T0+20n} 1n 1n 999u 2000u)
+xdet_d11 SCL_PAD_d11 SDA_PAD_d11 RST_N VDD GND sp_d11 raw_d11 held_d11 rstb_d11 SPDET
+
+* ---- copy 12: dt=25n (SDA falls 25n relative to SCL's fall at T0) ----
+vsclpad_d12 SCL_PAD_d12 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d12 SDA_PAD_d12 0 PULSE({vdd_val} 0 {T0+25n} 1n 1n 999u 2000u)
+xdet_d12 SCL_PAD_d12 SDA_PAD_d12 RST_N VDD GND sp_d12 raw_d12 held_d12 rstb_d12 SPDET
+
+* ---- copy 13: dt=30n (SDA falls 30n relative to SCL's fall at T0) ----
+vsclpad_d13 SCL_PAD_d13 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d13 SDA_PAD_d13 0 PULSE({vdd_val} 0 {T0+30n} 1n 1n 999u 2000u)
+xdet_d13 SCL_PAD_d13 SDA_PAD_d13 RST_N VDD GND sp_d13 raw_d13 held_d13 rstb_d13 SPDET
+
+* ---- copy 14: dt=40n (SDA falls 40n relative to SCL's fall at T0) ----
+vsclpad_d14 SCL_PAD_d14 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d14 SDA_PAD_d14 0 PULSE({vdd_val} 0 {T0+40n} 1n 1n 999u 2000u)
+xdet_d14 SCL_PAD_d14 SDA_PAD_d14 RST_N VDD GND sp_d14 raw_d14 held_d14 rstb_d14 SPDET
+
+* ---- copy 15: dt=50n (SDA falls 50n relative to SCL's fall at T0) ----
+vsclpad_d15 SCL_PAD_d15 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d15 SDA_PAD_d15 0 PULSE({vdd_val} 0 {T0+50n} 1n 1n 999u 2000u)
+xdet_d15 SCL_PAD_d15 SDA_PAD_d15 RST_N VDD GND sp_d15 raw_d15 held_d15 rstb_d15 SPDET
+
+* ---- copy 16: dt=75n (SDA falls 75n relative to SCL's fall at T0) ----
+vsclpad_d16 SCL_PAD_d16 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d16 SDA_PAD_d16 0 PULSE({vdd_val} 0 {T0+75n} 1n 1n 999u 2000u)
+xdet_d16 SCL_PAD_d16 SDA_PAD_d16 RST_N VDD GND sp_d16 raw_d16 held_d16 rstb_d16 SPDET
+
+* ---- copy 17: dt=100n (SDA falls 100n relative to SCL's fall at T0) ----
+vsclpad_d17 SCL_PAD_d17 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d17 SDA_PAD_d17 0 PULSE({vdd_val} 0 {T0+100n} 1n 1n 999u 2000u)
+xdet_d17 SCL_PAD_d17 SDA_PAD_d17 RST_N VDD GND sp_d17 raw_d17 held_d17 rstb_d17 SPDET
+
+* ---- copy 18: dt=150n (SDA falls 150n relative to SCL's fall at T0) ----
+vsclpad_d18 SCL_PAD_d18 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d18 SDA_PAD_d18 0 PULSE({vdd_val} 0 {T0+150n} 1n 1n 999u 2000u)
+xdet_d18 SCL_PAD_d18 SDA_PAD_d18 RST_N VDD GND sp_d18 raw_d18 held_d18 rstb_d18 SPDET
+
+* ---- copy 19: dt=200n (SDA falls 200n relative to SCL's fall at T0) ----
+vsclpad_d19 SCL_PAD_d19 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d19 SDA_PAD_d19 0 PULSE({vdd_val} 0 {T0+200n} 1n 1n 999u 2000u)
+xdet_d19 SCL_PAD_d19 SDA_PAD_d19 RST_N VDD GND sp_d19 raw_d19 held_d19 rstb_d19 SPDET
+
+* ---- copy 20: dt=500n (SDA falls 500n relative to SCL's fall at T0) ----
+vsclpad_d20 SCL_PAD_d20 0 PULSE({vdd_val} 0 {T0} 1n 1n 999u 2000u)
+vsdapad_d20 SDA_PAD_d20 0 PULSE({vdd_val} 0 {T0+500n} 1n 1n 999u 2000u)
+xdet_d20 SCL_PAD_d20 SDA_PAD_d20 RST_N VDD GND sp_d20 raw_d20 held_d20 rstb_d20 SPDET
+
+.nodeset v(held_d1)=0 v(rstb_d1)={vdd_val} v(held_d2)=0 v(rstb_d2)={vdd_val} v(held_d3)=0 v(rstb_d3)={vdd_val} v(held_d4)=0 v(rstb_d4)={vdd_val} v(held_d5)=0 v(rstb_d5)={vdd_val} v(held_d6)=0 v(rstb_d6)={vdd_val} v(held_d7)=0 v(rstb_d7)={vdd_val} v(held_d8)=0 v(rstb_d8)={vdd_val} v(held_d9)=0 v(rstb_d9)={vdd_val} v(held_d10)=0 v(rstb_d10)={vdd_val} v(held_d11)=0 v(rstb_d11)={vdd_val} v(held_d12)=0 v(rstb_d12)={vdd_val} v(held_d13)=0 v(rstb_d13)={vdd_val} v(held_d14)=0 v(rstb_d14)={vdd_val} v(held_d15)=0 v(rstb_d15)={vdd_val} v(held_d16)=0 v(rstb_d16)={vdd_val} v(held_d17)=0 v(rstb_d17)={vdd_val} v(held_d18)=0 v(rstb_d18)={vdd_val} v(held_d19)=0 v(rstb_d19)={vdd_val} v(held_d20)=0 v(rstb_d20)={vdd_val}
+
+.tran 0.1n 12u
+
+.measure tran sp_peak_d1   MAX v(sp_d1)   FROM='T0-500n' TO='T0+1u'   $ dt=-100n
+.measure tran raw_peak_d1  MAX v(raw_d1)  FROM='T0-500n' TO='T0+1u'   $ dt=-100n
+.measure tran held_peak_d1 MAX v(held_d1) FROM='T0-500n' TO='T0+2u'   $ dt=-100n
+.measure tran rstb_min_d1  MIN v(rstb_d1) FROM='T0-500n' TO='T0+2u'   $ dt=-100n
+.measure tran sp_peak_d2   MAX v(sp_d2)   FROM='T0-500n' TO='T0+1u'   $ dt=-50n
+.measure tran raw_peak_d2  MAX v(raw_d2)  FROM='T0-500n' TO='T0+1u'   $ dt=-50n
+.measure tran held_peak_d2 MAX v(held_d2) FROM='T0-500n' TO='T0+2u'   $ dt=-50n
+.measure tran rstb_min_d2  MIN v(rstb_d2) FROM='T0-500n' TO='T0+2u'   $ dt=-50n
+.measure tran sp_peak_d3   MAX v(sp_d3)   FROM='T0-500n' TO='T0+1u'   $ dt=-30n
+.measure tran raw_peak_d3  MAX v(raw_d3)  FROM='T0-500n' TO='T0+1u'   $ dt=-30n
+.measure tran held_peak_d3 MAX v(held_d3) FROM='T0-500n' TO='T0+2u'   $ dt=-30n
+.measure tran rstb_min_d3  MIN v(rstb_d3) FROM='T0-500n' TO='T0+2u'   $ dt=-30n
+.measure tran sp_peak_d4   MAX v(sp_d4)   FROM='T0-500n' TO='T0+1u'   $ dt=-20n
+.measure tran raw_peak_d4  MAX v(raw_d4)  FROM='T0-500n' TO='T0+1u'   $ dt=-20n
+.measure tran held_peak_d4 MAX v(held_d4) FROM='T0-500n' TO='T0+2u'   $ dt=-20n
+.measure tran rstb_min_d4  MIN v(rstb_d4) FROM='T0-500n' TO='T0+2u'   $ dt=-20n
+.measure tran sp_peak_d5   MAX v(sp_d5)   FROM='T0-500n' TO='T0+1u'   $ dt=-10n
+.measure tran raw_peak_d5  MAX v(raw_d5)  FROM='T0-500n' TO='T0+1u'   $ dt=-10n
+.measure tran held_peak_d5 MAX v(held_d5) FROM='T0-500n' TO='T0+2u'   $ dt=-10n
+.measure tran rstb_min_d5  MIN v(rstb_d5) FROM='T0-500n' TO='T0+2u'   $ dt=-10n
+.measure tran sp_peak_d6   MAX v(sp_d6)   FROM='T0-500n' TO='T0+1u'   $ dt=-5n
+.measure tran raw_peak_d6  MAX v(raw_d6)  FROM='T0-500n' TO='T0+1u'   $ dt=-5n
+.measure tran held_peak_d6 MAX v(held_d6) FROM='T0-500n' TO='T0+2u'   $ dt=-5n
+.measure tran rstb_min_d6  MIN v(rstb_d6) FROM='T0-500n' TO='T0+2u'   $ dt=-5n
+.measure tran sp_peak_d7   MAX v(sp_d7)   FROM='T0-500n' TO='T0+1u'   $ dt=0
+.measure tran raw_peak_d7  MAX v(raw_d7)  FROM='T0-500n' TO='T0+1u'   $ dt=0
+.measure tran held_peak_d7 MAX v(held_d7) FROM='T0-500n' TO='T0+2u'   $ dt=0
+.measure tran rstb_min_d7  MIN v(rstb_d7) FROM='T0-500n' TO='T0+2u'   $ dt=0
+.measure tran sp_peak_d8   MAX v(sp_d8)   FROM='T0-500n' TO='T0+1u'   $ dt=5n
+.measure tran raw_peak_d8  MAX v(raw_d8)  FROM='T0-500n' TO='T0+1u'   $ dt=5n
+.measure tran held_peak_d8 MAX v(held_d8) FROM='T0-500n' TO='T0+2u'   $ dt=5n
+.measure tran rstb_min_d8  MIN v(rstb_d8) FROM='T0-500n' TO='T0+2u'   $ dt=5n
+.measure tran sp_peak_d9   MAX v(sp_d9)   FROM='T0-500n' TO='T0+1u'   $ dt=10n
+.measure tran raw_peak_d9  MAX v(raw_d9)  FROM='T0-500n' TO='T0+1u'   $ dt=10n
+.measure tran held_peak_d9 MAX v(held_d9) FROM='T0-500n' TO='T0+2u'   $ dt=10n
+.measure tran rstb_min_d9  MIN v(rstb_d9) FROM='T0-500n' TO='T0+2u'   $ dt=10n
+.measure tran sp_peak_d10   MAX v(sp_d10)   FROM='T0-500n' TO='T0+1u'   $ dt=15n
+.measure tran raw_peak_d10  MAX v(raw_d10)  FROM='T0-500n' TO='T0+1u'   $ dt=15n
+.measure tran held_peak_d10 MAX v(held_d10) FROM='T0-500n' TO='T0+2u'   $ dt=15n
+.measure tran rstb_min_d10  MIN v(rstb_d10) FROM='T0-500n' TO='T0+2u'   $ dt=15n
+.measure tran sp_peak_d11   MAX v(sp_d11)   FROM='T0-500n' TO='T0+1u'   $ dt=20n
+.measure tran raw_peak_d11  MAX v(raw_d11)  FROM='T0-500n' TO='T0+1u'   $ dt=20n
+.measure tran held_peak_d11 MAX v(held_d11) FROM='T0-500n' TO='T0+2u'   $ dt=20n
+.measure tran rstb_min_d11  MIN v(rstb_d11) FROM='T0-500n' TO='T0+2u'   $ dt=20n
+.measure tran sp_peak_d12   MAX v(sp_d12)   FROM='T0-500n' TO='T0+1u'   $ dt=25n
+.measure tran raw_peak_d12  MAX v(raw_d12)  FROM='T0-500n' TO='T0+1u'   $ dt=25n
+.measure tran held_peak_d12 MAX v(held_d12) FROM='T0-500n' TO='T0+2u'   $ dt=25n
+.measure tran rstb_min_d12  MIN v(rstb_d12) FROM='T0-500n' TO='T0+2u'   $ dt=25n
+.measure tran sp_peak_d13   MAX v(sp_d13)   FROM='T0-500n' TO='T0+1u'   $ dt=30n
+.measure tran raw_peak_d13  MAX v(raw_d13)  FROM='T0-500n' TO='T0+1u'   $ dt=30n
+.measure tran held_peak_d13 MAX v(held_d13) FROM='T0-500n' TO='T0+2u'   $ dt=30n
+.measure tran rstb_min_d13  MIN v(rstb_d13) FROM='T0-500n' TO='T0+2u'   $ dt=30n
+.measure tran sp_peak_d14   MAX v(sp_d14)   FROM='T0-500n' TO='T0+1u'   $ dt=40n
+.measure tran raw_peak_d14  MAX v(raw_d14)  FROM='T0-500n' TO='T0+1u'   $ dt=40n
+.measure tran held_peak_d14 MAX v(held_d14) FROM='T0-500n' TO='T0+2u'   $ dt=40n
+.measure tran rstb_min_d14  MIN v(rstb_d14) FROM='T0-500n' TO='T0+2u'   $ dt=40n
+.measure tran sp_peak_d15   MAX v(sp_d15)   FROM='T0-500n' TO='T0+1u'   $ dt=50n
+.measure tran raw_peak_d15  MAX v(raw_d15)  FROM='T0-500n' TO='T0+1u'   $ dt=50n
+.measure tran held_peak_d15 MAX v(held_d15) FROM='T0-500n' TO='T0+2u'   $ dt=50n
+.measure tran rstb_min_d15  MIN v(rstb_d15) FROM='T0-500n' TO='T0+2u'   $ dt=50n
+.measure tran sp_peak_d16   MAX v(sp_d16)   FROM='T0-500n' TO='T0+1u'   $ dt=75n
+.measure tran raw_peak_d16  MAX v(raw_d16)  FROM='T0-500n' TO='T0+1u'   $ dt=75n
+.measure tran held_peak_d16 MAX v(held_d16) FROM='T0-500n' TO='T0+2u'   $ dt=75n
+.measure tran rstb_min_d16  MIN v(rstb_d16) FROM='T0-500n' TO='T0+2u'   $ dt=75n
+.measure tran sp_peak_d17   MAX v(sp_d17)   FROM='T0-500n' TO='T0+1u'   $ dt=100n
+.measure tran raw_peak_d17  MAX v(raw_d17)  FROM='T0-500n' TO='T0+1u'   $ dt=100n
+.measure tran held_peak_d17 MAX v(held_d17) FROM='T0-500n' TO='T0+2u'   $ dt=100n
+.measure tran rstb_min_d17  MIN v(rstb_d17) FROM='T0-500n' TO='T0+2u'   $ dt=100n
+.measure tran sp_peak_d18   MAX v(sp_d18)   FROM='T0-500n' TO='T0+1u'   $ dt=150n
+.measure tran raw_peak_d18  MAX v(raw_d18)  FROM='T0-500n' TO='T0+1u'   $ dt=150n
+.measure tran held_peak_d18 MAX v(held_d18) FROM='T0-500n' TO='T0+2u'   $ dt=150n
+.measure tran rstb_min_d18  MIN v(rstb_d18) FROM='T0-500n' TO='T0+2u'   $ dt=150n
+.measure tran sp_peak_d19   MAX v(sp_d19)   FROM='T0-500n' TO='T0+1u'   $ dt=200n
+.measure tran raw_peak_d19  MAX v(raw_d19)  FROM='T0-500n' TO='T0+1u'   $ dt=200n
+.measure tran held_peak_d19 MAX v(held_d19) FROM='T0-500n' TO='T0+2u'   $ dt=200n
+.measure tran rstb_min_d19  MIN v(rstb_d19) FROM='T0-500n' TO='T0+2u'   $ dt=200n
+.measure tran sp_peak_d20   MAX v(sp_d20)   FROM='T0-500n' TO='T0+1u'   $ dt=500n
+.measure tran raw_peak_d20  MAX v(raw_d20)  FROM='T0-500n' TO='T0+1u'   $ dt=500n
+.measure tran held_peak_d20 MAX v(held_d20) FROM='T0-500n' TO='T0+2u'   $ dt=500n
+.measure tran rstb_min_d20  MIN v(rstb_d20) FROM='T0-500n' TO='T0+2u'   $ dt=500n
+
+.control
+  save all
+  run
+
+  print sp_peak_d1 raw_peak_d1 held_peak_d1 rstb_min_d1
+  print sp_peak_d2 raw_peak_d2 held_peak_d2 rstb_min_d2
+  print sp_peak_d3 raw_peak_d3 held_peak_d3 rstb_min_d3
+  print sp_peak_d4 raw_peak_d4 held_peak_d4 rstb_min_d4
+  print sp_peak_d5 raw_peak_d5 held_peak_d5 rstb_min_d5
+  print sp_peak_d6 raw_peak_d6 held_peak_d6 rstb_min_d6
+  print sp_peak_d7 raw_peak_d7 held_peak_d7 rstb_min_d7
+  print sp_peak_d8 raw_peak_d8 held_peak_d8 rstb_min_d8
+  print sp_peak_d9 raw_peak_d9 held_peak_d9 rstb_min_d9
+  print sp_peak_d10 raw_peak_d10 held_peak_d10 rstb_min_d10
+  print sp_peak_d11 raw_peak_d11 held_peak_d11 rstb_min_d11
+  print sp_peak_d12 raw_peak_d12 held_peak_d12 rstb_min_d12
+  print sp_peak_d13 raw_peak_d13 held_peak_d13 rstb_min_d13
+  print sp_peak_d14 raw_peak_d14 held_peak_d14 rstb_min_d14
+  print sp_peak_d15 raw_peak_d15 held_peak_d15 rstb_min_d15
+  print sp_peak_d16 raw_peak_d16 held_peak_d16 rstb_min_d16
+  print sp_peak_d17 raw_peak_d17 held_peak_d17 rstb_min_d17
+  print sp_peak_d18 raw_peak_d18 held_peak_d18 rstb_min_d18
+  print sp_peak_d19 raw_peak_d19 held_peak_d19 rstb_min_d19
+  print sp_peak_d20 raw_peak_d20 held_peak_d20 rstb_min_d20
+
+  set filetype=ascii
+  write tb_start_pulse_isolated.raw v(xdet_d1.scl_buf) v(xdet_d1.sda_in_row2) v(xdet_d1.sda_d) v(sp_d1) v(rstb_d1) v(sp_d2) v(rstb_d2) v(sp_d3) v(rstb_d3) v(sp_d4) v(rstb_d4) v(sp_d5) v(rstb_d5) v(sp_d6) v(rstb_d6) v(sp_d7) v(rstb_d7) v(sp_d8) v(rstb_d8) v(sp_d9) v(rstb_d9) v(sp_d10) v(rstb_d10) v(sp_d11) v(rstb_d11) v(sp_d12) v(rstb_d12) v(sp_d13) v(rstb_d13) v(sp_d14) v(rstb_d14) v(sp_d15) v(rstb_d15) v(sp_d16) v(rstb_d16) v(sp_d17) v(rstb_d17) v(sp_d18) v(rstb_d18) v(sp_d19) v(rstb_d19) v(sp_d20) v(rstb_d20)
+.endc
+
+.end

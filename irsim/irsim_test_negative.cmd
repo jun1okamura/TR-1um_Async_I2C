@@ -350,48 +350,56 @@ d NC_CORE_rw NC_CORE_addr_match
 | ADDR+W (WRONG) = 0x22
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 x P2
 s 500
 h P1
 s 40
 s
 l P1
+s 300
 l P2
 s 500
 h P1
@@ -429,6 +437,7 @@ l P1
 | run that found this on the OLD .sim's same DEL1-based topology).
 s 500
 l P2
+s 300
 h P1
 s 8000
 x P2
