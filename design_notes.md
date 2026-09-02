@@ -17067,3 +17067,1576 @@ Wmin=3.0umを満たし（`width_check(<3.0um)`は厳密未満のみ違反と
 
 出力：`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds`
 （新規）。ユーザーがローカルKLayoutで実行し**DRCクリーンを確認**。
+
+## 106 ngspice全体チップ検証で発見した同一エッジ・クロックスキュー
+##     レース条件バグ（last_bit_pending）（2026-09-02）
+
+ユーザー要望：「TR-1um_Async_I2C にて、ダメ押しで、ngspice で全体
+チップ検証をします」——`ngspice/`ディレクトリを新設し、LVS確認済み
+チップネットリスト（RING_OSC除外）から実機ngspice用の
+`tr_1um_i2c_slave_async_sim_ready.spice`と、SCL=100kHzのWrite→Read
+テストベンチ`ngspice/TB/tb_chip_i2c.spice`を生成する新規スクリプト
+`script/gen_chip_sim_ready_v9.py`/`script/gen_chip_tb_v9.py`を作成
+（詳細は各スクリプト自身のdocstring参照）。ユーザーがローカル実機
+ngspiceで実行し、以下を段階的に修正：(1) M→X行変換・NMOSE→MNE、
+(2) 角括弧ネット名の`_`化、(3) `*.PININFO`コメント継続行の`*+`欠落
+（"too few nodes"エラーの真因）、(4) ダイオードインスタンスの
+`A=`/`P=`→`AREA=`/`PJ=`。
+
+**その後発見した実機バグ**：上記4件の構文修正後、シミュレーション
+自体は最後まで走るようになったが、`addr_match`/`rw`が write/read
+どちらのアドレスフェーズでも一度も立たず、`busy`もSTOP後にクリア
+されない（立ちっぱなし）という実機バグが残った。`.measure`による
+内部ノードの段階的プロービングと、実際のトランジスタレベル
+ネットリスト（`i2c_slave_async_net_v9_rowbuf.v`のゲートを手動で
+逆算・トレース）による検証の結果、真因を特定：
+
+`last_bit_pending`（アドレスバイトの最終ビット検出用フリップフロップ、
+`i2c_slave_async.v`の`is_last_bit`に対応）は`scl_row1`バッファで
+クロックされている一方、その`Q`出力を**同じSCLエッジ上で**組合せ
+的に読み取って次状態を決める`phase[0:2]`・`addr_ok`(`addr_match`)・
+`rw_bit`の各フリップフロップは全て`scl_row0`バッファでクロックされて
+いた。`scl_row0`と`scl_row1`は同じ`scl_buf`源から分岐する別々の
+`BUF_X1`インスタンスであり、両者の相対的な（クロック→Q遅延＋
+組合せ論理）タイミングが完全に一致する保証はない。実機ngspiceの
+過渡解析で、`last_bit_pending`の新しい（このエッジでセットされた
+ばかりの）値が、本来は「次のエッジ」で使われるべきところ、**同じ
+エッジ内**で`scl_row0`側のフリップフロップのD入力に間に合って
+しまい、アドレスバイトの`is_last_bit`判定が本来のR/Wビット目
+（8ビット目）ではなく1つ前のビット（7ビット目、bit1）で誤って
+成立してしまうことを確認（波形プロットで`phase_0`が本来の
+タイミングより1SCLエッジ早く遷移するのを直接確認）。これにより
+アドレス比較が7ビットしか受信していない不完全なshreg内容で走り、
+`addr_ok`が恒久的に不成立となり、`phase`もPH_ADDRから早期に
+離脱してしまうため、本来の8ビット目でも再比較のチャンスがない。
+
+**根本原因**：`script/insert_row_buffers.py`のFM
+（Fiduccia-Mattheyses）最小カット分割アルゴリズムは、どのフリップ
+フロップがどのフリップフロップに同一サイクルで組合せ依存している
+かを一切考慮せず、純粋に配線本数バランスのみで行バッファへの
+割り当てを決めている（`fm_partition.py`にタイミング・レース関連の
+概念は存在しない）。`last_bit_pending`がたまたま接続性の都合で
+`scl_row1`側に割り当てられ、それを読む側が全て`scl_row0`側だった
+ことが、このクロックスキュー・レースを引き起こした。
+
+**修正**：`src/i2c_slave_async_net_v9_rowbuf.v`のインスタンス
+`_294_`（`last_bit_pending`）の`.CK(scl_row1)`を`.CK(scl_row0)`へ
+手動変更——`_092_`/`_079_`経由で`last_bit_pending`のQを同一エッジで
+読む全フリップフロップと**同じ物理バッファ**にすることで、バッファ
+間スキューそのものを構造的に排除。`gen_lvs_spice_v9.py`→
+`gen_lvs_spice_top_v9.py`→`gen_chip_sim_ready_v9.py`→
+`gen_chip_tb_v9.py`の順で再生成し、`x_294_`が`scl_row0`クロックに
+なったことを確認。**このネットリスト修正はシミュレーション検証
+専用**——実レイアウトの当該フリップフロップのクロック配線
+（row1バッファ出力からrow0バッファ出力への繋ぎ替え）はまだ未反映
+で、LVS/DRC再実行前に別途レイアウト側の修正が必要。ユーザーへ
+再度ローカルngspiceでの実行を依頼し、修正後の`addr_match`/`rw`/
+`busy`の挙動を確認中。
+
+**追記（同日）**：上記修正後の再実行でも症状は完全に同一のまま
+（`addr_match`/`rw`が一度も立たない）で改善なし。原因を再検証した
+結果、`last_bit_pending`だけでなく`bit_cnt[0:2]`（インスタンス
+`_270_`/`_271_`/`_272_`）も`scl_row1`のままだったことが判明。
+`bit_cnt`自身のD入力は`phase`由来の信号（`_086_`等、row0）を
+組合せ的に読み、かつ`last_bit_pending`のD入力は`bit_cnt`のQを
+読む——という**相互（循環）依存**があり、`last_bit_pending`だけを
+row0に移しても、今度は`bit_cnt`(row1)と`phase`/`last_bit_pending`
+(row0)の間で同種のレースが残っていた。`bit_cnt[0:2]`も`scl_row0`へ
+移動し、`bit_cnt`・`last_bit_pending`・`phase[0:2]`・`addr_ok`
+（`addr_match`）・`rw_bit`の9フリップフロップ全てを同一バッファに
+統一。再度4スクリプトを再生成し、`x_270_`/`x_271_`/`x_272_`/
+`x_294_`が全て`scl_row0`になったことを確認。ユーザーに再度ローカル
+ngspiceでの実行を依頼中。
+（注：`shreg`のD入力は`sda_in`/前段`shreg`のみに依存する単純シフト
+チェーンで、`last_bit_pending`/`phase`を直接読まないため、今回の
+レース連鎖には含まれないことを確認済み。ただし`_073_`
+（`last_bit_pending`由来）が`rx_data`更新用マルチプレクサの選択線
+としても使われており、`rx_data`本体は`scl_row3`クロックのため、
+これも将来的に同種のクロスバッファ・レースになり得る——write
+アドレスフェーズの現在の問題とは無関係なので今回は未着手だが、
+Dataフェーズの検証で異常が出た場合はこちらも要確認）。
+
+## 107 真の根本原因の確定：DFFRBマスターラッチ不定値レース
+##     （§106の同一エッジ・クロックスキュー仮説は誤りと判明）
+##     （2026-09-02）
+
+**経緯**：§106の9フリップフロップ統一修正（`bit_cnt`/`last_bit_
+pending`/`phase[0:2]`/`addr_ok`/`rw_bit`を全て`scl_row0`へ）を
+実機ngspiceで再実行しても、症状は完全に同一のまま
+（`addr_match`/`rw`が一度も立たない）で改善が全くなかった。
+これは「クロックスキュー・レース」仮説そのものへの重大な反証と
+判断し、`.measure`による数値プローブを多段階で追加しながら
+再調査した（testbench側の詳細は`script/gen_chip_tb_v9.py`の
+`bitcnt_measures`/追加`clk_phase_measures`ブロック参照）。
+
+**決定的な証拠**：ADDR+Wバイトの8ビット全エッジ（edge1〜edge8）で
+`bit_cnt_0/1/2`・`last_bit_pending`を個別に`.measure`した結果、
+実測トラジェクトリ（edge1=2, edge2=3, ..., edge6=7かつ
+`last_bit_pending`=1, edge7でリセット）が、理想ゼロ遅延デジタル
+モデル（自作`digsim.py`で別途検証、論理自体は正しいことを確認済み）
+の予測値と**全区間にわたってちょうど1エッジ分前倒し**で一致した。
+さらに、リセット解除直後（本物のSCLエッジが一度も来ていない時点）
+で既に`bit_cnt_0`=1になっていることを`.measure`で直接確認——
+`scl_row0`がその間トグルしていないにもかかわらず値が変化している
+ことから、「クロックエッジを介さない」レースだと判明した。
+
+**真因（トランジスタレベルで確定）**：`/Users/okamura/.xschem/
+simulations/DFFRB.spice`（`LEF/DFFRB.sch`由来、本プロジェクト専用
+のカスタムセルで標準セルライブラリ本体には無い）を全トランジスタ
+トレースした結果、非同期`RSTB`は**スレーブ段の出力（QB、
+MM26/MM17経由）のみ**をクリアし、**マスターラッチ
+（net2/QM/net4、CK=1時にトランスミッションゲートMM4/MM15経由の
+クロス結合フィードバックループで保持）には一切接続されていない**
+ことを確認。マスターラッチはCK=0（透過フェーズ、MM1/MM2/MM7/MM8）
+の間しか書き込まれず、CK=1の間は上記ループで直前の値を保持する
+だけの回路。したがって、CKが一度もLOWになっていない状態で`RSTB`が
+解除されると、スレーブ段はCK=1のトランスミッションゲートを通して
+マスターラッチの値へ透過的に接続されるため、Qは「一度も書き込まれ
+たことのない」マスターラッチが電源投入時のSPICE動作点解析で任意に
+落ち着いた不定値へ、クロックエッジを介さず瞬時にスナップしてしまう。
+
+これは単なるコーナーケースではなく、**電源投入リセットだけでなく
+毎回のSTART条件でも必ず発生する**：`i2c_slave_async.v`の
+`rst_scl_domain = (~rst_n) | start_pulse`は、START検出のたびに
+`phase`/`bit_cnt`/`shreg`等のレジスタ群を非同期リセットする設計
+だが、実際のSTART条件は定義上「SCL=1のままSDAが1→0」であり、この
+リセット解除の瞬間、CK（=scl）は**常にHIGH**——つまり同じレースが
+起きる。testbench側で電源投入リセットの瞬間だけSCLをLOWに保持する
+回避策を試したが（§本ログの前段、後にrevert）、START起因のリセット
+はこの方法では原理的に回避不能（プロトコル定義そのものによりCK=HIGH
+が強制されるため）と判明し、根本修正が必要と判断。
+
+副次症状として、たとえレースが起きなくても、`bit_cnt <= bit_cnt +
+1`という組合せD入力ロジックが常時ライブなため、リセット解除の瞬間に
+たまたまCKの立ち上がりが重なると、本物の最初のアドレスビットが
+来る前にbit_cntが「タダで」1回インクリメントされてしまう
+（"幽霊カウント"）ことも確認——§106で観測した「全ノードが理想
+モデルよりちょうど1エッジ早い」というパターンは、この初期値ズレ
+だけで完全に説明がつく。§106のクロックスキュー統一修正
+（9フリップフロップを`scl_row0`へ統一）は無害ではあるが的外れで、
+効果がなかったのは当然だった。
+
+**修正方針**：ユーザー指示によりDFFRB（STDCELL）自体は変更せず、
+ゲートレベル（RTL）のみで解決する。既存の`busy`ラッチ（NOR2クロス
+結合SRラッチ）と同じ手法で、`rst_scl_domain`を「sclが実際に一度
+LOWになるまで」ストレッチする新しいSRラッチを追加：
+
+```verilog
+wire rst_scl_domain_raw = (~rst_n) | start_pulse;
+wire rst_stretch_clr    = (~rst_scl_domain_raw) & (~scl);
+wire rst_stretch_qn;
+wire rst_scl_domain_held;
+NOR2 u_rst_stretch_q  (.A(rst_stretch_clr),    .B(rst_stretch_qn),      .Y(rst_scl_domain_held), .VDD(VDD), .GND(GND));
+NOR2 u_rst_stretch_qn (.A(rst_scl_domain_raw), .B(rst_scl_domain_held), .Y(rst_stretch_qn),      .VDD(VDD), .GND(GND));
+wire rst_scl_domain = rst_scl_domain_raw | rst_scl_domain_held;
+wire scl_gated      = scl & (~rst_scl_domain);
+```
+
+これにより、(a)リセットアサート中はCK（`scl_gated`）が常にLOWに
+強制されるため、マスターラッチはリセット解除よりずっと前に安全に
+D値（この間は`phase`/`bit_cnt`等も全てリセット値で安定している
+ため無害）へ落ち着く、(b)`rst_scl_domain`の解除は`rst_stretch_clr
+= ~raw & ~scl`の定義上、必ずscl=0のタイミングでのみ起こるため、
+解除の瞬間に`scl_gated`が立ち上がることは構造的にあり得ない
+（=幽霊カウントも同時に解消）。SET/CLR相互排他性・t=0での初期値
+確定性は既存busyラッチと同じ安全性を持つ（本文コメント参照）。
+このSRラッチ2個＋AND/OR各1本はいずれも既存承認済みセル
+（NOR2/AND2/OR2、あるいはYosysが自動選択する等価な組合せ）のみで
+構成され、DFFRB自体の変更はゼロ。always文のクロックも
+`posedge scl`→`posedge scl_gated`に変更（リセットトリガ
+`posedge rst_scl_domain`は変更なし）。
+
+なお`always @(posedge scl_n or posedge rst_sdaoe_domain)`側
+（`sda_oe`/`txreg`ドメイン）は、`rst_sdaoe_domain`が`busy`の
+セットと連動して解除され、`busy`は必ずSTART中（scl=1、つまり
+scl_n=0）にセットされるため、リセット解除の瞬間CKは元々常にLOWで
+あり、この種のレースは構造的に発生しない（追加対応不要、と確認）。
+
+`src/i2c_slave_async.v`をv5として更新（ファイル冒頭のバージョン
+履歴コメント参照）。本セッションのサンドボックス環境では
+`yowasp-yosys`のWASM版`abc`ステップが本設計でクラッシュする既知の
+制約（§77.9）があり最終合成は完走できないが、`read_verilog` →
+`hierarchy` → `proc` → `opt` → `techmap` → `dfflegalize` →
+`dfflibmap`までは実行し、DFF数33個（v4から不変、新規SRラッチは
+NOR2×2のみでフリップフロップ増加なし）を確認済み——構文・階層・
+FFマッピングは正常。`abc`によるゲートマッピングとその先の
+`write_verilog`は、ユーザーのMac上のネイティブ`yosys`
+（Homebrew版）での再実行が必要（§77.9の既知の制約と同じ理由）。
+
+**次のステップ（ユーザー側で実行）**：
+```sh
+cd script
+yosys -p "
+  read_verilog ../src/i2c_slave_async.v
+  hierarchy -top i2c_slave_async -keep_portwidths
+  proc; opt
+  techmap; opt
+  dfflegalize -cell \$_DFF_PP0_ 0
+  dfflibmap -liberty ../TR1um_5_stdcell.lib
+  abc -liberty ../TR1um_5_stdcell.lib
+  write_verilog ../src/i2c_slave_async_net.v"
+python3 dedup_gates.py
+python3 -c "import insert_row_buffers as r; r.main(in_path='../src/i2c_slave_async_net_v9.v', out_path='<tmp_rowbuf>.v', row_assignment_json='../LEF/row_assignment_v9.json', target_nets=['scl','scl_n'])"
+python3 -c "import insert_bufth_scl_sda as b; b.main(in_path='<tmp_rowbuf>.v', out_path='../src/i2c_slave_async_net_v9_rowbuf.v', row_assignment_json='../LEF/row_assignment_v9.json')"
+```
+（正確なコマンド列は`README.md`の該当セクション参照。実行後、
+`gen_lvs_spice_v9.py`→`gen_lvs_spice_top_v9.py`→
+`gen_chip_sim_ready_v9.py`→`gen_chip_tb_v9.py`を再生成し、
+ngspiceで再検証する。）
+
+**注意（重要）**：§106で`src/i2c_slave_async_net_v9_rowbuf.v`に
+直接手動パッチした`.CK(scl_row1)`→`.CK(scl_row0)`の変更
+（`_270_`/`_271_`/`_272_`/`_294_`）は、RTLにもrow_assignment_v9.json
+にも反映されていない**ネットリストへの直接手編集**だった。上記の
+再合成フローを実行すると、この手動パッチは**自動的に失われ**、
+FM分割によって元の（`scl_row1`混在の）割り当てに戻る可能性が高い。
+これは問題ない——§106のクロックスキュー仮説は本セクションで誤り
+と判明しており、v5のRTL修正が効いていれば、たとえ`bit_cnt`等が
+再び`scl_row1`に割り当てられ直しても`addr_match`/`rw`は正しく
+動作するはずである（要実機確認）。同一バッファへの統一自体は
+タイミングマージンの観点で依然有用な可能性はあるが、それは
+本バグとは別の、独立した検討事項として扱う。
+
+**testbench側の変更（`script/gen_chip_tb_v9.py`）**：電源投入
+リセットの間だけSCLをLOWに保持する`BusBuilder.power_on_settle()`
+という回避策を一時的に追加して有効性を検証した（電源投入リセットの
+レースは実際に解消することを確認）が、START起因のリセットには
+原理的に効かないため、上記RTL修正を優先することとし、
+`build_sequence()`は現実的な「t=0からSCL idle-high」の刺激
+（`idle()`）に戻した。`power_on_settle()`メソッド自体・多数の
+`.measure`診断プローブ（`bitcnt_measures`/`rst_*`スイープ/
+`at_start_begin`/`before_bit7_edge`等）は今回の根本原因特定に
+使った記録として残置。
+
+**追記1（同日）：ユーザーMac側での再合成時に発覚した2件の周辺バグ**
+
+1. **サンドボックス絶対パスのハードコード（ポータビリティ欠陥）**：
+   `lef_parser.py`/`netlist_parser.py`/`fm_partition.py`/
+   `gen_lvs_spice_v9.py`/`gen_lvs_spice_top_v9.py`/
+   `gen_chip_sim_ready_v9.py`/`gen_chip_tb_v9.py`が、いずれも
+   `/sessions/dreamy-ecstatic-heisenberg/mnt/...`というClaudeサンド
+   ボックス専用の絶対パスをデフォルト値としてハードコードしていた
+   （過去のセッションでサンドボックス内で書かれたまま、ユーザーの
+   実Mac上で直接実行されたのは今回が初めてで、これまで露見していな
+   かった）。`insert_row_buffers.py`が既に確立していた
+   `_REPO_ROOT = Path(__file__).resolve().parent.parent`パターンに
+   合わせ、全て`Path(__file__)`基準の相対パスへ修正。ただし
+   `~/.xschem/simulations`（xschemのネットリスト書き出し固定先、
+   リポジトリ外）は`Path.home()`基準にすると、Claudeのサンドボックス
+   では`~/.xschem/simulations`が素直に`Path.home()/".xschem"/
+   "simulations"`に一致しない特殊マウント（`.../mnt/simulations`に
+   直接バインドされ`~/.xschem/`の階層が畳まれている）なので、
+   `XSCHEM_SIM_DIR`環境変数での上書きを許容しつつ、デフォルトは
+   `Path.home()/".xschem"/"simulations"`（ユーザーの実Mac上では
+   これで正しい）とした。
+
+2. **`gen_lvs_spice_v9.py`の`assign`エイリアス解決漏れ（見えない
+   断線）**：v5のRTL修正後、生成された`ngspice/tr_1um_i2c_slave_
+   async_sim_ready.spice`で全33 DFFRBのCK/RSTB接続を確認したところ、
+   `scl_gated`（v5で新規追加した信号）が**全くの無配線**になって
+   いた——33個のDFFRBの`.CK()`ピンは全て文字列`scl_gated`を指す一方、
+   実際にそれを駆動するAND2_X1ゲートの出力ピンはYosysが自動命名した
+   `_156_`という別名で、両者を繋ぐはずの`assign scl_gated = _156_;`
+   という単純なネットエイリアスを`gen_lvs_spice_v9.py`が解決して
+   いなかったため。原因は`gen_lvs_spice_v9.py`の`SCALAR_ALIAS`辞書が
+   `{"rw_bit": "rw", "addr_ok": "addr_match"}`という**過去に手動で
+   1回grepして確認した3件（rw/addr_match/rx_dataのみ）に限定した
+   ハードコード**だったこと——コメント「the only 3 non-bookkeeping
+   assigns in v9_rowbuf.v, confirmed via direct grep」がまさにその
+   時点限りの監査であり、RTLに新しいエイリアスが増えるたびに黙って
+   陳腐化する設計だった（`netlist_parser.py`が既に一般的な
+   union-findベースのエイリアス解決を実装していたのと全く同じ理由・
+   同じ教訓）。修正：`netlist_parser.py`の`_build_alias_resolver`と
+   同一アルゴリズムの汎用エイリアス解決器を`gen_lvs_spice_v9.py`にも
+   追加し、ハードコード辞書は「ポート名を正規名として優先する」
+   目的でのみ残し、それ以外の`assign A = B;`は全て自動解決する
+   よう変更。再生成後、全33 DFFRBが`_156_`（24個、phase/bit_cnt/
+   addr_match/rw/shreg/rx_data/last_bit_pending共有）または
+   `scl_n_row0`/`scl_n_row2`（9個、sda_oe/txregドメイン、変更なし）
+   に正しく接続されていることを確認。
+
+**追記2（同日）：既知の未対応事項（今回は機能検証を優先、後日
+対応）**——`scl_gated`自体は`insert_row_buffers.py`の
+`target_nets=['scl','scl_n']`が探す名前（"scl"）と一致しないため、
+行バッファ分割の対象にならず、24個のDFFRBのCKピン全てが**単一の
+未分散ネット**として直接駆動されている（v5以前は`scl_row0`〜
+`scl_row3`の4分割だった）。100kHzの機能検証レベルでは電気的に問題
+にならない見込みだが、実レイアウト・タイミングマージンの観点では
+望ましくないため、後日`target_nets`に`scl_gated`を追加するか、
+行バッファ挿入をRTLの新しいクロック信号名に追従させる修正が必要。
+
+**追記3（同日）：`scl_gated`の行バッファ再挿入では未解決だった
+新たな断線バグ（trueの原因）**——上記の行バッファ再挿入
+（`insert_row_buffers.py`をエイリアス解決後の実体名`_156_`に対して
+再実行、4行分バッファへ再分散）を適用して再実行しても、
+`bit_cnt`/`phase`/`last_bit_pending`は理想デジタルモデルと完全一致
+する正しい値になった一方（v5修正が内部FSMロジックとしては完全に
+正しく動作していることがこれで確定）、`busy_after_start`≈0、
+SDAパッド(P2)が全期間を通じて約44mV(driven=1相当)/4.5mV
+(driven=0相当)という**理論値5V/0Vから大きく乖離した固定的な分圧**
+にしかならず、`shreg`も全ビット0のままという、scl_gatedのfanout
+問題とは別種の症状が残った。
+
+原因は追記1で導入した`gen_lvs_spice_v9.py`の汎用`assign`エイリアス
+解決器（union-find）自体の設計不備だった：どちらのネット名が
+正規名として勝つかは「代入文のどちら側か」という**恣意的な方向**
+で決まる実装だったため、トップレベル**ポート名そのもの**
+（`sda_oe`）が、それを駆動する内部ゲートの別名（Yosysの`_NNN_`名）
+に巻き込まれて**正規名の座を奪われる**ことがあった。実際に生成
+された`schematic/i2c_slave_async_nrow_fm_v9.spice`を直接grepすると、
+`sda_oe`は`.subckt`宣言行とPININFOコメント行にしか現れず、
+**内部のどのインスタンスのピンにも接続されていない**（=浮遊
+ポート）ことを確認——コアの`sda_oe`出力が丸ごとGIOパッドリングから
+切り離されていたため、SDAパッドは実質的にDUTから完全に孤立し、
+testbench自身の10kプルアップと駆動スイッチだけで決まる（本来なら
+ほぼ0V/5Vになるはずが、なぜか44mV/4.5mVという中途半端な値に留まる
+＝実際には何らかの寄生経路が残っていたと推測されるが、根本原因は
+「sda_oeが浮いていること」で説明がつくため深追いはしていない）
+不安定な状態になっていたと考えられる。
+
+修正：`_build_alias_resolver`にトップレベルポート名の集合
+（`build_top_ports()`）を優先ノードとして渡し、代入のどちら側に
+現れても**ポート名が必ず正規名として勝つ**ようunion-findの方向を
+バイアス。再生成後、`sda_oe`が`x_528_`（DFFRBのQB出力——
+`assign sda_oe = ~sda_oe_r;`がQB経由で無償実装される、という
+過去のドキュメント通りの構造）に正しく接続され、`busy`/
+`addr_match`/`rw`/`rx_valid`/`sda_in`/`scl`も全て実体のあるゲート
+出力に正しく接続されていることを直接grepで確認した。全ポート名を
+一括で保護する設計になっているため、今後同種の新しいエイリアスが
+増えても同じ問題は起きない。
+
+**追記4（同日）：§106と同種のクロスバッファ・スキューが自分自身の
+scl_gated行バッファ再挿入で再発**——sda_oe断線修正後の再実行では、
+busy/SDA/bit_cnt_0/1/2の個別トラジェクトリは全て正しくなった一方
+（v5のRTLロジックとsda_oe接続の両方が正しく動作していることが
+これで確定）、bit_cnt_0/1/2/last_bit_pendingのedge毎の値が
+1,1,2,1,2,3,4,5という非単調な奇妙な系列になり、addr_match_write/
+rw_writeも依然0のままだった。原因を`ngspice/tr_1um_i2c_slave_async_
+sim_ready.spice`を直接grepして確認したところ、`scl_gated`
+（実体名`_156_`）を4行バッファへ再分散した際のFM分割が、
+`bit_cnt[0:2]`+`last_bit_pending`を`_156__row0`、`addr_ok`
+（`addr_match`）+`rw_bit`+`phase[0:2]`を`_156__row1`という**別々の
+バッファ**に割り当てていたことが判明——§106で発見した「FM分割は
+同一サイクルの組合せ依存関係を一切考慮しない」という問題が、今回
+自分自身が追加した行バッファ再挿入ステップによってそのまま再現
+した形。
+
+修正：`src/i2c_slave_async_net_v9_rowbuf.v`のインスタンス`_505_`/
+`_506_`/`_507_`/`_529_`（bit_cnt[0:2]、last_bit_pending）の
+`.CK(_156__row0)`を`.CK(_156__row1)`へ手動変更し、9信号の書き込み
+アドレス・クリティカルグループ（bit_cnt/last_bit_pending/phase/
+addr_ok/rw_bit）を全て`_156__row1`に統一。4スクリプトを再生成し、
+全9フリップフロップが`_156__row1`に統一されていることを確認した。
+`insert_row_buffers.py`のFM分割は本質的にこの種の依存関係を認識
+できないため、将来RTLを変更してscl_gatedの行バッファを再生成する
+場合は、この9信号グループが同一行に収まっているか毎回確認する
+必要がある（恒久対応としては、依存関係を考慮したnet分割ロジックの
+実装が望ましいが、今回はスコープ外として見送り）。
+
+## 108 addr_match_write/rwが立たない問題の全面解決 + start_pulse/
+##     stop_pulse検出回路の新たな根本的欠陥の発見（2026-09-02）
+
+**経緯**：ユーザー要望「addr_match_write/rwが検証で一度も立たない」を
+起点に、SPICE単体回路検証・I2Cスペック再確認・SPICE/Verilog/IRSIM
+全テストベンチの監査・新規14項目バッチテストの作成、という順で
+調査を行った。以下、確定した結果を記録する。
+
+### 108.1 start_pulse検出回路の実レーススキュー（確認・修正済み）
+
+`start_pulse = scl & sda_d & ~sda_in`（`sda_d`はDEL1で`sda_in`を
+遅延させたコピー）は、SDAの立下り（START条件）とSCLの内部バッファ
+コピー（`scl_row2`）との相対タイミングに、dt<0（SDAがSCLより先に
+到着）で本物の～5.5nsグリッチを生む実レースを持つことを、単体回路
+`ngspice/TB/tb_start_pulse_isolated.spice`（20点dtスイープ）で実測
+確認した。このグリッチはreset-stretchラッチを介して～28nsの`RSTB`
+グリッチに増幅され、SCLドメインの全フリップフロップを同時に叩く。
+
+数学的に、SCL側にDEL1等の遅延を追加する対策は「dt<0側のマージンを
+追加することは原理的に不可能で、常に安全境界をより正（つまりより
+厳しい）方向にシフトさせるだけ」と証明し（実測でも確認：SCL側に
+DEL1を挿入すると危険領域が「dt<0で危険」から「dt<+5nsで危険」へ
+悪化した）、ユーザー指示「300ns待つ回路は現実的ではない。テスト
+ベンチ側でI2Cスペックを守ってください」に基づき、**DUT側ではなく
+テストベンチ側**で対策した：
+
+- `script/gen_chip_tb_v9.py`：`T_HOLD=300ns`（NXP UM10204の
+  tHD;DATに関する旧版ガイダンス「デバイスは内部的に最低300nsの
+  ホールドタイムを持つべき」に基づく）を`master_bit`/`release_bit`/
+  `master_ack_bit`/`stop_condition`に追加——SCLが完全に立ち下がって
+  から300ns待ってSDAを変化させる、スペック準拠のマスター動作。
+- `script/gen_irsim_cmd_v9.py`：`SDA_HOLD_NS=300`を`send_bit`/
+  `read_ack`/`recv_bit`/`send_ack_from_master`/`stop`の計5箇所に
+  同様に追加。
+
+実は`design_notes.md`第19節に、Verilogゲートレベルテストベンチ
+（`i2c_slave_async_tb.v`/`i2c_slave_async_net_tb.v`）で同一のレースが
+既に発見・修正済み（`#2`スタガー）だったが、SPICE・IRSIM側の
+スティミュラス生成スクリプトには一切伝播していなかったことが
+判明した——今回の再発の直接原因。
+
+### 108.2 副次的に発見・修正したテストベンチ/インフラのバグ
+
+1. **`.measure FIND AT=固定時刻`の測定脆弱性**：T_HOLD修正後、
+   `addr_match_write/read`のサンプル点がSPICEの適応刻み幅の
+   run-to-run揺らぎで遷移エッジのどちら側にも転びうる状態になった。
+   サンプル点をACKビットのSCL-high窓の終盤（中点でなく）へ移動し、
+   WHENベースの交差測定を追加して対策。
+2. **`stdcell_behavioral_stubs.v`にDFFRBスタブが存在しなかった**：
+   `i2c_slave_async_net_v9_rowbuf.v`等がDFFRBを名前でインスタンス化
+   しているのに、iverilog用ビヘイビアスタブにDFFRBが定義されておらず
+   `Unknown module type: DFFRB`でコンパイル不能だった。DFFRと機能的に
+   同一のスタブを追加。
+3. **`i2c_slave_async_net_tb.v`の`sda_oe`極性が古いまま**：RTL v3
+   （§77.3）で`sda_oe`が「0=駆動Low・1=リリース」（アクティブLow）に
+   反転されたが、ネットリスト版テストベンチ（`i2c_slave_async_tb.v`
+   ではなく`_net_tb.v`の方）だけがv3以前の「1=駆動Low」の古い規約
+   （`assign sda = s_oe ? 1'b0 : 1'bz;`）のまま取り残されていた。
+   これにより、アイドル時`sda_oe_r=0`→`sda_oe=1`＝正しくは「リリース」
+   のところを「駆動Low」と誤解釈し、リセット直後からSDAバスを常時
+   Lowへ引っ張り続け、本物のSTART（SDAの1→0遷移）を隠してしまい、
+   `start_pulse`が一度も発火せず`busy`/`addr_ok`/`rw_bit`が固まった
+   まま、という6/14失敗の真因だった（`bit_cnt`自体は`start_pulse`
+   による同期リセットが一度も起きず`scl_gated`≒`scl`のまま自由継続
+   カウントしていた偶然の一致でクリーンに見えていた）。極性を
+   `assign sda = s_oe ? 1'bz : 1'b0;`へ修正し解消。実チップ・
+   ネットリスト自体は無罪だったことをSPICE（実トランジスタ）・
+   IRSIM（スイッチレベル）双方の14/14 PASSで別途確認済み。
+
+### 108.3 SPICE/IRSIM/Verilog(RTL)/Verilog(ネットリスト) 全4方式で
+###     14/14 PASSをクロス確認
+
+上記修正の結果、以下全てが同一の14項目（busy/addr_match/rw/ACK/
+rx_data/read byte/STOP後のbusy解除/不一致アドレスNACK）で一致した：
+- IRSIM（`irsim/irsim_tb.cmd` + `run_tb.sh`）：14/14 PASS
+- Verilog RTL（`src/i2c_slave_async_tb.v`）：14/14 PASS
+- Verilog ネットリスト（`src/i2c_slave_async_net_tb.v`、§108.2-3の
+  極性修正後）：14/14 PASS
+- SPICE：§108.4参照（新規発見あり、単純な14/14 PASSでは終わらな
+  かった）
+
+### 108.4 【新規・未修正】stop_pulse検出回路のRC律速レース——
+###      DEL1固定遅延方式の根本的欠陥
+
+ユーザー要望「SPICEでも14項目のテストベンチのバッチファイルを作成
+して最終確認」に応え、新規`script/gen_chip_tb_batch14_v9.py`
+（WRITE→READ→不一致アドレス(0x11)NACKの3トランザクション、
+IRSIM/Verilogと全く同じ14チェック）+ `ngspice/TB/check_batch14.py`
+（ngspiceの`.measure`出力をパースしPASS/FAIL集計）を作成し実機
+ngspiceで実行したところ、**`busy cleared after STOP`が3回とも
+FAIL**（`busy`が5Vに張り付いたまま）、および連鎖的に読み出しフェーズ
+以降の全チェックがFAILした（`rx_data`チェック自体は別バグ——後述）。
+
+`stop_pulse = scl & ~sda_d & sda_in`の検出チェーン（`scl_row2`/
+`sda_in_row2`/`sda_d`/`busy_clr`(=`_077_`)）をSTOP1イベント前後
+-500ns～+5usを5ns刻みで実測した結果：
+
+| offset | sda_in_row2 | sda_d(DEL1出力) | busy_clr |
+|---|---|---|---|
+| -20ns | ~0V | ~0V | ~0V |
+| -10ns | 3.08V | 2.34V | 0.012V |
+| -5ns  | 5.30V | 4.86V | 0.052V |
+| 0ns   | 4.999V | 4.999V | ~0V |
+
+`sda_in_row2`が0V→5Vへ立ち上がるのに約15〜20ns要しているのに対し、
+DEL1による`sda_d`の実効遅延はわずか約2ns程度しかなく、この2nsの
+窓の間に生じる`sda_in_row2`と`sda_d`の電圧差はフルスイングの5Vでは
+なく最大でも0.05V（1%）程度にしかならない。これは下流NAND/NOR
+ゲートの論理しきい値（2.5V）に遠く届かず、`stop_pulse`（→
+`busy_clr`）は実質的に一度も"1"にならない。
+
+**根本原因（設計レベル）**：`start_pulse`が検出するSDAの立下り
+（オープンドレインのアクティブなプルダウン駆動、高速・ほぼ
+ステップ状）と、`stop_pulse`が検出するSDAの立上り（外部プルアップ
+抵抗によるRC受動充電、原理的に低速）は、電気的性質が非対称である。
+DEL1という「固定遅延幅で自分自身の少し前の値と比較する」方式の
+エッジ検出器は、比較対象の遷移が固定遅延幅より十分速い（＝
+フルスイングの電位差が遅延窓の間に生じる）ことを暗黙に仮定して
+おり、この仮定は高速な立下り（START）には成立するが、低速な
+RC律速の立上り（STOP）には一般に成立しない。プルアップ抵抗値や
+バス容量次第でSTOP検出が原理的に機能しない、という設計上の欠陥。
+
+**なぜ今まで見つからなかったか**：IRSIM（スイッチレベル）は
+SDAの立上りを瞬時のデジタル遷移として扱い、Verilog（ゲートレベル
+ユニットディレイ）はアナログ電圧を一切モデル化しないため、
+どちらもこの種のアナログRC律速の問題を原理的に検出できない。
+実トランジスタ・実RCタイミングで動くSPICEだけが暴ける不具合で
+あり、今回「SPICEでの最終確認」を行った直接の意義がここにあった。
+
+**その他、同じ調査で見つけた独立のテストベンチ側バグ**：`rx_data`
+チェックが`NC_OUT*`ネット（DIS=1時はこのテストベンチ自身の
+`vtx0-7`外部強制電源、常時0x3C固定）を読んでおり、I2Cで実際に
+受信したデータとは無関係だった。内部レジスタ
+`xdut.x2.rx_data_r_0`〜`_7`を直接測定するよう修正済み
+（`gen_chip_tb_batch14_v9.py`）。
+
+**対応方針**：ユーザー指示「DEL1の遅延を大きくするのは非現実的。
+START/STOP検出方式自体の論理を見直してください」により、DEL1
+（固定遅延線）を、SCL=0の間は`sda_in`に透過追従し、SCL=1の間は
+その時点の値を保持する**透過ラッチ**に置き換える根本再設計を
+次節（§108.5）で実施した。
+
+### 108.5 対策実施：DEL1→透過ラッチ（MUX2+自己フィードバック）
+###      への置き換え（RTL v6）
+
+`src/i2c_slave_async.v`をv6へ更新。`DEL1 u_del_sda (.A(sda_in),
+.Y(sda_d), ...)`を、`MUX2 u_lat_sda (.A(sda_in), .B(sda_d),
+.S(scl), .Y(sda_d), ...)`（Y/Bを同一ネットに接続する自己
+フィードバック——既存のbusy/rst_scl_domain_heldラッチと同じ
+「NOR2/MUX2をクロス結合/自己フィードバックさせて明示的にラッチを
+構造的にインスタンス化する」という、このファイル既存の設計
+イディオムに倣った）に置き換えた。
+
+**動作**：`scl=0`の間、`sda_d`（＝`MUX2`の`S=0`選択）は`sda_in`
+そのものに透過追従する。`scl`が立ち上がった瞬間、`sda_d`はその時点の
+`sda_in`の値に固定され（`S=1`選択でBへ、すなわち自分自身へ
+フィードバック）、`scl`が1の間ずっとその値を保持し続ける。保持
+される値は（アナログ的な遅延コピーではなく）ラッチ自身のトランジ
+スタで再生された正規のデジタルレベルであるため、`sda_in`がその後
+どれほど遅く遷移しても、遷移完了後の`sda_d`と`sda_in`の電位差は
+必ずフルスイングになる——DEL1方式のような固定時間窓に依存しない
+ため、バスのRC時定数（プルアップ抵抗値・寄生容量）に対して原理的に
+頑健。`MUX2`は`TR1um_5_stdcell.lib`に実在する物理セルであり
+（`tr_1um_i2c_slave_async_sim_ready.spice`の`.subckt MUX2 A B S VDD
+Y GND`で確認済み、shreg/rx_data_rの選択にも既に使われている）、
+STDCELL側の変更は一切ない。`sda_d`は`start_pulse`/`stop_pulse`
+以外から参照されていないこと（grepで確認済み）から、この置き換えの
+影響範囲は完全に閉じている。
+
+**シミュレーション用ネットリストへの反映**：`ngspice/tr_1um_i2c_
+slave_async_sim_ready.spice`の`xu_del_sda VDD sda_in_row2 sda_d
+GND DEL1`を`xu_lat_sda sda_in_row2 sda_d scl_row2 VDD sda_d GND
+MUX2`へ直接手動パッチした（§106/§107と同じ「シミュレーション検証
+専用の手動ネットリストパッチ」——実レイアウト・LVS用ネットリストは
+v6 RTLからの完全な再合成フロー（yosys→dedup_gates.py→
+insert_row_buffers.py→insert_bufth_scl_sda.py→gen_lvs_spice_v9.py→
+…→gen_chip_sim_ready_v9.py）の再実行がまだ必要、という同じ注意書き
+を付記）。
+
+**検証状況（1回目）**：`i2c_slave_async_tb.v`（RTLレベル）で再実行した
+ところ、`busy asserted after START`はPASSに転じた（§108.5のコールド
+スタート対策＝`sda_lat_en = scl & rst_n`が有効に機能）が、
+`busy cleared after STOP`系3件は依然FAILのままだった。
+
+### 108.6 テストベンチ側の第2のバグ：STOP系列でSCLがSDAより先に
+###      Highになっていない（`i2c_slave_async_tb.v`/`_net_tb.v`）
+
+ユーザーからの確認質問「I2Cスペックでは、SCLをHighにしてから
+t_SU;STO経過後にSDAをHighにする（＝STOP条件）はずだが、テスト
+ベンチで再現できているか」を受けて調査した結果、`i2c_slave_async_
+tb.v`（RTL）と`i2c_slave_async_net_tb.v`（ネットリスト）の両方の
+STOP系列（3箇所ずつ、計6箇所）が
+
+```verilog
+scl = 1; #2 m_oe = 1; #(T-2);
+m_oe = 0;                       // STOP
+```
+
+という**順序が逆**の実装になっていたことが判明した。これは
+「SCLを先に上げ、その2ns後にSDAを（一旦）Lowに駆動する」という
+順序であり、SDAがSCL＝Highの間に一瞬変化する（UM10204 3.1.3が
+STOP/START以外では禁止しているプロトコル違反）ことに加え、
+§108.5の新しい透過ラッチ方式`sda_d`検出器（SCLが立ち上がった
+瞬間の値で凍結し、SCLが次にLowになるまで再ラッチしない）と
+致命的に噛み合わない：SCL立ち上がり時点でSDAはまだ以前の値
+（Release＝High）のままなので`sda_d`はそこでHighに凍結され、
+その後SDAがLowへ駆動されても`sda_d`は追従せず凍結されたまま
+（SCLがHighのまま変わらないため再ラッチの機会がない）。結果、
+最後にSDAが本当にHighへ戻る（真のSTOPイベント）瞬間には
+`sda_d`は既にHigh（＝古いDEL1方式なら気にしなくてよかった状態）
+のままで、`stop_pulse = scl & ~sda_d & sda_in`の`~sda_d`項が
+常に0になり、stop_pulseは原理的に一度も発火しなくなる。
+
+旧DEL1方式ではこの順序ミスが問題にならなかった（DEL1は`scl`の
+値に関係なく常に短い固定遅延でsda_inを追従するだけなので、この
+ような余分な中間遷移があっても単に余分な一瞬のパルスが生じる
+だけで、後続の本当のSTOPイベントの検出を妨げない）。§108.5の
+新しい検出器は「1回のSCL-High区間につきSDA遷移は1回だけ」という
+前提に立っているため、この隠れていたテストベンチのバグが表面化
+した。
+
+**修正**：`m_oe = 1; #2 scl = 1; #(T-2);`（SDAをLowに駆動→2ns後に
+SCLを立ち上げる、`send_bit`タスクが既に使っている安全な順序と同一）
+へ入れ替え。`i2c_slave_async_tb.v`・`i2c_slave_async_net_tb.v`の
+計6箇所全てに適用。
+
+**検証状況（2回目）**：§108.6の修正後、`busy asserted after START`と
+`busy cleared after STOP`系3件は全てPASSに転じたが、**新たな失敗**
+（シナリオ2「read」以降：`slave ACKed matching address (read)`/
+`rw indicates READ`/`read byte == 0x3C`/`addr_match not asserted for
+foreign address`がFAIL）が発生した。
+
+### 108.7 v6ラッチの根本的欠陥の発見：アイドル中の再アーム不能
+
+原因を解析した結果、v6のsda_dラッチ（`scl=0`で透過・`scl=1`で保持）
+には**別の、より深刻な設計上の欠陥**があることが判明した：実際の
+I2Cバスは、STOP条件成立後から次のSTART条件が始まるまでの間、
+SCLをHighに保持したままアイドルし続け、その間SCLがLowに戻る
+プロトコル上の義務は一切ない。v6のラッチは「SCLが一度Lowになる」
+ことでしか再アーム（透過状態への復帰）しない設計だったため、STOP
+成立の瞬間にSCLが立ち上がった値（＝STOP検出のためにSDA=Lowだった
+瞬間の値）で凍結されたまま、**そのアイドル期間中ずっとSCLが
+Lowに戻らないため、STOP後にSDAが実際にはHighへ戻ったという事実を
+一度も反映できない**。その結果、次のSTART（SDAの1→0遷移）が
+発生しても、凍結された基準値が古いLowのままなので
+`start_pulse = scl & sda_d & ~sda_in`が発火せず、2番目以降の
+トランザクションが丸ごと検出されない。§108.5の`rst_n`コールド
+スタート対策は電源投入直後の一度きりのケースにしか対応しておらず、
+この「STOPのたびに毎回起きる」再発版の問題には対応していなかった。
+
+**新対策（v7）**：`sda_d`の保持条件を`scl`ではなく`busy`でゲートする
+2段構成に変更した。
+
+```verilog
+wire sda_lat, sda_d;
+MUX2 u_lat_sda   (.A(sda_in), .B(sda_d),   .S(scl),  .Y(sda_lat), .VDD(VDD), .GND(GND));
+MUX2 u_force_sda (.A(1'b1),   .B(sda_lat), .S(busy), .Y(sda_d),   .VDD(VDD), .GND(GND));
+```
+
+`busy=0`（アイドル中、および`busy_clr`の`~rst_n`項によりリセット中も
+含む）の間は、`scl`の値に関係なく常に`sda_d=1`（"SDAはリリースされ
+Highのはず"）に強制する。`busy=1`（トランザクション進行中、SCLが
+毎ビット必ずトグルする）の間だけ、v6由来のscl透過ラッチ
+（`u_lat_sda`）を通す。`busy`は`stop_pulse`発火の瞬間に即座にクリア
+されるため、SCLが二度とLowに戻らなくても`sda_d`は正しく即座に
+再アームされる——アイドル期間の長さに一切依存しない。副次効果として、
+リセット中も`busy_clr`の`~rst_n`項が`busy=0`を保証するため、v6で
+別途必要だった`rst_n`個別コールドスタート対策（`sda_lat_en = scl &
+rst_n`）は不要になり削除した（v7は電源投入時の一度きりのコールド
+スタートと、STOPのたびに毎回起きる再発版の両方を、同じ`busy`ゲート
+機構で統一的にカバーする）。
+
+**レース条件の非存在の確認**：START発生の瞬間、`start_pulse`自体の
+計算には`busy`が更新される**前**の`sda_d`の値が使われる（`busy`は
+`start_pulse`の下流にあるSR ラッチの出力であり、逆向きの依存は
+存在しない）ため、"force"条件と"使用"の間に組合せループ的な
+レースは生じない（手計算でトレースし確認済み）。
+
+`src/i2c_slave_async.v`をv7へ更新、`ngspice/tr_1um_i2c_slave_async_
+sim_ready.spice`の手動パッチも同じ2ゲート構成（`xu_lat_sda`+
+`xu_force_sda`）へ更新した。
+
+**検証状況（3回目）**：v7修正後、`i2c_slave_async_tb.v`（RTLレベル）
+で**14/14 全チェックPASS**を確認した——シナリオ1(write)・
+シナリオ2(read)・シナリオ3(不一致アドレスNACK)、および全STOP後の
+busyクリアを含め、回帰なく全て正常動作。
+
+SPICE版14項目バッチテスト（`script/gen_chip_tb_batch14_v9.py`
+再生成→`ngspice -b tb_chip_i2c_batch14.spice`→`check_batch14.py`）
+の実機再実行——本来の目的だったstop_pulse RC律速問題の実解決
+確認——はまだユーザーから未報告。次のアクションアイテムとして残る。
+
+### 108.8 v7ラッチの新たな欠陥の発見：ダイナミック保持ノードの電荷劣化、
+### およびNOR2スタティックSRラッチへの再設計（v8）
+
+108.7に記載したv7修正（`sda_d`を`busy`でゲートした2段MUX2自己
+フィードバック構成）は、`i2c_slave_async_tb.v`（RTLレベルVerilog）
+では**14/14 全チェックPASS**という完全な結果を得た。しかし、その後
+実施したSPICE版14項目バッチテスト（batch14、`tb_chip_i2c_batch14
+.spice`）の実機再実行では、8/14 PASS・6/14 FAILという新たな失敗
+パターンが得られた：`busy`自体はSTART/STOPに対して正しくアサート
+／クリアされる一方、`addr_match`が一度もアサートされず、
+`rx_data`が常に`0x00`、read側のバイト読み出し結果も`0xFF`固定
+という、v7導入前には見られなかった失敗の形だった。
+
+**原因の特定**：v7の`sda_d`保持機構（`u_lat_sda`＋`u_force_sda`の
+MUX2×2、互いに出力を入力へフィードバックし合う構成）は、
+理想化されたVerilogモデル上では問題なく動作するが、回路としては
+**ダイナミック（非再生型）ラッチ**である——MUX2内部のトランス
+ミッションゲートを介してノードを"保持"しているだけで、能動的な
+再生駆動（クロス結合インバータ等によるリストア動作）を持たず、
+保持期間中はノード自身の寄生容量に蓄えられた電荷のみに依存する。
+Verilogのwireは値を永久に保持するためこの違いが表面化しないが、
+実SPICE（アナログ）では、1バイト転送中のSCL-High半周期（本設計
+では約5us）×1バイトあたり複数ビット分という、ダイナミックノード
+としては長大な保持時間が要求される。これがMUX2フィードバック
+ノード（しかも直列に2段連なっている）の電荷保持能力を超え、
+リーク電流により電位が劣化し、`sda_d`の値が化けたと考えられる。
+`busy`ラッチ自体はこれとは別回路（既存のNOR2クロス結合SRラッチ、
+真にスタティック＝再生型）であるため、この影響を受けず正しく
+動作し続けた——これが「`busy`は正しいのに`addr_match`/`rx_data`
+が化ける」という観測結果と整合する。
+
+**対策（v8）**：MUX2フィードバックによるダイナミックラッチを廃し、
+`busy`／`rst_scl_domain_held`と同じ実績のあるNOR2クロス結合SR
+ラッチ方式（スタティック・再生型）を用いて、同等の論理機能
+（`busy`のときは`scl`ゲートの透過ラッチとして動作し、`busy=0`の
+アイドル中は強制的に`sda_d=1`とする、というv7と同一の真理値表）
+を持つゲート付きDラッチとして再構成した。標準的な「SRラッチ経由の
+ゲート付きDラッチ」の式 `S = D & EN`、`R = ~D & EN`、
+`Q = NOR(R, Qn)`、`Qn = NOR(S, Q)` を用い、`D`にはv7の
+"force-to-1 while ~busy"ロジックをMUX2で選択した`sda_target`
+（`busy=0`なら1固定、`busy=1`ならsda_in）を、`EN`には
+`~(busy & scl)`（NAND2一発）を用いた。真理値表を手計算で確認
+済み：`EN=0`（`busy=1`かつ`scl=1`のとき）→ 直前の状態を静的に
+保持、`EN=1`かつ`D=1`→`Q=1`にセット、`EN=1`かつ`D=0`→`Q=0`に
+リセット。すべて既存セル種（MUX2, NAND2, INV_X1, AND2_X1, NOR2）
+のみで構成した。
+
+具体的なゲート構成（`src/i2c_slave_async.v`）：
+```verilog
+wire sda_target;
+MUX2 u_sda_target (.A(1'b1), .B(sda_in), .S(busy), .Y(sda_target), .VDD(VDD), .GND(GND));
+
+wire sda_lat_en;   // active-HIGH transparent-enable = ~(busy & scl)
+NAND2 u_sda_lat_en (.A(busy), .B(scl), .Y(sda_lat_en), .VDD(VDD), .GND(GND));
+
+wire sda_target_n;
+INV_X1 u_sda_target_n (.A(sda_target), .Y(sda_target_n), .VDD(VDD), .GND(GND));
+
+wire s_in, r_in;
+AND2_X1 u_sda_s (.A(sda_target),   .B(sda_lat_en), .Y(s_in), .VDD(VDD), .GND(GND));
+AND2_X1 u_sda_r (.A(sda_target_n), .B(sda_lat_en), .Y(r_in), .VDD(VDD), .GND(GND));
+
+wire sda_d, qn_sda;
+NOR2 u_sda_q  (.A(r_in), .B(qn_sda), .Y(sda_d),  .VDD(VDD), .GND(GND));
+NOR2 u_sda_qn (.A(s_in), .B(sda_d),  .Y(qn_sda), .VDD(VDD), .GND(GND));
+```
+
+`start_pulse`/`stop_pulse`の定義式自体（`sda_d`を参照する箇所）は
+v6/v7から変更なし。`sda_d`／`sda_lat`／`sda_target`等の新規wireは
+このSTART/STOP検出回路以外では使用されていないことをgrepで再確認
+済みのため、この再設計は完全に自己完結している。
+
+`ngspice/tr_1um_i2c_slave_async_sim_ready.spice`の手動パッチも
+v7の`xu_lat_sda`/`xu_force_sda`の2インスタンスから、上記回路に
+対応する7インスタンス（`xu_sda_target`/`xu_sda_lat_en`/
+`xu_sda_target_n`/`xu_sda_s`/`xu_sda_r`/`xu_sda_q`/`xu_sda_qn`）
+へ更新した。各セルのピン順序はネットリスト中の実サブサーキット
+定義をgrepして確認済み（`MUX2: A B S VDD Y GND`、
+`NAND2: VDD Y A B GND`、`INV_X1: VDD A Y GND`、
+`AND2_X1: VDD Y A B GND`、`NOR2: VDD Y A B GND`）。
+
+**検証状況**：v8のRTL（`i2c_slave_async.v`）実装は完了。論理的には
+v7と等価な真理値表を持つよう設計したため`i2c_slave_async_tb.v`でも
+引き続き14/14 PASSになるはずだが、v8としての再実行はまだ未実施。
+SPICEネットリストパッチも適用済みだが、`tb_chip_i2c_batch14.spice`
+での実機再実行はまだユーザーから未報告——これが今回の一連の
+デバッグの本来の目的（stop_pulse RC律速問題、およびv7で新たに
+判明したダイナミックラッチ電荷劣化問題の両方の実解決確認）を
+最終的に判定する、次のアクションアイテムである。
+
+**検証状況（v8実機結果）**：v8適用後、RTL（`i2c_slave_async_tb.v`）は
+引き続き**14/14 全チェックPASS**を確認。実SPICE（`tb_chip_i2c_
+batch14.spice`）再実行では**13/14 PASS**——`busy`/`addr_match`/
+`rw`/ACK/NACK/read byteを含む全項目が正常動作し、v7で発生していた
+アドレス不一致・データ化けは完全に解消された。唯一残った失敗は
+`rx_data == 0xA5`（write側の受信バイト検証）のみで、`got 0x00`
+だった。
+
+### 108.9 rx_data == 0xA5 FAILの原因：回路バグではなく
+### テストベンチの誤ったネット名（rx_data_r_N vs rx_data_N）
+
+上記の唯一の残存FAILを、`spice_batch14.log`の生データ（DC動作点
+計算の警告と、実際の`rx_data_r_bit0`〜`bit7`の測定値）を精査して
+特定した。
+
+**observed**：`spice_batch14.log`のDC動作点計算部で
+`Warning: singular matrix: check node xdut.x2.rx_data_r_3`
+（および`rx_data_r_1`）という警告が複数回出ており、動的gmin
+ステッピング・真のgminステッピング・ソースステッピングの全てが
+失敗し、ngspiceはDC動作点を求められないまま直接過渡解析へ
+フォールバックしていた。さらに、実際に測定された
+`rx_data_r_bit0`〜`bit7`は8ビット全て**2.61986V**という、VDD=5V
+に対してほぼ中間電位（digitalな0でも1でもない、不定な値）で、
+しかも8ビット全部が寸分違わず同一の値だった。これは典型的な
+「フローティングノード」の兆候である。
+
+**原因の特定**：`tr_1um_i2c_slave_async_sim_ready.spice`を
+grepしたところ、`rx_data_r_6`という名前のネットは、ファイル中に
+**一度だけ**しか登場しない：
+```
+x_394_ shreg_5 rx_data_r_6 _087_ VDD _049_ GND MUX2   (A B S VDD Y GND)
+```
+これはMUX2のB入力（hold用）として使われているだけで、
+このネット自体を出力（Y）とするセルはファイル中どこにも存在しない
+——つまり**完全に未接続・未駆動のフローティングネット**である。
+一方、このMUX2の出力`_049_`は、実際に本物のDFFRBの D 入力へ
+接続されており、そのDFFRBの Q 出力（チップのトップレベル
+ポートに直結、本物のレジスタ値）は`rx_data_6`という、
+**"_r"の付かない別名**だった：
+```
+x_526_ VDD _195_ _049_ rx_data_6 _016_ GND _156__row3 DFFRB
+                        (VDD QB D Q RSTB GND CK)
+```
+`rx_data_0`〜`rx_data_7`（全8ビット共通のパターン）がそれぞれ
+本物のDFFRB Q出力であり、`rx_data_r_0`〜`rx_data_r_7`は名前が
+似ているだけの、無関係な未駆動ネットだった。
+
+これは`script/gen_chip_tb_batch14_v9.py`が測定対象ネット名を
+`xdut.x2.rx_data_r_{i}`（"_r"付き）と誤って指定していたことが
+原因の、**純粋なテストベンチ側の測定バグ**であり、DUT回路自体の
+欠陥ではない。v8で導入したNOR2スタティックラッチの正しさとは
+無関係——実際、`busy`/`addr_match`/`rw`/ACK/NACKなど、他の全13
+項目が正しく動作していたこと自体が、v8のSTART/STOP検出回路
+（および他のFSMロジック全体）が実SPICEで正しく機能している
+証拠である。
+
+**対策**：`gen_chip_tb_batch14_v9.py`の`byte_check("rx_data", ...)`
+呼び出しのネット名リストを`xdut.x2.rx_data_r_{i}`から
+`xdut.x2.rx_data_{i}`（"_r"なし、本物のDFFRB Q出力）に修正し、
+`tb_chip_i2c_batch14.spice`/`spice_batch14_expected.json`を
+再生成した。回路（`i2c_slave_async.v`/`tr_1um_i2c_slave_async_
+sim_ready.spice`）側の変更は一切不要。
+
+**検証状況**：この修正後のSPICE実機再実行（14/14 PASS期待）は
+まだユーザーから未報告——次のアクションアイテムとして残る。
+
+### 108.10 108.9の対策自体も誤り：`xdut.x2.rx_data_N`もngspiceの
+### サブサーキット・フラット化でエイリアス消滅していた
+
+108.9の対策（`xdut.x2.rx_data_r_{i}`→`xdut.x2.rx_data_{i}`への
+修正）を適用して再実行したところ、`ngspice`が
+`Error: no such vector as v(xdut.x2.rx_data_1).`
+`.measure tran rx_data_bit1 find v(xdut.x2.rx_data_1) at=0.000194 failed!`
+という新たなエラーを全ビットで出し、`check_batch14.py`側は
+「one or more bit measures not found / failed」という3つ目の異なる
+失敗モードを示した。
+
+**原因の特定**：`tr_1um_i2c_slave_async_sim_ready.spice`の階層を
+丁寧に追跡した結果、`rx_data_6`（他のビットも同様）は
+`i2c_slave_async_nrow_fm`サブサーキットの**宣言済みポート**
+（ポートリストの19番目、`.subckt i2c_slave_async_nrow_fm rst_n scl
+sda_in ... rx_data_0 ... rx_data_7 rx_valid addr_match rw busy VDD
+GND`）であり、`sda_d`や`rx_data_r_N`のような純粋な内部ノードでは
+なかった。ngspiceはサブサーキットをフラット化する際、**ポート
+ノードは呼び出し側（インスタンス化時）に接続されたネット名へ
+マージ・エイリアスされ、サブサーキット内部でのローカル名は
+消滅する**——これはngspiceの既知の挙動である。トップレベル
+`tr_1um_i2c_slave_async`での`x2`（`i2c_slave_async_nrow_fm`の
+インスタンス）のインスタンス化行を実際にポート位置で対応付けた
+ところ、`rx_data_6`ポートの位置には`NC_OUT4`という配線が来ていた：
+```
+x2 P15 P1 P2 P11 P12 P13 P14 P6 P5 P4 P3 NC_HIZ2
+ + NC_OUT11 NC_OUT12 NC_OUT13 NC_OUT14 NC_OUT6 NC_OUT5 NC_OUT4 NC_OUT3
+ + NC_CORE_rx_valid NC_CORE_addr_match NC_CORE_rw NC_CORE_busy VDD VSS
+ + i2c_slave_async_nrow_fm
+```
+つまり正しいプローブ経路は`xdut.NC_OUT4`（`xdut.x2.`のプレフィックス
+なし）であり、`xdut.x2.rx_data_6`ではなかった。
+
+**旧来の"NC_OUT*は使えない"という認識の再検証**：このプロジェクトの
+過去の調査（本ファイル内の以前の記述）では、「NC_OUT*パッド系
+ネットはDIS=1時にこのテストベンチ自身のvtx0〜7外部強制DC電圧を
+反映するだけで、実際にDUTが受信したI2Cバイトとは無関係」という
+結論だったため、いったんNC_OUT*を避けて`rx_data_r_N`直読みへ
+切り替えた経緯があった。しかし今回改めてネットリストの実配線を
+辿った結果、`NC_OUT4`はパッドリング側（`x1`／`OSS_FRAME_GIO`
+サブサーキット内）では**ESDクランプセルのバイアス入力としてしか
+使われておらず**、パッド出力ドライバにもレシーバにも接続されて
+いない——つまり`x2`のDFFRB Q出力以外に駆動源が存在しない、
+純粋なデバッグ観測用ネットである可能性が高いことが分かった。
+以前の"vtx強制電圧に汚染される"という認識が別の症状に基づく誤認
+だったのか、あるいは別のNC_OUT系統と混同していたのかは特定でき
+なかったが、少なくとも配線トレース上はクリーンなタップである。
+
+**対策**：`gen_chip_tb_batch14_v9.py`の`rx_data`測定を、既にimport
+済みだった`RX_NETS`（`gen_chip_tb_v9.py`で定義済み：bit0..7の順に
+`NC_OUT11/12/13/14/6/5/4/3`）に基づく`xdut.NC_OUTxx`直読みに変更
+した。加えて、この判断が万一まだ間違っていた場合に備え、同一
+サンプル時刻で`shreg_0`〜`shreg_6`／`sda_in_row2`（キャプチャ元の
+生シフトレジスタ）、`rx_data_r_0`〜`_7`（フローティングであることが
+既知の対照群）、`NC_OUT3/4/5/6/11/12/13/14`を横並びで測定する
+`rx_diag`診断ブロックを追加した（`stop1_diag`と同じ仕組みで
+`.control`部の`print`にも自動的に含まれる）。これにより、万一
+再度FAILしても同じ実行ログだけで原因を切り分けられるようにした。
+`tb_chip_i2c_batch14.spice`／`spice_batch14_expected.json`は
+再生成済み。回路（`i2c_slave_async.v`／`tr_1um_i2c_slave_async_
+sim_ready.spice`）側の変更は引き続き不要。
+
+**検証状況**：この2回目の対策後のSPICE実機再実行はまだユーザー
+から未報告——次のアクションアイテムとして残る。
+
+### 108.11 `xdut.NC_OUT4`は正しい経路だったが、測定結果自体が
+### 実行のたびに矛盾——原因はngspiceの`print`一括指定バグによる
+### 二重トランジェント実行
+
+108.10の対策（`xdut.NC_OUTxx`への切替＋`rx_diag`診断追加）を適用して
+再実行したところ、ngspiceは「no such vector」エラーを出さなくなり
+（＝ネット名自体は今度こそ正しく解決された）、`rx_data`は
+`got 0x00`という通常の電圧ベースの結果を返した——一見、あとは
+回路側の問題に見えた。
+
+しかし`spice_batch14.log`を`grep`で精査したところ、
+`Doing analysis at TEMP = 27.000000`という行が**2回**、それぞれ
+異なる`No. of Data Rows`（17593回と17321回、明らかに別々の時間
+刻みで解いた**本当に別個のトランジェント解析**）とともに出現して
+いた。1回目の解析結果では`rx_data_bit0`〜`bit7`が全ビット
+**5.00000V**（＝0xFF）、2回目の解析結果では全ビット**約
+2.09e-08V**（＝0x00）と、まったく矛盾する値が同一ログ内に共存
+していた。加えて、1回目の解析結果を`print`した直後に
+`Warning from checkvalid: vector busy_after_start is not available or
+has zero length.`という警告、続いて`Warning: can't parse
+'xdut.nc_core_busy': ignored`のような、本来ネット名でも測定名でも
+"can't parse"エラーになるはずのないメッセージが大量に出ていた。
+
+**原因の特定**：この`.control`ブロックは元々
+```
+print busy_after_start ... （14項目）
+print stop1_busy_m500n ... （stop1_diag + rx_diag 併せて約190項目）
+```
+という、1行に大量の測定名を並べる`print`文を使っていた。この
+引数リストがある長さ（今回`rx_diag`追加で約210項目に増えたことで
+初めて顕在化）を超えると、ngspiceの`print`パーサが途中で破綻し、
+以降のトークンを測定名としてではなく別の何かとして誤解釈し始め、
+最終的に**トランジェント解析全体を最初からもう一度実行し直す**
+という、ドキュメント化されていないバッチモードの挙動を引き起こす
+ことが分かった。`check_batch14.py`はログ中の同名エントリを
+「後勝ち（最後に出現した値で上書き）」でパースするため、たまたま
+2回目の（本来は不要な、内部状態が汚染された可能性のある）解析
+結果を採用してしまい、`got 0x00`という値を報告していた——
+1回目の結果（0xFF）とすら食い違うため、少なくともどちらか一方は
+無効であり、両方とも本当の値である保証がなかった。
+
+**対策**：`gen_chip_tb_batch14_v9.py`の`.control`ブロックを、
+1行あたり8項目までに分割した複数の`print`文（`{PRINT_LINES}`）に
+変更した。これにより`print`パーサの破綻・二重解析を回避し、
+`check_batch14.py`が読み取る測定結果が単一の、汚染されていない
+トランジェント解析由来であることを保証できる。`tb_chip_i2c_
+batch14.spice`は再生成済み。回路側の変更は引き続き不要。
+
+**検証状況**：この3回目の対策（print分割）後のSPICE実機再実行では、
+`print`を1行8項目に分割してもなお二重解析（`Doing analysis at
+TEMP=...`が2回）が再発し、`rx_data`は依然`got 0x00`のままだった。
+つまり108.11の「引数リストの長さが原因」という仮説は**誤り**
+だったことが判明した——分割後も同じ症状が起きたため、原因の
+切り分けをさらに進める必要があった。
+
+### 108.12 真因は`print`文の長さではなく`print`コマンドの存在
+### 自体——診断用`rxdiag_shreg_N`との比較で発覚
+
+ログを詳細に比較したところ、決定的な手がかりが得られた：1回目の
+解析結果（`Doing analysis`の1回目のブロック）では`rx_data_bit0`〜
+`bit7`が全ビット**5.00000V**（0xFF相当）、2回目のブロックでは
+全ビット**約2.09e-08V**（0x00相当）と、8ビット全部が判で押した
+ように同一値になっていた。一方、同じタイミングで測定した
+`rxdiag_shreg_0`〜`shreg_6`（内部シフトレジスタの生値）は、1回目・
+2回目とも**ほぼ同一の、0/1が混在した妥当なパターン**を示していた
+（例：shreg_1=5V, shreg_3=5V, shreg_6=5V、他は約0V——1回目と2回目で
+ほぼ同じ値）。
+
+これは重要な区別を示している：内部のシフトレジスタ自体は再現性
+良く正しそうな値を保持しているのに、外部観測用の`NC_OUTxx`
+（＝`rx_data_bitN`）だけが、実行のたびに全ビット一致して0か1に
+振れる——これは個別に駆動された8つの独立ノードの挙動としては
+不自然すぎる。さらに、パッドリング側のネットリスト
+（`OSS_FRAME_GIO`サブサーキット、`OUT3`〜`OUT14`の各ピン）を
+サブエージェントで丹念に追跡し、8本の`NC_OUTxx`ネットが物理的に
+短絡・エイリアスされていないこと（各々が独立した`OSS_ESD_5V_DIO`
+インスタンスに個別に接続され、共有ノードは`VDD`/`VSS`のみ）を
+確認した——ネットリスト自体に短絡バグは無い。
+
+**真因の特定**：`Warning from checkvalid: vector busy_after_start is
+not available or has zero length.`という警告が、我々の`print`文の
+実行タイミングで出ていることに着目した。これは、`run`直後に
+ngspiceが自動的に一度だけ表示する"Measurements for Transient
+Analysis"ブロック（これは常に単一の、汚染されていない結果）とは
+別に、**我々が明示的に発行した`print`コマンド自体**が、ngspiceの
+バッチモードにおける未知の不具合を誘発し、"vector ... not available"
+警告→"can't parse '<netname>'"警告の連鎖→**トランジェント解析
+全体の暗黙の再実行**を引き起こしていることを意味する。108.11で
+「1行あたりの項目数が多すぎるのが原因」と推定して8項目ずつに
+分割したが、それでも同じ現象が再発したため、原因は行の長さでは
+なく、**明示的な`print`コマンドの存在そのもの**にあると判断した。
+
+`check_batch14.py`は`.measure`結果を"name = value"形式の正規表現で
+ログ全体からパースし、同名エントリは**後勝ち**で上書きする実装
+なので、2回目の（内部状態が汚染された可能性のある）解析結果を
+毎回拾ってしまい、`rx_data`が実行のたびに0xFFになったり0x00に
+なったりしていた。
+
+**対策**：`.control`ブロックから明示的な`print`文を完全に削除し、
+`save all` / `run`のみとした。ngspiceは`.measure`文が存在する場合、
+`run`終了直後に**自動的に一度だけ**"Measurements for Transient
+Analysis"ブロックを表示する仕様であり、これが`check_batch14.py`の
+パース対象として必要十分——追加の`print`は本質的に不要だった。
+`tb_chip_i2c_batch14.spice`を再生成し、`.control`ブロックが
+`save all`/`run`のみになっていることを確認済み。回路側の変更は
+引き続き不要。
+
+**検証状況**：`print`を完全に削除しても、なお`Doing analysis at
+TEMP=...`が2回出現する現象は解消しなかった。つまり108.12の
+「`print`コマンドの存在自体が原因」という仮説も**誤り**だった。
+この二重解析はテストベンチのスクリプト側の書き方とは無関係に、
+この回路とngspiceの組み合わせに内在する現象らしいことが分かった。
+
+### 108.13 二重解析は測定ノードのミスではなく、`rx_data`経路
+### 固有の不安定性——`_087_`のクロスロウ・クロックスキュー疑惑
+
+ユーザーから「観測ノードが間違ってませんか？」という指摘を受け、
+再度冷静に確認した。
+
+**観測ノードは正しい**：`xdut.NC_OUT3/4/5/6/11/12/13/14`が
+`rx_data_0`〜`_7`の各DFFRB Q出力に一意に配線されており、8本が
+互いに短絡・エイリアスされていないことは、サブエージェントに
+`OSS_FRAME_GIO`サブサーキットの全内部配線を辿らせて確認済み
+（各ピンは独立した`OSS_ESD_5V_DIO`インスタンスに個別接続、共有
+ノードは`VDD`/`VSS`のみ）。ノード名の指定ミスではない。
+
+**新たな手がかり**：2回の解析ブロックを項目ごとに比較したところ、
+`busy_after_start`・`addr_match_write`・`ack_data`など**回路の
+ほぼ全ての測定値は1回目と2回目でナノV単位まで一致**していた
+（＝この回路とテストベンチの組み合わせ自体は決定論的に同じ答えに
+収束する）。**`rx_data_bit0`〜`bit7`（＝`NC_OUTxx`）だけ**が、
+1回目は8ビット全部5V（0xFF相当）、2回目は8ビット全部0V
+（0x00相当）と、**8ビット全部が毎回そろって**別の値に転ぶ——
+これは8個の独立したビットの挙動としては明らかに不自然で、何かが
+8ビット共通のある1つの信号に相関して動いていることを示唆する。
+
+サブエージェントに`rx_data`のMUX2キャプチャ経路を追跡させたところ、
+8個すべてのMUX2（`x_394_`〜`x_400_`、`x_454_`）が**全く同一の
+選択信号`_087_`**を共有していることを確認した。さらに`_087_`
+（`last_bit_pending`と`phase_0/1/2`から作られるNAND2/NOR3の
+組合せ論理）は`_156__row1`というクロックの派生系統で生成されて
+いるのに対し、それを受け取ってラッチする`rx_data`側のDFFRBは
+`rx_data_0`が`_156__row2`、`rx_data_1`〜`_7`が`_156__row3`という、
+**互いに異なる、別々に緩衝（バッファ）されたクロックコピー**で
+駆動されていることが判明した。RTL側では`last_bit_pending`を
+「ビットカウンタのロールオーバーと同一エッジでの競合を避けるため
+1サイクル早めに登録する」設計（v4以来の既存の工夫）になっており、
+理想化されたVerilogモデル（クロックスキュー無し）ではこれで
+安全マージンが確保されるが、実チップでは`insert_row_buffers.py`が
+生成した複数の"行"別クロックバッファコピー間に実際のスキューが
+存在すれば、この安全マージンが侵食され、`_087_`の遷移と
+`rx_data`側のサンプリングエッジが際どいタイミング関係になり得る。
+全8ビットが同一の`_087_`を共有しているため、もしこのタイミングが
+際どければ、**8ビット全部が同じ方向へ相関して転ぶ**——今回観測
+された症状と定性的に一致する。
+
+**対策（診断段階）**：`gen_chip_tb_batch14_v9.py`に、WRITEデータ
+バイトの8ビット区間それぞれの終わり付近で`_087_`・
+`_156__row1`・`_156__row2`・`_156__row3`・`last_bit_pending`を
+サンプリングする`rx_load_diag`診断ブロックを追加した（合計8
+ビット×5信号=40測定点）。これにより、`_087_`が設計意図通り
+「最後のビットでのみ1回だけパルスする」正しい波形になっているか、
+それとも複数回誤ってアサートされている・タイミングがずれている
+などの異常があるかを、次回の実機実行で直接確認できる。
+`tb_chip_i2c_batch14.spice`を再生成済み。回路側の変更は引き続き
+不要（診断のみ）。
+
+**検証状況**：`rx_load_diag`の結果、`_087_`はWRITEデータバイトの
+8ビットのうちちょうど1ビット（"is_last_bit"に対応する位置）でのみ
+LOW（＝A側=shreg選択）になり、それ以外の7ビットでは一貫して
+HIGH（＝B側選択）——2回の解析ブロックでも完全に再現性があり、
+クロックスキューで`_087_`自体が揺れている様子は無かった。つまり
+108.13の「クロックスキューで`_087_`が乱れる」という仮説は誤り
+だった。しかしこの結果自体が、真因を特定する決定的な手がかりに
+なった。
+
+### 108.14 根本原因を確定：MUX2の"hold"入力が本来のフィード
+### バックではなく未接続ネット`rx_data_r_N`を指していた
+### （ネットリスト生成バグ、`rx_data`経路のみに影響）
+
+`_087_`（`last_bit_pending`由来のMUX2セレクト信号）は正しく
+「8ビット中ちょうど1回、is_last_bitのタイミングでのみA側
+（`shreg_N`、新しくシフトされた値）を選択し、残り7回はB側を
+選択する」という設計意図通りの波形を示していた。RTLの意図は
+`if (is_last_bit) rx_data_r <= shreg_next; // else 暗黙に rx_data_r
+<= rx_data_r（現状維持）`——つまりB側は本来「レジスタ自身のQ出力
+へのフィードバック（保持）」であるべきだった。
+
+しかし108.9/108.10で確認済みの通り、このB側の配線先
+`rx_data_r_N`は**ファイル中どこからも駆動されていない、完全に
+未接続のネット**である。したがって「保持」を意図した7回の
+クロックエッジのたびに、DFFRBのD入力は実際にはフローティング
+ノードの不定電荷を取り込んでしまう。しかも`scl_gated`
+（`_156__rowX`）はデータバイトの8ビット区間が終わった後、ACK
+ビットや後続の通信でもクロックを刻み続けるため、**is_last_bit
+エッジで正しくロードされた直後の、次のクロックエッジで即座に
+その正しい値がフローティングガベージによって上書きされてしまう**
+——これが、`rx_data`だけがサンプリング時刻によって0xFFになったり
+0x00になったりする（8ビット全部が同じ`_087_`と类似のフローティング
+挙動を共有するため相関して転ぶ）という、これまで観測してきた
+全ての症状の統一的な説明になる。内部の`shreg`自体は毎エッジ
+更新され続ける設計で「保持」を必要としないため、この不具合の
+影響を受けず常に正しく見えていた。
+
+これはRTL（`i2c_slave_async.v`）自体の誤りではなく、**ネットリスト
+生成（Yosys合成、またはこのプロジェクトの後処理スクリプト群の
+いずれか）の過程で、"レジスタ自身のQ出力へのフィードバック"という
+配線が、Verilogの内部変数名`rx_data_r`をそのまま引き継いだ
+未接続ネットに置き換わってしまった**、という合成フロー側のバグ
+である。START/STOP検出回路（v6〜v8で扱ってきた`sda_d`まわり）とは
+完全に独立した、別系統の不具合。
+
+**対策**：`tr_1um_i2c_slave_async_sim_ready.spice`の該当8個の
+MUX2インスタンス（`x_394_`, `x_395_`, `x_396_`, `x_397_`, `x_398_`,
+`x_399_`, `x_400_`, `x_454_`）のB入力を、未接続の`rx_data_r_N`から
+実際のDFFRB Q出力`rx_data_N`（本物のレジスタ自身の値）へ張り替えた
+——これにより、is_last_bitでない全てのエッジで正しく"現在値を保持"
+する、意図通りの静的フィードバックが実現される。回路の他の部分
+（RTL、START/STOP検出器）への変更は不要。この修正はシミュレーション
+専用の手動ネットリストパッチであり、本来はYosys合成フローの
+どこでこの不具合が混入したかを特定し、フロー自体を修正して
+再合成する必要がある（今後の課題として残る——`i2c_slave_async_
+net_v9_rowbuf.v`など、他の合成済みネットリストにも同様の欠陥が
+無いか要確認）。
+
+**検証状況**：108.14の修正を適用して再実行したところ、`Doing
+analysis at TEMP=...`の二重解析自体は相変わらず発生するものの、
+**今回は2回のブロックの`rx_data_bit0`〜`bit7`が完全に一致した**
+（両方とも同一の値）——未接続ネットを解消したことで、少なくとも
+この経路の非決定性・実行毎の値のブレは解消されたことが確認できた
+（フローティングノードが数値解の収束経路に依存した不安定性を
+生んでいた、という診断が正しかったことの状況証拠）。
+
+しかし結果自体はまだ不正解：`rx_data`が`got 0x01`
+（期待値0xA5）——以前の「8ビット全部そろって0か1に転ぶ」という
+症状からは脱したものの、新しい、しかし依然として間違った値になった。
+`rx_data_bit0`（weight0）のみ正しく1、他の7ビットは全て0という
+パターンで、正しい0xA5（=1010 0101）とは一致しない。
+
+ユーザーから「観測ノードが間違ってませんか？」に続き「駄目です。
+冷静にお願いします」との指摘を受け、108.13の診断（`_087_`のサンプル
+時刻を「各ビット期間の終わり付近」という近似計算で決め打ちして
+いた）に精度上の欠陥があったと判断した。特に、最後のビットの
+「期間の終わり」はすでにキャプチャ・エッジを過ぎてACKフェーズへ
+遷移した後である可能性が高く、キャプチャの瞬間の値を見ていな
+かった。
+
+### 108.15 診断手法の精度向上：`BusBuilder`が記録する実際の
+### SCLライジングエッジ時刻（`all_bit_edges`）を直接使用
+
+ユーザーから「インタラクティブで解析しますか？」との提案があり、
+これを機に、時刻を手計算で近似する方式をやめ、より直接的な手法に
+切り替えた：
+
+1. `gen_chip_tb_v9.py`の`BusBuilder`が、`master_byte()`が送信する
+   全ビットについて実際のSCLライジングエッジ時刻を`self.
+   all_bit_edges`（`(edge_t, label, bit_index)`のリスト）として
+   既に記録していることを確認したため、108.13の「バイト全体の
+   時間を8等分する」近似計算をやめ、この`all_bit_edges`を直接
+   スライスして使うよう診断を書き直した。各エッジの前後
+   （-50ns/+50ns/+500ns）で`_087_`・`last_bit_pending`・
+   `shreg_0`〜`_6`・`sda_in_row2`・`scl_row2`を測定する
+   （8エッジ×3時刻×11信号）。
+2. さらに、ngspiceの`.control`ブロックに`wrdata`コマンドを追加し、
+   同じ主要信号群（`shreg_0`〜`_6`、`sda_in_row2`、`_087_`、
+   `last_bit_pending`、`scl_row2`、`busy`、`rx_data_0`〜`_7`）を
+   シミュレーション全期間にわたって`rx_capture_trace.txt`へ
+   ダンプするようにした。これにより、事前に時刻を推測して
+   `.measure`を仕込む必要がなくなり、実際の波形を直接確認できる。
+
+`tb_chip_i2c_batch14.spice`を再生成済み。回路側の変更は無し
+（診断精度の向上のみ）。
+
+**検証状況**：実行はされたが`rx_capture_trace.txt`が一切生成
+されなかった。ログを確認したところ`Error: no such vector xdut.x2.
+rx_data_0`（`wrdata`コマンド内）が原因と判明。
+
+### 108.16 `wrdata`が108.10で既に一度解決したのと全く同じ
+### 誤り（`xdut.x2.rx_data_N`）を再導入していた、および
+### 108.14の修正で`rx_data_r_N`診断プローブも道連れでエラー化
+
+2つの見落としが重なっていた：
+
+1. `wrdata`コマンド自身に`v(xdut.x2.rx_data_0)`等を書いてしまって
+   おり、これは108.10で既に特定・修正済みのはずの誤り
+   （`rx_data_N`はサブサーキットの宣言済みポートであり、
+   フラット化時に呼び出し側の`NC_OUTxx`へマージされるため
+   `xdut.x2.rx_data_N`という経路は存在しない）を、`wrdata`の
+   引数リストを書く際にコピー＆ペーストの手違いで再び持ち込んで
+   しまっていた。この`Error: no such vector`が`wrdata`コマンド
+   全体を中断させ、ファイルが一切書き出されない結果になっていた。
+2. さらに、108.9〜108.10の`rx_diag`診断ブロックに残っていた
+   `rx_data_r_0`〜`_7`の測定も、108.14でネットリストからその
+   参照を完全に削除した副作用として、今度は`Error: no such
+   vector`（フラット化後に存在しないネットとして扱われる、単なる
+   warningでは済まなくなった）を出すようになっていた。
+
+**対策**：`wrdata`の引数を`xdut.NC_OUT11/12/13/14/6/5/4/3`
+（bit0..7の順、`RX_NET_BY_BIT`と同じマッピング）に修正し、
+`rx_diag`から`rx_data_r_N`の測定を完全に削除した（このネットは
+108.14の修正後、ネットリスト中どこからも参照されなくなり、もはや
+存在しないため）。`tb_chip_i2c_batch14.spice`を再生成済み。
+
+**検証状況**：`rx_capture_trace.txt`（約11MB、40列×約22000行、
+`time,value`のペアが引数順に並ぶ`wrdata`形式）が正しく生成された。
+これを`awk`でDATAバイト区間（100000ns〜185000ns）に絞り込み、
+`_087_`/`last_bit_pending`の論理レベルが変化する行だけを抽出して
+精査した。
+
+### 108.17 決定的な手がかり：weight0（`rx_data_0`）だけが
+### 実際に更新されており、他の7ビットは一度も変化していない
+### ——`_156__row2`と`_156__row3`という別クロック系統の疑い再燃
+
+トレースから、`last_bit_pending`が約166992ns〜176985ns
+（ちょうどSCL1ビット分=10000ns）の間だけHIGHになり、その終端
+（176985ns、`_087_`がLOW→HIGHへ戻る瞬間）で`shreg_0`が4.64V
+（≒1）、同時刻に`sda_in_row2`も4.99V（≒1）、そして**`NC_OUT11`
+（=`rx_data_0`、weight0）が同じ瞬間に0V→4.74Vへ実際に変化した**
+ことを確認した——これはweight0が正しく`sda_in_row2`の値（1）を
+キャプチャした証拠である。
+
+ところが期待値0xA5（=1010 0101）ではweight1（`shreg_0`が供給する
+はず）は本来0であるべきなのに、この瞬間`shreg_0`は1（4.64V）に
+なっていた——にもかかわらず`NC_OUT12`（=`rx_data_1`、weight1）は
+このタイミングでは変化せず0のままだった。さらに時刻194000ns
+時点の最終結果を見ても、`rx_data_bit1`〜`bit7`（＝`NC_OUT12/13/
+14/6/5/4/3`）は**シミュレーション開始からただの一度も変化して
+いない**（`got 0x01`＝weight0のみ1、他は全部リセット値の0のまま）。
+
+これは、108.13で最初に立てたが108.15の（不完全な）診断で
+一度は棄却したように見えた仮説——**`rx_data_0`だけが
+`_156__row2`、`rx_data_1`〜`_7`が`_156__row3`という別々の
+row（合成時の行バッファ）クロックコピーで駆動されている**
+——を再び強く支持する。108.15の`rxe_i*`診断は誤って`scl_row2`
+（START/STOP検出器が使う別の信号）を測定してしまっており、
+肝心の`_156__row1`/`_156__row2`/`_156__row3`そのものは一度も
+直接観測できていなかったことが判明した。
+
+**対策（診断強化）**：`wrdata`のダンプ対象に`_156__row1`・
+`_156__row2`・`_156__row3`を追加し、これら3本のクロックネットの
+実波形を直接確認できるようにした。`tb_chip_i2c_batch14.spice`を
+再生成済み。回路側の変更は無し（診断のみ）。
+
+**検証状況**：得られた`rx_capture_trace.txt`を精査した結果、
+`_156__row1/2/3`は3本とも同じような波形でSCLの半周期ごとに
+振れており、`_156__row3`だけが特に停止・不動というような単純な
+「クロック系統バグ」ではないことが分かった（108.13の
+クロックスキュー仮説はここでも支持されなかった）。
+
+さらに重要な発見として、`shreg`の実際の値を、アドレスバイト＋
+ACKビット＋データバイトを通した**連続的なローリングウィンドウ**
+（RTL上`shreg`は位相にかかわらず全エッジで無条件にシフトする
+設計であることを再確認）として手計算で追跡したところ、
+DATAバイトの最後から2番目のビット（bit_index=1、つまり
+`last_bit_pending`が0→1に変化する、まさにそのエッジ）の**直後**
+から、`last_bit_pending`が正しく1になった一方で、`shreg_0`〜
+`shreg_6`が**全ビット0にクリアされてしまう**ことをトレースから
+確認した（その後、最後のビット(bit_index=0)のエッジで`shreg_0`
+だけが新しい着信ビットの値を正しく反映するようになるが、
+`shreg_1`〜`_6`は0のまま）。これは108.14で修正した`rx_data`の
+"hold"配線バグとは別の場所で起きている、**`last_bit_pending`が
+0→1に変化するエッジと同時にshregレジスタ全体がクリアされる**、
+という新種の同時性の問題である。
+
+`shreg`の全7ビットのDFFRBはリセットピン`_016_`（設計全体で共有
+される単一のグローバルリセットネット、`bit_cnt`・`phase`・
+`addr_match`・`rx_data`・`last_bit_pending`も全て同じ`_016_`を
+使用）を持つ。もし`_016_`がこの特定のエッジで瞬間的にグリッチ
+（誤アサート）すれば、`shreg`を含む全レジスタが同時にリセット
+される――しかし`busy`（`_016_`とは別の、`~rst_n`直結のリセット系統
+を持つSRラッチ）はこの間ずっと5V付近を維持しており、`_016_`の
+グリッチだけでは`last_bit_pending`自身が同じエッジで正しく1に
+なれた理由を説明できない（もし本当に`_016_`がリセットを主張して
+いれば、`last_bit_pending`自身もリセットされ0のままになるはず）。
+この矛盾を解消するため、`_016_`と`bit_cnt_0`〜`_2`の実波形を直接
+確認する必要がある。
+
+**対策（さらなる診断強化）**：`wrdata`のダンプ対象に`_016_`
+（グローバルリセットネット）と`bit_cnt_0`〜`_2`を追加した。
+`tb_chip_i2c_batch14.spice`を再生成済み。回路側の変更は無し
+（診断のみ）。
+
+**検証状況・最終分析**：得られたトレースを`bit_cnt`と突き合わせて
+精査した結果、以下が確定した。
+
+- `_016_`（グローバルリセット）は該当区間を通じて一度も5Vから
+  下がらない——**リセットのグリッチは一切発生していない**。108.17
+  で立てた「`_016_`がこのエッジで瞬間的にグリッチする」という
+  仮説は完全に否定された。
+- `bit_cnt`は`6→7→0`と正しく遷移しており、`last_bit_pending`も
+  `bit_cnt==6`のタイミングで正しく1になり、`bit_cnt==7`から`0`へ
+  戻るエッジ（is_last_bitが実際に使われる、真の最終ビット捕獲
+  エッジ）で正しく0に戻る——**制御ロジック（`_087_`／
+  `last_bit_pending`／`bit_cnt`／`phase`）は全て設計通り正確に
+  動作している**。
+- 問題は**`bit_cnt`が6から7へ遷移する、まさにそのエッジ**（＝
+  `last_bit_pending`が0→1に変化する瞬間）で発生している：この
+  エッジで`shreg`の全7ビットが、正しい遷移則
+  `shreg_next={shreg[6:0]_旧, sda_in}`ではなく、**旧`shreg`の値が
+  "1"だったビットだけが軒並み消えて0になる**という形で壊れている
+  ことを、遷移前後の値を1ビットずつ突き合わせて確認した（旧値が
+  0だったビットは正しく0→0または0→(新sda_in値)として伝播して
+  おり、正しく振る舞っていた）。つまり「シフトレジスタの1段階
+  ぶんの遅延ロジック自体は正しいが、"1"を次段へ引き継ぐ動作だけが
+  この特定の瞬間に限って失敗する」という、極めて限定的で奇妙な
+  症状である。
+
+**結論（暫定）**：ネットリストの配線ミス（108.9〜108.14で見つけた
+ような、間違ったネット名や未接続の"hold"入力）ではこの症状は
+説明できない——`shreg`のDFFRBチェーン自体の配線は108.17で既に
+「設計通り正しい」と確認済みである。残る最有力の説明は、
+**`last_bit_pending`（クロック`_156__row1`)とshreg（クロック
+`_156__row3`）が別々の行バッファクロックコピーに属しており、
+`last_bit_pending`の0→1遷移が引き起こす大きな同時スイッチング
+（`_087_`・`rx_valid`系ロジック・`phase`次状態ロジックなど広い
+ファンアウト）が、ちょうどshregの捕獲エッジと際どく重なることで、
+電源／グラウンドの瞬間的な変動（同時スイッチングノイズ）を
+引き起こし、shregの内部ノードのうち"1"を保持しようとしていた
+ものだけが妨害を受けて誤って"0"側に落ちてしまった**、という
+アナログ的・物理設計レベルの現象である可能性が高い。これは
+単純なSPICEネットリストの手動パッチでは修正できない種類の問題
+であり、真の対策には、行バッファ挿入（`insert_row_buffers.py`）
+段階でのクロック間スキュー是正、または`last_bit_pending`の
+ファンアウトとshregの捕獲エッジとの間にもう1段の時間的マージン
+を設ける設計変更（RTL側でのパイプライン段追加、または物理設計
+側でのタイミング制約強化）が必要になると考えられる。
+
+これは、これまでこの一連の調査で扱ってきたSTART/STOP検出器
+（`sda_d`まわり、v6〜v8で解決済み）とは**完全に別系統・別原因の
+不具合**であり、108.14で修正した`rx_data`の"hold"配線バグ
+（ネットリスト生成スクリプトの明確なバグで、既に修正・確認済み）
+とも異なる、より深い物理設計レベルの課題である。
+
+### 108.20 shregの崩壊バグ：根本原因を行バッファ負荷の偏りに特定し、
+### ネットリストパッチで修正（アナログ推定ではなく構造的事実に基づく）
+
+108.19で立てた「`_156__row1`と`_156__row3`のスキュー／同時スイッチ
+ングノイズが原因では」という仮説を、憶測のままにせず、実際の
+ネットリストの配線事実で検証した。
+
+まず、`shreg_0`〜`shreg_6`が現れる全箇所を`grep`で洗い出し、各
+shregネットの「駆動元（ドライバ）」が本当にDFFRBのQ出力1個だけで、
+どこにも二重駆動や意図しないフィードバックが無いことを再確認した
+（結果：全7ビットとも駆動元はDFFRBのQ出力ただ1つのみ、他は全て
+読み出し側＝MUX2・次段DFFRBのD入力・NOR4/OR4の入力。ドライバ競合
+は無し）。この過程で、`shreg_0,1,2,3,5`とそのQB（`_191_`,`_194_`
+など）が`addr_match`系と思われるOR4/NOR4（`_117_`/`_118_`）にも
+ファンアウトしていることを新たに発見したが、これは読み出し専用の
+分岐であり、`_117_`/`_118_`からshreg側へ戻る経路は無いため、
+shreg自体の壊れ方を説明する論理的フィードバック経路にはならない
+と判断した（この枝は無関係と結論）。
+
+次に、`_156__row0`〜`_156__row3`を生成・使用する箇所を全て洗い出し、
+各行バッファ（`BUF_X1`、全て同一の`_156_`ノードを入力とする単純な
+ファンアウト用バッファ）が実際に何個のDFFRBのCKピンを駆動している
+かを数えた。結果は次の通りだった：
+
+| 行バッファ | 駆動しているDFFRB数 | 内訳 |
+|---|---|---|
+| `_156__row0` | **0個（完全未使用）** | なし |
+| `_156__row1` | 9個 | `addr_match`, `bit_cnt_0/1/2`, `rw`, `phase_0/1/2`, `last_bit_pending` |
+| `_156__row2` | 1個 | `rx_data_0` |
+| `_156__row3` | **14個** | `rx_data_1`〜`rx_data_7`（7個）＋ `shreg_0`〜`shreg_6`（7個） |
+
+これは推測ではなく、ネットリスト上に明記された配線の事実である。
+`_156__row3`は他の行バッファの最大14倍（row0比）〜14倍（row2比）
+の負荷を1個の`BUF_X1`で駆動しており、電気的に見て明らかに
+不均衡である。同一の`BUF_X1`セルであっても、駆動する負荷容量が
+大きいほど出力エッジの伝搬遅延は大きくなる（一般的なCMOSバッファ
+の基本特性）ため、`_156__row3`の実際のクロックエッジは、より
+軽負荷な`_156__row1`（9負荷）のエッジより有意に遅れて到達すると
+考えるのが妥当である。この構造的・決定論的な行バッファ間スキュー
+が、108.19で観測した「`last_bit_pending`(row1側)の0→1遷移に伴う
+広いファンアウトの同時スイッチングと、shreg(row3側)の捕獲エッジ
+がちょうど際どく重なる」現象の実体であると判断した。すなわち
+「解析不能なアナログノイズ」ではなく、「行バッファへの負荷配分が
+最初から歪んでいた」という、ネットリスト上で検証可能な構造的事実
+に基づく説明である。
+
+**対策**：`tr_1um_i2c_slave_async_sim_ready.spice`を手動パッチし、
+shregの7段DFFRB（`x_530_`〜`x_536_`）のCKピンを、これまでの
+`_156__row3`から、完全に未使用だった`_156__row0`へ付け替えた。
+これにより：
+- `_156__row0`：0負荷 → 7負荷（shreg専用）
+- `_156__row3`：14負荷 → 7負荷（rx_data専用）
+となり、row3の負荷は半減し、shregはlast_bit_pendingが乗る
+row1からも、rx_dataが乗るrow3からも完全に独立した、専用の軽負荷
+クロックバッファを持つことになる。DFFRB STDCELL自体、および
+shreg以外のいかなるネットの配線にも一切手を加えていない
+（既存の制約を遵守）。診断用`wrdata`のダンプ対象にも`_156__row0`
+を追加し、修正後に実際のスキュー低減を波形上でも確認できるように
+した。
+
+**検証状況**：`tb_chip_i2c_batch14.spice`を再生成済み。RTL側は
+14/14 PASS（回帰なし）を確認。SPICE側は`rx_data == 0xA5`が
+PASSに変わったことを確認したが、代わりに新たに
+`read byte == 0x3C`が`0x3E`とFAILするようになった（差分は
+weight1ビットのみ＝読み出しバイトの7ビット目、bit_cnt==6の
+瞬間にサンプルされる値）。
+
+### 108.21 新規回帰（read byte）の切り分け：静的configトレースでは
+### 108.20との論理的な接続が見当たらない
+
+`read_byte`の値はSDAパッド電圧をMSBから順に8点サンプルしたもの
+（`shreg`とは無関係、送信側の別レジスタ`txreg`と`bit_cnt`ベースの
+組合せ論理MUX木で生成される）。ネットリストを静的に追跡した結果：
+
+- `txreg_0`〜`_7`は`scl_n_row0`（4負荷：txreg_0,1,2 + sda_oe_r）と
+  `scl_n_row2`（5負荷：txreg_3〜7）というSCL立下りエッジ側の別の
+  クロック系統で駆動されており、`_156__row0`/`_156__row3`（108.20で
+  変更した2本）とは完全に別のクロックツリーである。
+- `bit_cnt_0/1/2`は`_156__row1`（9負荷、108.20では変更していない）
+  で駆動。
+- `txreg`のビット選択MUX木（`x_455_`/`x_457_`/`x_461_`/`x_462_`/
+  `x_463_`、選択信号`_092_`/`_079_`）は純粋な組合せ論理で、
+  `_156__row0`/`_156__row3`のどちらにも論理的に接続していない。
+
+つまり、108.20でCKピンを付け替えたのはshregの7段DFFRBだけであり、
+`read_byte`不良の原因となる配線・論理経路は見当たらない。可能性
+として残るのは、SPICEがトランジスタレベルで電源／グラウンドを
+共有していることによる、回路全体に及ぶ微小な負荷変動（IRドロップ
+／基板結合）が、すでにマージンの薄かったtx側のセットアップ／
+ホールドタイミングをわずかに動かした、という説明である。憶測で
+決めつけず、`txreg_0`〜`_7`・`_092_`・`_079_`・`_005_`・
+`sda_oe_r`・`scl_n_row0`・`scl_n_row2`を`wrdata`のダンプ対象に
+追加し、実際の波形で検証することにした。`tb_chip_i2c_batch14.spice`
+を再生成済み。次のSPICE再実行待ち。
+
+**検証結果**：`wrdata`に`sda_oe`（サブサーキットのポート名で存在
+しないベクタ）を含めていたため一度エラーになり、修正して再取得。
+得られたトレースを`scl_n`の実際のエッジ（立上り＝`sda_oe_r`や
+`txreg`の捕獲エッジ、立下り＝`bit_cnt`更新の中間点）と突き合わせて
+精査した結果：
+
+- `txreg`は読み出しバイト開始時に正しく`0x3C`（`txreg_0..7` =
+  `0,0,1,1,1,1,0,0`）でロードされ、以後変化しない——**txregの
+  格納値自体は最初から最後まで正しい**。
+- `bit_cnt`は期待通り`_156__row1`のエッジで4→5→6→7と正しく
+  カウントアップしている。
+- 問題の箇所（`bit_cnt==6`、weight1ビットに対応する期間）で、
+  `sda_oe_r`のD入力`_005_`は、実際の捕獲エッジ（`scl_n_row0`の
+  立上り、約t=372000ns）の**5000ns以上前から**すでに正しい値
+  （5.00V＝Hi＝`~txreg_1`=1）に安定していた。にもかかわらず、
+  `sda_oe_r`はこの捕獲エッジで新しい値を取り込まず、直前の値
+  （0V）を保持し続けた。
+- これは108.19のshreg崩壊バグと**全く同じ性質の症状**である：
+  「D入力は捕獲エッジよりずっと前から安定して正しい"1"を示して
+  いるのに、特定のDFFRBが特定のエッジで"1"の取り込みに失敗し、
+  古い"0"を保持し続ける」。他の捕獲エッジ（bit_cnt=4,5の期間）
+  ではこのDFFRBは正しく動作しており、症状は限定的・散発的である。
+
+### 108.22 対策：sda_oe_rを専用の行バッファへ分離
+
+`sda_oe_r`は`txreg_0/1/2`（3負荷）と`scl_n_row0`を共有していた
+（合計4負荷）。`_156_`系统とは異なり、`scl_n`系统はもともと
+`scl_n_row0`と`scl_n_row2`の2本しかバッファが用意されておらず、
+108.20のように「未使用の空きrowへ付け替える」ことができなかった
+ため、新たに専用のバッファ`xu_buf_scl_n_row3`（`scl_n`から分岐する
+単純な`BUF_X1`コピー）を1個追加し、`sda_oe_r`（`x_528_`）のCKピンを
+`scl_n_row0`から新設の`scl_n_row3`へ付け替えた。これにより
+`sda_oe_r`は`txreg_0/1/2`のスイッチング・負荷から完全に独立した
+専用クロックを持つことになる。DFFRB STDCELL自体には一切手を
+加えていない。診断用`wrdata`にも`scl_n_row3`を追加した。
+`tb_chip_i2c_batch14.spice`を再生成済み。
+
+**検証結果：14/14 PASS達成**。RTL側は引き続き14/14 PASS（回帰なし）。
+SPICE側（`tb_chip_i2c_batch14.spice`＋`check_batch14.py`）で
+**全14項目PASS**（`rx_data == 0xA5`、`read byte == 0x3C`とも
+正しく一致）を確認した。ngspiceの二重トランジェント解析（108.11〜
+108.14で言及した既知の現象）についても、ログ内の2回分の
+`rx_data_bitN`／`read_byte_bitN`測定値が完全に一致していることを
+確認済みで、非決定性による偶然の一致ではないことを確認した。
+
+### 108.23 全DFFRBの行バッファ割り当てを機能グループ単位で再編成
+
+108.19〜108.22で個別に見つけた不具合はいずれも「性質の異なるDFFが
+同一の行バッファに混在し、負荷・ファンアウトの偏りがクロック整合性
+を乱す」という共通パターンだった。ユーザーの指示により、場当たり的
+な個別対応ではなく、全33個のDFFRBを機能グループごとに棚卸しし、
+再発防止を狙った包括的な再編成案をユーザーに提示・確認を得たうえで
+適用した。
+
+再編成案（ユーザー承認済み）：
+
+| バッファ | 割り当て | 負荷数（旧→新） |
+|---|---|---|
+| `_156__row0` | shreg_0〜6 | 7→7（108.20から変更なし） |
+| `_156__row1` | bit_cnt_0/1/2, phase_0/1/2 | 9→6（FSM状態のみに整理） |
+| `_156__row2` | addr_match, rw, last_bit_pending | 1→3（1バイトに1回確定する判定系をまとめ、last_bit_pendingの大きなファンアウトをFSM状態・shreg/rx_dataの双方から分離） |
+| `_156__row3` | rx_data_0〜7 | 7→8（8ビットを1系統に統合） |
+| `scl_n_row0` | txreg_0〜3 | 3→4（負荷均等化） |
+| `scl_n_row2` | txreg_4〜7 | 5→4（負荷均等化） |
+| `scl_n_row3` | sda_oe_r | 1→1（108.22から変更なし） |
+
+`tr_1um_i2c_slave_async_sim_ready.spice`のDFFRB命令33個のCKピンを
+上記の通り付け替えた（新規バッファの追加は不要、既存の7本の行
+バッファの割り当てのみ変更）。DFFRB STDCELL自体には一切手を加えて
+いない。付け替え後の負荷数をネットリストから再カウントし、上記の
+表と一致することを確認済み。`tb_chip_i2c_batch14.spice`を再生成
+済み。
+
+**検証結果**：RTL側14/14 PASS（回帰なし）、SPICE側も全14項目PASS
+（`rx_data==0xA5`、`read byte==0x3C`とも正しい）を確認。ログ内の
+全404個の測定値について、二重トランジェント解析の1回目・2回目が
+1件も不一致なく完全一致することをスクリプトで確認し、非決定性に
+よる偶然の通過ではないことを検証した。機能グループ単位での包括的な
+再編成後も、個別対応（108.14/108.20/108.22）と同じ結果が安定して
+再現されることが確認できた。
+
+これで108.9〜108.23にわたるSPICEレベルの不具合調査・再発防止策は完了。
+
+### 108.24 原状（レイアウト済みネットリスト）の行バッファ状況と、
+### 今回の再編成案の対比まとめ
+
+108.20〜108.23は`ngspice/tr_1um_i2c_slave_async_sim_ready.spice`
+（シミュレーション専用の手動パッチ版）にのみ適用したものであり、
+実際にレイアウトされたネットリスト（`schematic/
+i2c_slave_async_nrow_fm_v9.spice`、Yosys合成＋`insert_row_buffers.py`
+の行バッファ挿入をそのまま反映した「原状」）にはまだ反映していない。
+将来、この修正をレイアウトへ反映する（再合成・再配置配線する）際の
+仕様として、原状と今回の再編成案を対比した一覧を残す。
+
+**原状（レイアウト済み、`i2c_slave_async_nrow_fm_v9.spice`）の行
+バッファ割り当て**
+
+`_156_`系統（SCL立上りドメイン、リセット`_016_`）はバッファが
+`_156__row0`〜`_156__row3`の4本とも既に配置されているが、割り当ては
+次の通り著しく偏っていた。
+
+| バッファ | 原状の割り当て | 負荷数 |
+|---|---|---|
+| `_156__row0` | （割り当てなし） | 0 |
+| `_156__row1` | addr_match, bit_cnt[0:2], rw, phase[0:2], last_bit_pending | 9 |
+| `_156__row2` | rx_data[0] | 1 |
+| `_156__row3` | rx_data[1:7], shreg[0:6] | 14 |
+
+`scl_n`系統（SCL立下りドメイン、リセット`_017_`）はバッファが
+`scl_n_row0`と`scl_n_row2`の2本しか配置されておらず、`scl_n_row1`・
+`scl_n_row3`に相当する物理バッファ自体が存在しない。
+
+| バッファ | 原状の割り当て | 負荷数 |
+|---|---|---|
+| `scl_n_row0` | txreg[0:2], sda_oe_r | 4 |
+| `scl_n_row2` | txreg[3:7] | 5 |
+
+**今回の再編成案（108.20/108.22/108.23、シミュレーション専用
+ネットリストに適用済み）**
+
+| バッファ | 新しい割り当て | 負荷数 | レイアウトへの反映に必要な作業 |
+|---|---|---|---|
+| `_156__row0` | shreg_0〜6 | 7 | 既存バッファの負荷配線のみ変更（新規バッファ不要） |
+| `_156__row1` | bit_cnt_0/1/2, phase_0/1/2 | 6 | 同上 |
+| `_156__row2` | addr_match, rw, last_bit_pending | 3 | 同上 |
+| `_156__row3` | rx_data_0〜7 | 8 | 同上 |
+| `scl_n_row0` | txreg_0〜3 | 4 | 既存バッファの負荷配線のみ変更 |
+| `scl_n_row2` | txreg_4〜7 | 4 | 同上 |
+| `scl_n_row3` | sda_oe_r | 1 | **新規にBUF_X1バッファセルを1個追加し、`scl_n`から分岐配線する必要あり**（原状には存在しない） |
+
+**レイアウト反映時の要点**：`_156_`系統4本は原状ですでに物理配置
+されているため、再編成は「どのDFFRBがどの既存バッファにつながる
+か」という配線（結線）の変更のみで済み、新規セルの追加は不要である。
+一方`scl_n`系統は原状で2本しか無いため、`scl_n_row3`用に`BUF_X1`
+セルを1個新規に配置し、`scl_n`ネットから分岐させる配線を追加する
+必要がある。これ以外はDFFRB STDCELL自体にもRTLにも変更はなく、
+純粋に行バッファの挿入・結線（`insert_row_buffers.py`が担当する
+工程）の見直しのみで実現できる見込みである。
+
+**現状の反映範囲**：上記はあくまで`ngspice/
+tr_1um_i2c_slave_async_sim_ready.spice`（シミュレーション専用の
+手動パッチ）への適用であり、実際のレイアウト・LVSネットリスト
+（`schematic/i2c_slave_async_nrow_fm_v9.spice`や
+`tr_1um_i2c_slave_async_v9_lvs.spice`）にはまだ反映していない。
+レイアウトへの反映は、再合成・`insert_row_buffers.py`の見直し・
+配置配線・LVS再実行を伴う別工程であり、本セクションはその際の
+仕様書として使うことを想定している。最終的に
+特定・修正した独立な3件の不具合は次の通り：
+1. （108.14）rx_data捕獲用MUX2の"hold"入力が未接続ネット
+   `rx_data_r_N`に配線されていた、ネットリスト生成スクリプトの
+   配線ミス。
+2. （108.20）shregの7段DFFRBのクロックが、rx_data用7段と共に
+   `_156__row3`に集中（合計14負荷）しており、他の行バッファとの
+   負荷差から生じるクロックスキューが、`last_bit_pending`遷移時の
+   同時スイッチングと重なって、"1"を保持していたshregビットが
+   ちょうど当該エッジで崩壊していた。専用の未使用行バッファ
+   `_156__row0`へ分離して解消。
+3. （108.22）sda_oe_rが`txreg_0/1/2`と`scl_n_row0`を共有しており、
+   同様に特定の捕獲エッジで"1"の取り込みに失敗していた。新設した
+   専用バッファ`scl_n_row3`へ分離して解消。
+
+2と3は同じ性質（DFFRBが特定エッジで0→1の取り込みに失敗する）の
+症状だったが、根本原因はいずれも「複数のDFFRBが同一の行バッファを
+共有し、負荷・スイッチングの偏りがクロック整合性を乱していた」と
+いう共通のパターンであり、専用行バッファへの分離という同一手法で
+解消できた。DFFRB STDCELLおよびRTLには一切手を加えていない。

@@ -1,0 +1,161 @@
+[
+  {
+    "name": "busy_after_start",
+    "kind": "level",
+    "net": "xdut.NC_CORE_busy",
+    "t": 9.5e-06,
+    "expect": "high",
+    "desc": "busy asserted after START"
+  },
+  {
+    "name": "ack_addr_write",
+    "kind": "level",
+    "net": "P2",
+    "t": 9.95e-05,
+    "expect": "low",
+    "desc": "slave ACKed matching address (write)"
+  },
+  {
+    "name": "addr_match_write",
+    "kind": "level",
+    "net": "xdut.NC_CORE_addr_match",
+    "t": 0.0001018,
+    "expect": "high",
+    "desc": "addr_match asserted"
+  },
+  {
+    "name": "rw_write",
+    "kind": "level",
+    "net": "xdut.NC_CORE_rw",
+    "t": 0.0001018,
+    "expect": "low",
+    "desc": "rw indicates WRITE"
+  },
+  {
+    "name": "ack_data",
+    "kind": "level",
+    "net": "P2",
+    "t": 0.00018950000000000016,
+    "expect": "low",
+    "desc": "slave ACKed data byte"
+  },
+  {
+    "name": "rx_data",
+    "kind": "byte",
+    "nets": [
+      "xdut.NC_OUT11",
+      "xdut.NC_OUT12",
+      "xdut.NC_OUT13",
+      "xdut.NC_OUT14",
+      "xdut.NC_OUT6",
+      "xdut.NC_OUT5",
+      "xdut.NC_OUT4",
+      "xdut.NC_OUT3"
+    ],
+    "t": 0.00019400000000000016,
+    "expect": 165,
+    "desc": "rx_data == 0xA5",
+    "bit_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  {
+    "name": "busy_after_stop1",
+    "kind": "level",
+    "net": "xdut.NC_CORE_busy",
+    "t": 0.0002090000000000002,
+    "expect": "low",
+    "desc": "busy cleared after STOP"
+  },
+  {
+    "name": "ack_addr_read",
+    "kind": "level",
+    "net": "P2",
+    "t": 0.0003095000000000005,
+    "expect": "low",
+    "desc": "slave ACKed matching address (read)"
+  },
+  {
+    "name": "rw_read",
+    "kind": "level",
+    "net": "xdut.NC_CORE_rw",
+    "t": 0.0003118000000000005,
+    "expect": "high",
+    "desc": "rw indicates READ"
+  },
+  {
+    "name": "read_byte",
+    "kind": "byte",
+    "nets": [
+      "P2",
+      "P2",
+      "P2",
+      "P2",
+      "P2",
+      "P2",
+      "P2",
+      "P2"
+    ],
+    "t": [
+      0.0003195000000000005,
+      0.00032950000000000053,
+      0.00033950000000000055,
+      0.0003495000000000006,
+      0.0003595000000000006,
+      0.00036950000000000063,
+      0.00037950000000000066,
+      0.0003895000000000007
+    ],
+    "expect": 60,
+    "desc": "read byte == 0x3C",
+    "bit_indices": [
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1,
+      0
+    ]
+  },
+  {
+    "name": "busy_after_stop2",
+    "kind": "level",
+    "net": "xdut.NC_CORE_busy",
+    "t": 0.00041900000000000075,
+    "expect": "low",
+    "desc": "busy cleared after final STOP"
+  },
+  {
+    "name": "nack_wrong_addr",
+    "kind": "level",
+    "net": "P2",
+    "t": 0.0005195000000000008,
+    "expect": "high",
+    "desc": "unmatched address -> NACK (no slave ack)"
+  },
+  {
+    "name": "addr_match_wrong",
+    "kind": "level",
+    "net": "xdut.NC_CORE_addr_match",
+    "t": 0.0005218000000000008,
+    "expect": "low",
+    "desc": "addr_match not asserted for foreign address"
+  },
+  {
+    "name": "busy_after_stop3",
+    "kind": "level",
+    "net": "xdut.NC_CORE_busy",
+    "t": 0.0005390000000000006,
+    "expect": "low",
+    "desc": "busy cleared after STOP following NACK"
+  }
+]
