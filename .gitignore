@@ -23,6 +23,13 @@ ngspice/TB/*.raw
 ngspice/TB/rx_capture_trace.txt
 ngspice/TB/spice.log
 
+# 2026-09-03: V10 counterpart of the above -- rx_capture_trace_v10.txt
+# (23MB, gen_chip_tb_batch14_v10.py's own `wrdata` full-waveform dump,
+# same role as rx_capture_trace.txt above). spice_batch14_v10.log is
+# NOT excluded here, matching the existing spice_batch14.log precedent
+# (kept as a real PASS/FAIL evidence record, not just a byproduct).
+ngspice/TB/rx_capture_trace_v10.txt
+
 # iverilog/vvp compiled outputs and their build logs are binaries, not
 # source -- regenerate with `iverilog -o <name> ...`.
 src/sim_dbg9

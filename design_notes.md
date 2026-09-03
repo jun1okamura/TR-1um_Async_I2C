@@ -20421,3 +20421,1132 @@ V9自身が過去に§104で実施した手法と同種）を使い、各V10ネ�
 配線生成、電源バスバーのV10再較正、DRC反復）はV9の§104相当の
 まとまった作業量であり、ユーザーの次の指示待ち。まだgit commitは
 していない。
+
+### 108.55 チップレベル配線を実装：最適パッド再割当（6レーン）＋
+V10再較正済み電源バスバーで`route_gio_core_v10.py`完成、自前チェッカー
+でV9基準と同等クリーンを確認
+
+ユーザー：「一旦コミットして、チップレベルの配線に進んでください。」
+（108.52-108.54の内容をコミット、hash `71091f7`、その後本節の作業）
+
+**(1) パッド再割当の確定**：108.54の最近傍貪欲（8レーン）はあくまで
+概算だったため、`scipy.optimize.linear_sum_assignment`による厳密な
+最適割当（コスト＝各ネットの`core`側`unroll(s)`座標と各GIOパッドの
+`unroll(s)`座標の差＝レーン詰め込みで実際に使われる区間幅そのもの）
+に置き換えて再計算。結果：**必要レーン数6**（貪欲の8よりさらに改善、
+V9本体の10-11より大幅に少ない、最大レーン半径877.0——予算上限913
+/921.7に対し44um近い余裕）。`schematic/v10_signal_routing_plan.json`
+として確定（V9の20個の物理GIOパッド座標・辺・層はそのまま、ネット
+→パッド対応のみ最適割当で変更）。
+
+**(2) `script/route_gio_core_v10.py`新規作成**：`route_gio_core_v9.py`
+（766行、リング配線エンジン一式）をベースに以下のみ差し替え：
+- `SIGNAL_PLAN`を`v10_signal_routing_plan.json`に、`IN_GDS`/`OUT_GDS`
+  をV10のパスに変更。
+- `FORCE_DIR`（V9固有のrx_data[1]強制CW）は新しいパッド割当に紐づく
+  ものなので撤去（まずは強制無しで試行、必要ならログを見て追加）。
+- 電源バスバー：VSS側（コア下端、チップY=-140.0）はV9と完全に幾何
+  同一（CORE_OFFSET/コアのnative下端が両バージョンとも同じ）のため
+  **無変更**。VDD側（コア上端）のみ、V10のコア高さが+2.8um高い分
+  `NATIVE_TOP_Y`を796.1→798.9に更新（`TOP_Y`はログ表示専用の値なので
+  797.4に追従）。TAP X座標・VDD_BUS_Y・GIOピン座標・PTECT関連は全て
+  フレーム固有の固定値のため無変更。
+- DIS chain（P7+8xHIZ、GIOピン間のみ）はV9から完全流用。
+
+実行結果：`signal lanes needed: 6`、20ネット全て`vias=2-4`でエラー無く
+描画、`layout/step10/v10_top_routed.gds`書き出し成功。
+
+**(3) 検証**：
+- `drc_check_nrow_fm.py`（top-cell override付き）：M1幅/スペース0/0、
+  M2幅1件・スペース5件——**この6件は配線前のフレーム単体
+  （`src/tr_1um_i2c_slave_async_v10.gds`）にも、V9自身の最終納品GDS
+  （`src/tr_1um_i2c_slave_async.gds`）にも、座標まで完全一致で
+  存在**することを確認（3つとも同一座標・同一違反）。すなわち
+  OSS_FRAME_GIOフレーム自体に元から存在する既知の（V9で既に
+  受容済みの）アーティファクトであり、**今回のV10配線が新たに
+  持ち込んだ違反はゼロ**。
+- ネット間ショート検証：`route_gio_core_v10.py`が出力する
+  `v10_top_routed_net_shapes.json`（各ネットのM1/M2/via形状ログ）を
+  レイヤー別に比較する独自チェッカーを作成。単純にネット毎の全形状
+  をマージして重なりを見ると100件ヒットするが、これはM1とM2が異なる
+  ネット間で単に立体交差している（via無し＝実害無し）ケースを大量に
+  含む誤検出——**同一レイヤー同士の重なりのみに絞って再チェックした
+  ところ13件のみで、その全てがDIS chainの隣接リンク同士（例：
+  `HIZ1_HIZ14`と`HIZ14_HIZ12`がHIZ14ピンを共有）という設計上意図された
+  接続**。同じ手法をV9自身の最終納品`v9_top_routed_net_shapes.json`
+  に適用したところ、**完全に同一のネットペア・同一の面積で13件**
+  ——V10の配線はV9の検証済み基準と完全に同水準でクリーン。
+- 接続性検証：20信号ネット全てについて、`core`ピン座標・`gio`パッド
+  座標の両方に接する単一連結ポリゴンであることを確認（途切れ0件）。
+  VDD/VSSも同様に、それぞれ単一連結ポリゴン（VDD:4 TAP+GIOピン、
+  VSS:4 TAP+GIOピン、いずれも1ピース）であることを確認。
+
+**未実施・要確認事項（正直に記載）**：
+- 実機KLayout本番DRCデッキ（`drc.lydrc`、CO/OFFGRID/角度等）はまだ
+  未実行——108.53の教訓（自前チェッカーはV1.CO違反を検出できな
+  かった）を踏まえ、この`route_gio_core_v10.py`の出力についても
+  実機デッキでの再確認が必要。特に新規のTAP-to-busバー配線や
+  パッド再割当によるM2立体交差の密度増加箇所はCO関連違反の
+  リスクが相対的に高い。
+- LVS（この配線がスキーマティックのGIO<->コア結線意図と一致するか）
+  は未実施。
+- V9自身の配線計画も本番化までに3回のDRC起因改訂を要した実績が
+  あり、V10版も実機DRC結果次第で同様の反復調整が必要になる可能性が
+  高い。
+
+`layout/step10/v10_top_routed.gds`（ドラフト、`src/`への昇格はまだ
+行っていない——本プロジェクトの「ドラフト→実機DRC確認→確定」の
+established convention踏襲）。まだgit commitはしていない。
+
+### 108.56 PTECT削除、RING_OSC＋OPENSUSI_LOGO埋め込みでV10チップ完成
+（`finalize_chip_v10.py`）
+
+ユーザー：「DRC はクリーンです。コア下のPTECTを外して、RING_OSCと
+ロゴも埋め込んで完成させてください。DRC/LVSに進みます。」——108.55の
+`v10_top_routed.gds`に対する実機KLayout DRCがクリーンだったとの確認、
+続けてRING_OSC/ロゴの組み込み指示。
+
+V9自身の統合作業（design_notes.md 103.5-103.15、`place_ring_osc.py`/
+`route_ring_osc_power_v9.py`/`route_ring_osc_signals_v9.py`/
+`place_opensusi_logo_dots.py`）を精査し、大半がコア高さ・GIOパッド
+割当に依存しない（＝V10にそのまま流用可能な）幾何であることを確認
+した上で`script/finalize_chip_v10.py`を新規作成：
+
+**(1) PTECT削除**：V9では「ユーザーが自身のローカル環境でPTECT
+ジオメトリを削除しDRC/LVSクリアになった」（103.15）との報告ベースの
+対応だったが、V10ではスクリプト内で直接layer(63,1)の全形状を消去
+（1件）。
+
+**(2) RING_OSC配置**：`place_ring_osc.py`と完全同一（原点
+(-810,-650)、r0）——コアの**下端**（チップY=-140.0、CORE_OFFSETと
+コアのnative下端=0がV9/V10で同一）にのみ依存する幾何のため無変更で
+流用可能。配置後のRING_OSC絶対bbox(-816.3,-770.0)-(816.3,-525.2)は
+V9と完全一致。
+
+**(3) 電源配線**：`route_ring_osc_power_v9.py`と完全同一（TAP0/TAP3の
+VDD/VSS M2ストラップをコア下端-140.0からRING_OSC内部メッシュ
+(-545.0)まで延伸）——TAP X座標・CORE_BOTTOM_Yともにコア高さ非依存の
+ためV10でも無変更。ただし**新規に判明した点**：`route_gio_core_v10.py`
+自身のVSS母線配線（TAP0/TAP3は"direct"クリアランスのため既に
+-140から-808.5まで連続配線済み）と今回のRING_OSC向け延伸(-140~-545)
+が**同一ネット上で全区間重複**（無害、電気的にはVDD/VSS同士の冗長な
+二重配線に過ぎない——V9自身の同じ構成でも起きていたはずの特性で、
+新規の問題ではない）。VDD側は元々コア下端まで届いていないため
+重複なし。
+
+**(4) 信号配線**：OUT→OUT10(620,-921.7)、OUTD→OUT9(180,-921.7)は
+GIOフレーム自身の固定ドライバ入力ピンのため`route_ring_osc_signals_
+v9.py`と完全同一で流用。**ENBのみV10向けに再設計が必要**——V9では
+ENBをrst_n自身の配線（TOP辺、P15パッド付近）に直接マージしていたが、
+V10のパッド再割当（108.55）でrst_nの物理GIOパッドがRIGHT辺
+(921.7,270.0)に変わったため、マージ先を`v10_top_routed_net_shapes.
+json`から実測したrst_nの最終アプローチ区間（M1、X=869.3-914.7、
+Y=268.3-271.7）に変更。
+
+新しい経路の設計にあたり最初の案（ダイ下端Y=-855で左右横断、右辺
+notch X=822を上昇）はklayout.dbでの直接クエリでは無衝突と出たが、
+ネット別の同一レイヤー重なりチェックでOUT(X=830)・OUTD(X=824)との
+M2平行配線衝突（X=822は824からわずか2um、必要な5.4um以上に対し
+不足）を発見——右辺notch（ダイ端816.3〜DIS_R838.3、幅22um）は
+既にOUT/OUTDで埋まっており3本目の余地が無いことが判明。**修正**：
+経路をダイ**上端**（Y=888、最高レーンR=877より上、NEAR_R=913より下）
+経由に変更——左辺notch(X=-822、OUT/OUTD無関係)を上昇→上端を横断→
+右辺notch(X=822、OUT/OUTDの占有Y範囲(-913~-620)より上のためこちらも
+無関係)を下降→rst_n区間にマージ。全区間を`v10_top_routed.gds`の実
+ジオメトリに対しklayout.dbで個別に重なり判定（rst_nとの意図的マージ
+点を除き全区間overlap_area=0を確認）。
+
+**(5) ロゴ**：V9の`OPENSUSI_LOGO`セル（PNGデジタイズ結果、319×65
+グリッド、ピッチ5.0um、ドット3.0um角）を配置環境
+（RING_OSC上端-525.2・コア下端-140.0由来のY[-525.2,-148.7]、
+X[-798.2,798.2]、いずれもコア高さ非依存）ごとそのまま流用——再
+デジタイズ不要。**実装上の落とし穴**：当初`layout.read()`でロゴ
+参照ファイル（`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.
+gds`）を直接読み込んだところ、そのファイル自身のトップセル名が
+`tr_1um_i2c_slave_async`——**V10チップと同名**——だったため、V9の
+チップ全体がV10のトップセルにマージされ、2つの独立したチップ
+レイアウトが同一座標に重複するという壊滅的な結果（M1幅違反75件・
+スペース違反2126件のDRC結果として発覚）になった。原因を各ステップ
+（配置/電源/信号/ロゴ）を1つずつ加えて実DRCを再実行する形で切り分け、
+ロゴ読み込みが原因と特定。**修正**：ロゴ参照ファイルを別の
+`db.Layout`オブジェクトに隔離して読み込み、`OPENSUSI_LOGO`セル
+（純粋なM2形状のみのリーフセル、依存セル無し）の形状だけを新規
+セルへコピーする方式に変更、解消を確認。
+
+**検証**（新規追加分すべてに対し実施）：
+- `drc_check_nrow_fm.py`：M1 0/0、M2 1/5——108.55の既知アーティファクト
+  6件と座標まで完全一致、新規違反ゼロ。
+- 同一レイヤー限定の重なりチェック（RING_OSC電源4本＋信号3本）：
+  0件（TAP0/TAP3のVSS側の同一ネット内自己重複2件を除く、上記(3)の
+  冗長配線として説明済み・無害）。
+- 接続性：OUT/OUTD/ENBそれぞれが単一連結ポリゴンとしてRING_OSC側
+  ピンとターゲット（パッド/マージ点）の両方に接することを確認。
+  VDD/VSS 4本のTAPストラップがそれぞれRING_OSC内部メッシュ
+  （Y<-545）からコア上端のVDD/VSSバス（Y=798.9-803.5）まで単一の
+  連結ポリゴンとして繋がっていることを確認。
+- ロゴ：既存チップ全体のM2との重なり0um²を確認。
+
+**未実施（正直に記載）**：実機KLayout本番DRCデッキ・LVSはまだ
+未実行——ユーザーの次のステップ（「DRC/LVSに進みます」）待ち。
+V9自身のRING_OSC統合は実DRCで3ラウンドの修正を要した実績があり
+（103.5/103.6/103.7、M2幅違反・via間隔・ENBのVSSショート等）、
+今回のklayout.db自己チェックで捕捉できない種類の違反（V1.CO等、
+108.53の教訓）が実デッキで見つかる可能性は引き続きある。
+
+出力：`layout/step10/v10_chip_final.gds`（ドラフト）。まだgit commit
+はしていない。
+
+### 108.57 パッド再割当の端子タイプ／パッド共有バグを発見・修正、
+ENB配線を再設計（`assign_v10_gio_pads.py`新規、`route_gio_core_v10.
+py`／`finalize_chip_v10.py`修正）
+
+ユーザー：「DRC はクリーンです。LVS用の spice を作ってください。」
+——LVS SPICE生成に着手しようとした際、108.55のパッド再割当が
+`schematic/gio_connections.json`を一切参照していないことに自分で
+気づき指摘。ユーザー：「schematic/gio_connections.jsonを参照して
+いないのですか？」次いで「修正してください。スクリプトも修正
+ください。」との明示指示を受け、以下の一連の修正を実施した。
+
+**(1) 端子タイプ不一致バグ**：108.55の`scipy.optimize.
+linear_sum_assignment`は「総インターバル幅の最小化」のみを目的関数
+としており、GIOフレームの`P<n>`（外部センス線、INPUT専用）・
+`OUT<n>`（コア駆動線、OUTPUT専用）・`HIZ<n>`（方向制御線）という
+端子タイプの区別を一切考慮していなかった。結果、20ネット中10ネットが
+電気的に誤った端子タイプに割り当てられていた（例：`scl`→`OUT4`、
+`rx_data[2]`→`P1`）。DRCには一切現れない（配線自体は正しく描画され、
+論理的に誤ったピンへ繋がるだけ）ため、`gio_connections.json`の
+`pad_pin_coords`/`connections_per_terminal_detail`と突き合わせて
+初めて発覚。**修正**：`script/assign_v10_gio_pads.py`を新規作成し、
+20ネットをINPUT用11ネット↔`P<n>`11スロット、OUTPUT用8ネット
+（rx_data[0-7]）↔`OUT<n>`8スロット、`sda_oe`↔`HIZ2`の3グループに
+分離した`linear_sum_assignment`に変更（v1）。この時点で8レーン。
+
+**(2) パッド番号二重取得バグ**：v1を検算中に発見。端子タイプが
+正しくても、`P<n>`系と`OUT<n>`系を独立に最適化すると、同一物理
+パッド番号`n`を無関係な2ネットが（一方は`P<n>`経由、他方は
+`OUT<n>`経由で）同時に「取得」しうる。GIOフレームの実際の構造では
+`P<n>`と`OUT<n>`は**同一の物理ボンドパッド**（双方向端子）であり、
+`HIZ<n>`という単一の方向制御線を共有する——V9自身の実パッドマップも
+常に`tx_data[i]`/`rx_data[i]`を1つの共有パッド番号にペアで
+割り当てている（例：`P3`=tx_data[7]、`OUT3`=rx_data[7]）。
+`connections_per_terminal_detail`のOUT系エントリを精査して発覚。
+**修正**：`assign_v10_gio_pads.py`をv2に改訂——グループA（sda_in/
+sda_oeを`P2`/`HIZ2`に固定）、グループB（rst_n/scl対`P1`/`P15`の
+2×2割当）、グループC（8ビットペア対8共有パッド番号の8×8割当、
+コストは`tx`側`P<n>`と`rx`側`OUT<n>`の合算）に再構成。使用後の
+パッド占有をtx/rx片方のみ・不整合ペアが残らないことを検証する
+サニティチェックも追加。この修正で**12レーン**に増加——8!×2!=
+80,640通りの全探索でも12レーンが真の最小値であることを別途確認
+（ビットペア8個の順列が支配的で計算コスト的に全探索可能だった
+ため、ヒューリスティックな最適解ではなく証明済みの最小値）。
+
+**(3) 方向／インターバル整合性バグ**：8レーン版の検証中、
+`rx_data[2]`と`rx_data[7]`（共にlane 0）でM2-M2実ショート
+（重なり面積3685.94um²、`klayout.db`の直接オーバーラップ判定で
+確認）を発見。根本原因は`route_gio_core_v10.py`（V9から継承）の
+`ring_waypoints()`が「生の弧長が短い方」でCW/CCWを選ぶのに対し、
+レーンパッキングが使う`net_interval[name]=(min(u1,u2),max(u1,u2))`
+という表現は「u1<u2ならCW、u1>u2ならCCW」という非ラップ方向を
+暗黙に仮定しており、両者が食い違うケース（ラップする方が物理的に
+短い場合）ではインターバル表現自体が実際の配線経路と一致しなく
+なる——V9自身のスクリプトに潜在していた未発見バグで、V9では
+たまたまこの食い違いを誘発する配置にならなかっただけと判明。
+**修正**：`_forced_direction(core,gio)`ヘルパーを追加し、常に
+「u1<u2ならCW、そうでなければCCW」を強制（時に物理的に長い方の
+弧を選ぶことになるが、インターバル表現の正しさを保証）。修正後、
+同一レイヤー限定の重なり再チェックで不正な重なり0件を確認。
+
+**(4) デジェネレートなゼロ長ホップ問題**：12レーンに増えたことで
+`LANE_R0=847`＋`LANE_PITCH=6.0`の最上位レーンR＝913.0が
+`NEAR_R=913.0`と完全一致し、最終の径方向ホップ区間が長さ0となって
+`seg_layer()`が`ValueError`で異常終了することが判明（V9自身のコード
+コメントで予告されていた既知の危険域に実際に到達した形）。
+**修正**：`LANE_PITCH=5.6`・`NEAR_R=915.0`に変更（隣接レーン間隙
+2.2um＞Smin2.0、最上位レーン〜NEAR_R間隙3.0um、NEAR_R〜実パッド境界
+(921.7)間隙5.0umをそれぞれ確認）。
+
+**(5) VDD-GIO交差(CROSS_Y)の衝突**：LANE_PITCH/NEAR_R変更後、DRCで
+既知の6件を超える新規M2スペース違反が発生。原因は`CROSS_Y=910.0`の
+via用パッド（PAD=3.4、CROSS_Y±1.7）が新設の最上位レーン
+（M1端Y=910.3）とほぼ隙間なく接触したこと。`CROSS_Y=912.0`への
+変更でも実際にvia用パッドがレーン端(910.3)にちょうど隙間0で接触
+（`klayout.db`の`space_check()`で違反box `[195.601,909.5,204.399,
+910.3]`を直接特定）。**最終修正**：`CROSS_Y=914.5`（viaパッド
+912.8-916.2、レーン端910.3から2.5umのクリアランス）。DRCが既知の
+6件のみに戻ることを再確認。
+
+**(6) ENB配線の再設計**：(2)のパッド共有修正の副作用として、
+`rst_n`の物理GIOターゲットが108.56時点のRIGHT辺(921.7,270.0)から
+TOP辺（端子`P15`、(530.0,921.7)付近）へ移動。この結果、108.56で
+実装したENBの経路（RIGHT辺のマージ先(913.0,270.0)、TOP交差
+Y=894）が完全に無効化された。再設計は3段階を要した：
+
+  - **案1（TOP交差の踏襲、Y再計算）**：12レーン化後の最上位R=908.6
+    より上、NEAR_Rより下でTOP全幅を横断する新しいYを探索したが、
+    `klayout.db`での系統的な列スイープ（TOP-LEFT角の notch、
+    X=-838〜-817）で、12本すべてのレーンが**5.6um間隔（＝
+    LANE_PITCH）で並ぶ11本のM1行**（Y=851.7〜907.7）としてこの
+    notchに収束していることが判明——隙間は最大でも3.8um、3.4幅の
+    配線＋2×2.0のSmin＝7.4umが必要なため物理的に収まらない。TOP
+    全幅を通しでクリアな一定Yは12レーン構成では存在しないと結論。
+
+  - **案2（RIGHT辺notchをX=830で上昇、OUT自身のXを再利用）**：
+    OUT（X=830）はY=-907〜-620.3の範囲でしか存在しないため、それより
+    高いYでは同じXを再利用できると考えたが、実装してklayout.dbで
+    検証したところ、ENB経路がY=-785から上昇を開始するため、
+    OUTの占有範囲(-907〜-620.3)と直接重複（M2-M2、重なり面積
+    571.5um²）することが判明。
+
+  - **最終解（X=884の空き列を発見）**：X=817〜875をklayout.dbで
+    2um刻みに系統スイープした結果、DIS_Rリング(X=837-843、Y方向
+    ほぼ全域で連続)、rst_n自身のlane-0配線＋同レーンを共有する別
+    ネット(X=845-849、Y=[-530,313]と[345.3,847])、lane1-4それぞれの
+    径方向立ち上げ(X=849-873、いずれも数百um規模でY方向に連続)が
+    隙間なく埋まっており、X=[824,873]には新規配線の入る余地が
+    どこにも無いことを確認。同じスイープで**X=873-895がY=[-800,847]
+    全域にわたり完全に空**であることを発見（lane5以降の右辺コア
+    ピンが存在しないため）。最終経路：RING_OSCのENBピンから
+    Y=-785まで下降→X=884まで水平移動（DIS_Rを含む全既存配線をM1で
+    安全に横断）→X=884を垂直に上昇しY=400まで到達（M2、全域で
+    重なり0件を確認）→X=847まで水平ジョグ（M1、Y=400での重なり0件を
+    確認）→rst_n自身のM2配線（X=845.3-848.7、Y=[345.3,847]）へvia
+    で直接マージ。
+
+**検証**（108.57の全修正を反映した`v10_chip_final.gds`に対し
+実施）：
+- `drc_check_nrow_fm.py`：M1 0/0、M2 1/5——既知の6件（108.53以来の
+  フレーム内蔵アーティファクト）と完全一致、新規違反ゼロ。
+- 同一レイヤー限定の重なりチェック：新規追加分（RING_OSC電源4本＋
+  OUT/OUTD/ENB）同士の意図しない重なり0件。既存チップとの重なりは
+  ENB↔rst_n（意図的マージ、X=845.3-848.7,Y=398.3-401.7、11.56um²）、
+  OUT↔OUT10パッド、OUTD↔OUT9パッド、TAP0/TAP3_VSS↔コア既存VSS
+  バス（いずれも意図的な接続）の5件のみで、想定外の重なりはゼロ。
+- 接続性：OUT/OUTD/ENBそれぞれの新規形状を1つのネットとしてマージ
+  すると単一連結ポリゴンになることを確認（＝分断や未接続区間なし）。
+- ロゴ：既存チップ全体との重なり0um²（108.56から変更なし、再確認）。
+
+出力：`layout/step10/v10_chip_final.gds`（更新、ドラフト）、
+`schematic/v10_signal_routing_plan.json`（パッド共有考慮版に更新）、
+`script/assign_v10_gio_pads.py`（新規）。実機KLayout DRC/LVSは
+108.56同様まだ未実行。まだgit commitはしていない——108.55/108.56
+分も含め、この一連の修正はすべて未コミットのまま。次はユーザーの
+元々の依頼（LVS用SPICEネットリスト生成）に戻る。
+
+### 108.58 V10チップレベルLVS用リファレンスSPICE生成（`gen_lvs_spice_
+top_v10.py`／`gen_lvs_spice_ringosc_v10.py`新規）
+
+108.57の修正完了を受け、元々の依頼「LVS用の spice を作ってください」
+に着手。V9の`gen_lvs_spice_top_v9.py`／`gen_lvs_spice_ringosc_v9.py`の
+構成をそのまま踏襲（x1=OSS_FRAME_GIO、x2=core、x3=RING_OSC、16個の
+実ボンドパッドピン(P1-P7,VSS,P9-P15,VDD)をトップサブサーキットの
+実ポートとして宣言、未接続ピンはNC_*の一意なフローティングネット）
+しつつ、接続マップの導出元をV10向けに変更した。
+
+**接続マップの方針**：`schematic/gio_connections.json`の
+`connections_per_terminal_detail`（43端子）を引き続きベースとして
+使用——スペアパッド（P7/P9/P10）、VDD/VSS結線、DIS方向制御チェーンの
+HIZ系統、OUT2の固定VSS結線、RING_OSC自身の駆動入力ピン(OUT9/OUT10)
+などはフレーム構造そのものでありV9/V10間で不変（108.55/108.57で
+V9のGIO物理端子位置20個をそのまま流用しているため）。**実際に
+異なるのは**8ビットペア共有パッド（パッド番号3,4,5,6,11,12,13,14）の
+`P<n>`/`OUT<n>`16端子のみ——`schematic/v10_signal_routing_plan.json`の
+各ネットの`terminal`フィールドから機械的に上書き（ハードコードせず
+プログラム的に導出、108.57がまさに「導出せず思い込みで割り当てた」
+ことが原因のバグだったため）。念のためP1/P15(scl/rst_n)・P2/HIZ2
+(sda_in/sda_oe)も同じ上書き機構にかけたが、結果はV9の割当と偶然
+一致（scl=P1、rst_n=P15）——一致するかどうかに関わらずJSONから
+再導出する設計にしてあるので、`assign_v10_gio_pads.py`が将来再実行
+されても本スクリプトが独自に古いままになることはない。
+
+生成後、`v10_signal_routing_plan.json`の20ネットすべてが期待通りの
+GIOネットに実際に着地しているかをスクリプト自身が自動クロス
+チェックする機構を追加（不一致があれば例外で停止）——全20件一致を
+確認。
+
+**RING_OSC統合**（`gen_lvs_spice_ringosc_v10.py`）：RING_OSC自体は
+V9から完全に無変更（同一GDS/schematic/`RING_OSC.spice`）のため、
+V9の最終版（v3、INV3D/FILL2を階層のまま`x3`一つのインスタンスで
+呼ぶ構造、klayout.db.NetlistComparerでINV3Dが実レイアウト側でも
+正しく階層化されることを確認済み）をそのまま踏襲。ネット対応：
+`OUT->OUT10`・`OUTD->OUT9`（GIOフレーム自身の固定駆動入力ピン、
+パッド再割当と無関係）、`ENB->P15`（`v10_signal_routing_plan.json`の
+`rst_n`エントリの`terminal`から動的に取得、108.57のENB配線
+（`finalize_chip_v10.py`のvia直結マージ）と論理的に整合）。
+`ENB`の接続先ネットが実際にトップレベルの実ピンであることも
+スクリプト自身が検証する。
+
+**検証**：`klayout.db.NetlistSpiceReader`で最終ネットリスト
+（`simulations/tr_1um_i2c_slave_async.spice`）をパースし、28
+circuit（ライブラリセル18種＋MUXDFFRB/RSLATCH＋OSS_ESD系3種＋
+OSS_FRAME_GIO＋RING_OSC＋INV3D＋core＋top）すべてが正常にパース
+されることを確認。トップサブサーキットは16ピン・3個の
+サブサーキット呼び出し（x1/x2/x3、期待通り）。全ネットの接続数を
+1件ずつ確認：P1-P6/P11-P14（各3——トップピン＋GIO側＋コア側）、
+P7=10（DISチェーン、GIO内部のHIZ3/4/5/6/11/12/13/14全8本＋P7自身の
+GIOピン＋トップピン、V9と同一構造）、P9/P10（各2——トップピン＋
+GIO側のみ、コア非接続でRING_OSC駆動先のOUT9/OUT10とは別ネット、
+想定通り）、VDD/VSS（各7）、NC_OUT3/4/5/6/11/12/13/14（各2——GIO側＋
+コアのrx_data[i]、8ビット全て正しく2点接続）、NC_HIZ2（2——GIO側＋
+コアのsda_oe）、NC_OUT1/7/15・NC_CORE_rx_valid/addr_match/rw/busy
+（各1——真に未接続、V9の`core_outputs_not_connected_to_any_pad`と
+一致）——意図しない多重接続・NC名の衝突は皆無であることを確認。
+
+出力：`schematic/tr_1um_i2c_slave_async_v10_lvs.spice`（core+GIOのみ、
+中間生成物）、`schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`
+（RING_OSC統合版、プロジェクト側の保存版）、
+`simulations/tr_1um_i2c_slave_async.spice`（ローカルLVSツールが要求
+する`<TopCellName>.spice`命名規則に従った最終版、V9時代のコピーを
+置き換え）。実機KLayout LVSはまだ未実行——ユーザーの次のステップ
+待ち。まだgit commitはしていない。
+
+### 108.59 実機LVSエラー調査：OSS_FRAME_GIOの8ピンNoMatch——V10の
+配線パイプラインがV9由来の固定VDD/VSS結線とDIS chainの新メンバーを
+描き忘れていたバグを修正（`route_gio_core_v10.py`修正）
+
+ユーザー：「DRC クリーン LVSはエラーです。LBS_error.lvsdb を調査
+ください。」——`layout/step10/LVS_error.lvsdb`（ユーザーのメッセージ
+の数秒前に更新、最新の実行結果と確認）を`klayout.db.LayoutVsSchematic`
+/`NetlistCrossReference`で直接調査。
+
+**診断**：28 circuit中27がMatch、`OSS_FRAME_GIO`のみNoMatch。ネット
+ペア（44件全一致）・デバイスペア（0件、GIOは階層のみ）・サブ
+サーキットペア（16件全一致）はすべて問題なし——ピンペアのみ8件
+Mismatch（レイアウト側に対応ピンが存在しない）：`HIZ7`・`HIZ9`・
+`HIZ10`・`HIZ13`・`HIZ15`・`OUT2`・`P9`・`P10`。
+
+**根本原因の特定**：V9自身の最終成功LVS（`ring_osc/LVS_error.lvsdb`、
+08-31、GIO Match確認済み）の実チップGDSを同じ座標で直接プローブし
+比較。`OSS_FRAME_GIO`セル自身の内容（own shape・22個の子インスタンス
+＝ESDダイオード等）はV9/V10間で完全に同一（バイト単位で一致確認）—
+—フレーム自体は無変更。差はTOPセルレベルの配線：V9の実チップには
+これら6ピン（HIZ7/HIZ15→VDD、HIZ9/HIZ10→VSS、当時はHIZ2→VDD/
+OUT13→VSSだったが後にHIZ13/OUT2へ移動——`gio_connections.json`の
+現行ドキュメントと`script/add_hiz_vss_ties_v9.py`の履歴コメントで
+確認）へ実際に金属配線が届いていたが、V10の`route_gio_core_v10.py`
+には**この固定結線を描く処理が一切存在しなかった**（V9では一度
+削除されてから`add_hiz_vss_ties_v9.py`で個別に復元された経緯があり、
+V10のスクリプトを書いた際にこの復元ステップ自体を移植し忘れていた）。
+さらに`HIZ13`は「HIZ2とHIZ13の役割入れ替え」（sda_oeの動的制御点が
+HIZ13→HIZ2に移動）でDIS chainの新メンバーになったはずが、
+`DIS_CHAIN_POINTS`リストがこの入れ替え前の古い状態のまま（`HIZ13`が
+未挿入）だったため、これも未結線のまま残っていた。`P9`/`P10`は
+V9・V10どちらも実際には無配線（スペアパッド、意図通り）——V9の
+LVS実行がなぜこれらを有効なピンとして認識できたかは特定できず
+（LVSデック側のネット刈り込み挙動の差の可能性、実害なしと判断）。
+
+**修正**（`route_gio_core_v10.py`）：
+1. `DIS_CHAIN_POINTS`に`("HIZ13", (921.7, 220.0, "RIGHT", "M2"))`を
+   `HIZ14`と`HIZ12`の間（物理的にもちょうど中間、同じRIGHT辺）に
+   挿入——`HIZ14_HIZ12`の単一リンクを`HIZ14_HIZ13`・`HIZ13_HIZ12`の
+   2リンクに置き換え。
+2. `HIZ15_VDD_tie`・`OUT2_VDD_tie`・`HIZ7_VSS_tie`・`HIZ9_VSS_tie`・
+   `HIZ10_VSS_tie`の5本の固定結線を新規追加。全ターゲットは
+   `LEF/OSS_FRAME_GIO.lef`で直接確認済みのM2ピン（3.4×3.4um、
+   NEAR_R=915〜921.7の実パッド境界）。VDD/VSSバス母線はダイ内部
+   （Y=800／-805)にあり、パッドはY=±921.7と約120um離れている
+   ため、12レーンの信号帯とDIS chain専用リング（R=840）を横断する
+   必要がある——`klayout.db`での系統的な列スイープ（各ピン自身の
+   X±3um、バスからパッドまでの全Y区間）で5列すべてM2形状ゼロ
+   （M1のレーン横断配線のみ、異なるレイヤーなので安全に横断可能）
+   と確認、単純な垂直M2配線1本ずつで済むと判明。各配線はバス側に
+   via、パッド側はLEF矩形へ2um食い込ませて（エッジのみでなく実体の
+   ある重なりにする、本プロジェクトの既定の作法）直接着地。
+
+**検証**：
+- `drc_check_nrow_fm.py`：M1 0/0、M2 1/5——既知の6件のみ、新規違反
+  ゼロ。
+- 同一レイヤー限定の重なりチェック：DIS chainの隣接リンク同士が
+  共有ノード（HIZ11/HIZ12/HIZ13/HIZ14、HIZ4/HIZ5/HIZ6、P7）で
+  重なるのは同一ネット内の意図した接続であり問題なし（新規の
+  他ネットとの衝突は皆無）。
+- 6ピン（HIZ7/9/10/13/15/OUT2）それぞれのLEF宣言矩形が新規配線に
+  よってM1・M2とも100%被覆されることを確認。
+- DIS chain 9メンバー（P7+8個のHIZピン、HIZ13含む）を1つのネットと
+  してマージすると単一連結ポリゴンになることを確認（分断なし）。
+  5本のVDD/VSS結線もそれぞれVDD/VSSバス母線と単一連結ポリゴンに
+  なることを確認（バスまで実際に届いていることの直接確認）。
+
+`schematic/gio_connections.json`はHIZ7/HIZ9/HIZ10/HIZ13/HIZ15/OUT2
+それぞれの正しいnet（VDD/VSS/DIS）を既に宣言済みだったため、LVS用
+リファレンスSPICE（108.58）側の変更は不要——今回のバグはレイアウト
+側（実配線の欠落）のみに起因していた。
+
+出力：`layout/step10/v10_top_routed.gds`／`v10_chip_final.gds`
+（再生成、6本の新規結線＋HIZ13挿入を反映）。実機KLayout LVSの
+再実行はユーザーの次のステップ待ち。まだgit commitはしていない。
+
+### 108.60 P9/P10のLVS NoMatch対策——リファレンスSPICE側のトップ
+ピン宣言から除外（`gen_lvs_spice_top_v10.py`／
+`gen_lvs_spice_ringosc_v10.py`修正）
+
+108.59の6ピン修正を反映した実機LVSを再実行した結果（ユーザー共有の
+スクリーンショット、KLayout Netlist Database Browserのログタブ）、
+8件中6件は解消し、`P9`・`P10`のみ引き続き
+「No equivalent pin P9/P10 from reference netlist found... physical
+connection is not made to the subcircuit」として残った。
+
+**調査**：`OSS_FRAME_GIO.spice`を直接grepし、P9/P10自身は
+`OSS_ESD_5V_DIO`サブサーキットへの実デバイスインスタンス
+（`x15 VDD P10 VSS HIZ10 OUT10 OSS_ESD_5V_DIO`、
+`x16 VDD P9 VSS HIZ9 OUT9 OSS_ESD_5V_DIO`）としてGIOフレーム自身の
+回路図内では確かに接続されていることを確認——フレームの中では
+孤立ノードではない。一方でV10のレイアウト・スキーマともにP9/P10は
+設計上「実装配線なし・完全スペアパッド」（core信号・VDD/VSS・DIS
+タイのいずれも無し）であり、V9の物理配置と完全にバイト単位で一致
+（108.59で確認済み）。にもかかわらずV9自身の過去の成功LVS
+（`ring_osc/LVS_error.lvsdb`、08-31）ではP9/P10は問題にならなかった
+——両者の物理配線が同一である以上、原因はレイアウト側ではなく
+リファレンスSPICE側にあると判断。`gen_lvs_spice_top_v10.py`は元々
+P9/P10を含む16本すべてを`TOP_PIN_ORDER`でトップレベル実ピンとして
+宣言していたが、同じく未使用の`OUT1`/`OUT7`/`OUT15`はそもそも
+トップピン宣言に含めておらず（内部の`NC_OUT*`floatingネットの
+ままで済ませていた）、この非対称な扱いがP9/P10だけ
+`flag_missing_ports`系のエラー対象になっていた可能性が高いという
+仮説をユーザーに提示。V9側がなぜ同じ宣言で問題にならなかったかの
+正確な機構（LVSデック側の`soft_connect`/ネット刈り込み設定の差等の
+可能性）は特定できず、ユーザー自身のローカルLVSスクリプトへの
+アクセスがないため検証不能——ユーザーの判断で、根本機構の特定を
+追わず対症療法（トップピン宣言からの除外）を採用する方針となった。
+
+ユーザー：「理解しました。P9,P10をV9と同じくトップから外して試し
+ます。」
+
+**修正**：
+1. `gen_lvs_spice_top_v10.py`の`TOP_PIN_ORDER`から`P9`/`P10`を削除
+   （16本→14本、`OUT1`/`OUT7`/`OUT15`と同じ「内部floatingネットの
+   まま」の扱いに統一）。再実行し、`NC_P9`/`NC_P10`としてリネーム
+   されず内部floatingネットのまま残ることを確認、
+   `v10_signal_routing_plan.json`の20ネットのクロスチェックは
+   影響なく全通過（元々どちらもP9/P10端子を使用していないため）。
+2. `gen_lvs_spice_ringosc_v10.py`を再実行し、新しい14ピンのベース
+   ファイルを取り込んでRING_OSC統合版を再生成——このスクリプト自身
+   のENBターゲット（`P15`＝rst_n）健全性チェック
+   （`if rst_n_terminal not in top_pins: raise ...`）も新しい
+   トップピンリストに対して問題なく通過。
+
+**検証**（`klayout.db.NetlistSpiceReader`で最終ファイル
+`simulations/tr_1um_i2c_slave_async.spice`を直接パース）：
+- トップサブサーキットのピン数：14（P9/P10なし）。
+  `['P1','P2','P3','P4','P5','P6','P7','VSS','P11','P12','P13',
+  'P14','P15','VDD']`
+- `NC_P9`／`NC_P10`は内部floatingネットとして存在（トップピンには
+  昇格していない）。
+- トップレベルに`P9`／`P10`という名前のネットは一切残存しない
+  （リネーム漏れなし）。
+- `OUT9`／`OUT10`／`P15`は健全（RING_OSCのOUT/OUTD/ENB接続用）。
+- トップレベルサブサーキットインスタンス3個すべて存在：
+  `OSS_FRAME_GIO`・`I2C_SLAVE_ASYNC_NROW_FM`・`RING_OSC`。
+
+出力：`schematic/tr_1um_i2c_slave_async_v10_lvs.spice`（14ピン版）、
+`schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`、
+`simulations/tr_1um_i2c_slave_async.spice`（実機LVSツールが直接
+参照するファイル、再生成済み）。レイアウト側の変更は無し（108.59
+までの状態のまま）。実機KLayout LVSの再実行はユーザーの次のステップ
+待ち。まだgit commitはしていない。
+
+### 108.61 108.60を撤回——トップピン除外はLVSを悪化させると判明、
+原因調査は振り出しに（レイアウト・ラベルはV9/V10間で完全一致を確認）
+
+108.60の変更（P9/P10を`TOP_PIN_ORDER`から除外）を反映した状態で
+ユーザーが実機LVSを再実行した結果、スクリーンショット（KLayout
+Netlist Database Browser、Logタブ）で判明：`P1`〜`P15`・`VSS`を含む
+**ほぼ全ピン**が新たに「Port mismatch」を起こし、さらに複数の
+匿名ネット（`$1`・`$61`等）が「Net ... is not matching any net from
+reference netlist」として出現——108.59までの状態（8件中6件解消、
+P9/P10のみ残存）より明らかに悪化した。ユーザー：「DRCエラーが悪化
+（実際にはLVSエラーの悪化を指す誤記と判断）　もとに戻して、冷静に
+原因を探しましょう。」
+
+**診断**（`layout/step10/LVS_error.lvsdb`、15:46更新分＝108.60の
+14ピン版に対する実行結果、を`klayout.db.LayoutVsSchematic`で直接
+調査）：
+- `each_circuit_pair()`で全28 circuitを確認：GIO・core・RING_OSC・
+  全ライブラリセルは**全てMatch**（108.59の6ピン修正は無傷で健在）。
+  NoMatchはトップ回路`tr_1um_i2c_slave_async`のみ。
+- これが決定的：**リファレンス側のトップpin数（14）とレイアウト側の
+  実際の物理トップpin数（16、GDS上のPINラベルで確認済み）が食い違うと、
+  KLayoutのネットリスト比較はトップ回路全体でグラフ同型性を確立でき
+  ず、NoMatchが波及して他の正常なピンまで巻き込んで偽のmismatchを
+  報告する**。つまりP9/P10を「消せば無害」という108.59/108.60時点の
+  想定（未使用のOUT1/OUT7/OUT15の前例からの類推）は誤りだった：
+  OUT1/OUT7/OUT15はそもそもOSS_FRAME_GIOの外側（チップのトップレベル
+  ピン）には一度も昇格しない内部専用ネットだが、P9/P10は実在する
+  ボンドパッド（GDS上に物理的なPINラベル "P9"/"P10" が存在、後述）
+  であり、レイアウト側の抽出は常にこれを16本目・15本目の実ピンとして
+  拾う——ゆえに宣言数を減らすことは「安全な省略」ではなく「トップ
+  回路の構造そのものの破壊」だった。
+
+**対処**：`gen_lvs_spice_top_v10.py`の`TOP_PIN_ORDER`を108.59以前の
+16ピン（P9/P10を含む）に復元。再実行し、`NC_P9`/`NC_P10`が正しく
+`P9`/`P10`にリネームされ直すことを確認。続けて
+`gen_lvs_spice_ringosc_v10.py`も再実行し、`simulations/
+tr_1um_i2c_slave_async.spice`を再生成。`klayout.db.NetlistSpiceReader`
+で最終ファイルを直接パースし、トップpin数が16本（`P9`/`P10`含む）に
+戻ったことを確認——108.59修正が完了した直後の状態（6/8解消、P9/P10
+のみ残存）に正しく復帰。
+
+**根本原因の再調査（振り出しから再開）**：P9/P10単体の本当の原因を
+突き止めるため、「V9では成功・V10では失敗」という非対称性の実体を
+再検証：
+- **レイアウト形状**：`v10_chip_final.gds`と、V9の実際の成功LVS実行
+  （`ring_osc/LVS_error.lvsdb`、08-31 14:46）に対応する
+  `ring_osc/tr_1um_i2c_slave_async_ringosc_signals.gds`（タイムスタンプ
+  08-31 14:35、直前に生成）の両方で、P9/P10のLEFピン座標
+  （絶対座標に変換："P9"=(268.3,-923.4)-(271.7,-920.0)、"P10"=
+  (528.3,-923.4)-(531.7,-920.0)）周辺を`klayout.db`でトップセル直下
+  （非再帰）のM1/M2形状を数えたところ、**両バージョンとも0件**
+  （比較対象のP1は1件——実際に配線されたコア信号ワイヤがトップセル
+  直下に存在するため）。つまりP9/P10自体はV9でもV10でも「トップセル
+  レベルには何も配線されていない、GIOセル内部のパッド形状のみ」で
+  完全に同一——ここに差は無い。
+- **PINラベル**：両GDSファイルの同じ座標にレイヤ(49,0)上のテキスト
+  ラベル "P9"・"P10"・"PAD" がそれぞれ存在することを確認——これも
+  V9/V10間で完全に同一（座標・レイヤ・文字列とも一致）。
+- **リファレンスSPICE生成ロジック**：`gen_lvs_spice_top_v9.py`
+  （V9当時に実際に使われたスクリプト）を直接読み、P9/P10の扱いを
+  `gen_lvs_spice_top_v10.py`（今回の108.59版）と比較——**構造的に
+  ほぼ同一**：どちらも`TOP_PIN_ORDER`に16ピン全て（P9/P10含む）を
+  列挙し、`NC_P9`/`NC_P10`という内部floatingネットをP9/P10という
+  実ピン名にリネームする、同じメカニズム。`gen_lvs_spice_ringosc_v9.py`
+  （RING_OSC統合版）も確認したが、x3（RING_OSC）のOUT/OUTDはP9/P10
+  ではなくGIOの内部ピンOUT10/OUT9に接続する仕様（v3改訂後、V10と
+  同じ）——P9/P10のネット自体には一切触れない点も同一。
+- 結論：**レイアウト形状・PINラベル・リファレンスSPICE生成ロジックの
+  いずれにもV9/V10間の差が見つからなかった**。原因はまだ特定できて
+  いない——`src/LVS_error.lvsdb`（08-30、V9のもっと初期の回）に
+  `flag_missing_ports`由来と思われる警告文（`No pins found in circuit
+  during 'flag_missing_ports'`）およびHIZ2/7/9/10/15/OUT13に対する
+  「No equivalent pin ... found in netlist. This is an indication
+  that a physical connection is not made to the subcircuit.」という
+  実際のエラー文言を発見できたが、これらは全てOSS_FRAME_GIO**サブ
+  サーキットレベル**（すなわちOSS_FRAME_GIO自身の`.subckt`宣言ピン）
+  の話であり、P9/P10がチップ**トップレベル**でどう扱われて
+  「no equivalent pin」と判定されたかの実際のログ本文は、108.60の
+  誤った実験で上書きされてしまい確保できていない（現在の
+  `LVS_error.lvsdb`は14ピン実験時のカスケード障害のログのみ）。
+
+**次のステップ**：現状は108.59直後の安全な状態（16ピン、6/8解消）に
+復帰済み。ユーザーに実機LVSの再実行を依頼し、汚染されていないP9/P10
+単体のエラーログを新たに取得した上で、そのログがOSS_FRAME_GIOレベル
+の`flag_missing_ports`メッセージなのか、トップレベル
+（`tr_1um_i2c_slave_async`回路自身）のメッセージなのかを直接確認して
+から次の手を検討する。まだgit commitはしていない。
+
+### 108.62 真の根本原因を特定・修正——V10のfinalize_chip_v10.pyが
+トップレベルM2PIN/TXM2ピンマーカー追加ステップを一度も引き継いで
+いなかった（`add_top_pins_gio_v9.py`のV10版が存在しなかった）
+
+ユーザーが108.61依頼どおり実機LVSを再実行し、今度は汚染されていない
+ログをスクリーンショットで共有：
+
+```
+Circuits tr_1um_i2c_slave_async and TR_1UM_I2C_SLAVE_ASYNC could not
+be compared because the following subcircuits failed to compare:
+  A: OSS_FRAME_GIO
+  B: OSS_FRAME_GIO
+
+Circuit OSS_FRAME_GIO
+  No equivalent pin P10 from reference netlist found in netlist.
+  This is an indication that a physical connection is not made to
+  the subcircuit.
+  No equivalent pin P9 from reference netlist found in netlist.
+  This is an indication that a physical connection is not made to
+  the subcircuit.
+
+Circuit tr_1um_i2c_slave_async ⇔ TR_1UM_I2C_SLAVE_ASYNC
+  ⚠ No pins found in circuit during 'flag_missing_ports'
+```
+
+これで108.61の未解決点（GIOサブサーキットレベルかトップレベルか）が
+判明：**P9/P10の不一致はOSS_FRAME_GIOサブサーキット自体の比較
+（レイアウト側extractionとリファレンスSPICE側の比較）で起きており、
+トップレベルの比較はそれが原因で「そもそも実行できていない」**
+（トップの警告"No pins found... during flag_missing_ports"は、GIOの
+比較が先に失敗したため後続処理がスキップされたことを示す副次的な
+メッセージ）。
+
+続けてユーザー本人が核心を指摘：「わかりました。Layout のトップに
+M2PIN/TXTM2 が無いです。V9のときはスクリプトを通しています。確認
+ください。」
+
+**確認**：`script/add_top_pins_gio_v9.py`を発見・直読——V9のパイプ
+ラインには、GDS完成後に**チップTOPセル直下**（OSS_FRAME_GIOインス
+タンスの内部ではなく）へ、16個の実ボンドパッド全て（P1-P7, VSS,
+P9-P15, VDD）について3.0×3.0umの`M2PIN`（layer 49/1）ボックス＋
+ピン名の`TXM2`（layer 49/0）テキストラベルをパッド中心へ追加する
+専用ステップが存在した（design_notes.md 82.x/83.x由来）。V10側で
+`klayout.db`で直接カウントしたところ：
+
+- V10 (`layout/step10/v10_chip_final.gds`、修正前)：トップセル直下
+  M2PIN(49,1)＝**0個**、TXM2(49,0)＝**0個**
+- V9 (`ring_osc/tr_1um_i2c_slave_async_ringosc_signals.gds`、V9の
+  実際の成功LVS実行の直前に生成されたGDS)：トップセル直下
+  M2PIN(49,1)＝**16個**、TXM2(49,0)＝**16個**
+
+`finalize_chip_v10.py`／`route_gio_core_v10.py`のどちらにもこの
+ステップに相当する処理が一切存在しないことをgrepで確認——V10の
+パイプラインを新規に組んだ際、`add_top_pins_gio_v9.py`のV10版を
+作成し忘れていた（108.59で見つかったHIZ7/9/10/13/15/OUT2の欠落
+ティーと全く同種の「V9では別スクリプトで後から追加されていた
+処理がV10パイプラインに移植されていなかった」というパターン）。
+
+**なぜP9/P10だけが表面化したか**：他の14ピン（P1-P7・P11-P15・
+VDD・VSS）は、いずれもコア信号・DIS chain・VDD/VSSバスへの実配線が
+トップセルに直接存在するため、そのワイヤ自体がflag_missing_portsの
+要求する「サブサーキット境界を越える物理接続」を満たしてしまい、
+M2PIN/TXM2マーカーが無くても問題にならなかった。P9/P10は設計上
+「実装配線なし・完全スペアパッド」（core信号もVDD/VSS/DISタイも
+無し）なので、トップセルに何も届いておらず、M2PIN/TXM2マーカー
+（またはそれに相当する何らかのトップセル形状）が無いと、GIOサブ
+サーキット自身の比較時に「宣言されたポートなのにレイアウト側で
+対応する接続が一切見つからない」と判定される——108.59のHIZ系ピン
+とは異なり、電気的にVDD/VSS等へ接続する対処はできない（意図的に
+スペア＝未接続のままにすべきピンのため）。マーカー追加こそが
+唯一の正しい対処。
+
+**修正**（`finalize_chip_v10.py`にステップ6として追加）：
+`add_top_pins_gio_v9.py`の`TOP_PINS`座標リストをそのまま流用——
+OSS_FRAME_GIOがV10のトップセルでも(0,0)/r0/mag1（恒等変換）で
+配置されていることを`klayout.db.Layout.each_inst()`で確認済み
+（V9と同一）なので、同じ16点の絶対座標がそのままV10にも通用する。
+16個のM2PINボックス＋TXM2テキストラベルをトップセル直下に追加する
+コードを末尾（`layout.write(OUT_GDS)`の直前）に挿入。
+
+**検証**：
+- 再実行後、`klayout.db`でトップセル直下M2PIN(49,1)＝16個、
+  TXM2(49,0)＝16個を確認（V9と同数）。
+- P9/P10それぞれのM2PINマーカー（(200,-1040)・(600,-1040)）が、
+  GIO内部の実M2パッド形状（再帰検索）と実際に重なることを確認
+  （各1件）——マーカーが正しい位置に乗っていることの直接証拠。
+- ステップ1-5（PTECT除去／RING_OSC配置／電源ストラップ延長／
+  OUT・OUTD・ENB配線／ロゴ埋め込み）のコードは今回一切変更して
+  いないため、M1/M2/PTECT等の製造レイヤーへの影響は無し（DRCへの
+  影響なしと判断——マーカーはlayer 49、非製造・注釈用レイヤー）。
+
+出力：`layout/step10/v10_chip_final.gds`（再生成、M2PIN/TXM2
+16組を追加）。実機KLayout LVS・DRCの再実行はユーザーの次のステップ
+待ち。まだgit commitはしていない。
+
+### 108.63 108.62後の実機LVSでP7に新規エラー——HIZ1のDISチェーン
+誤登録＋HIZ7/OUT2のVDD/VSSバス取り違えを修正、ダイ内部を貫く配線
+ではなくDISチェーンと同じリング配線方式に切替え
+
+108.62でM2PIN/TXM2を追加した状態でユーザーが実機LVSを再実行、
+スクリーンショット2枚を共有：「P9/P10はクリアーですが、P7に
+エラーがあります。LVS_error.lyrdbです。調査ください。P7のHIZが
+VSSにつながっていませんか？」1枚目はCross Referenceツリーで
+Pin行の一致数が食い違うP7、2枚目はNet P7/VSS/VDDが揃って
+"not matching"という内容。
+
+**診断1：HIZ1がDISチェーンに誤って残っていた。** `layout/step10/
+LVS_error.lvsdb`を`klayout.db`で直接調べ、P7ネットの
+`subcircuit_pin_count()`がレイアウト側10、リファレンス側9と判明。
+`gio_connections.json`の`connections_per_terminal_detail`を確認
+すると`HIZ1: {"net": "VDD", "meaning": "Hi-Z / input-only (moved
+here from HIZ2)"}`——HIZ1はVDDタイであってDISチェーンのメンバー
+ではない。しかし`route_gio_core_v10.py`の`DIS_CHAIN_POINTS`
+リストは、HIZ2→HIZ13、HIZ13→HIZ1というV9時代の再配線履歴より
+前の状態を引き継いだままで、HIZ1が今もチェーンの先頭に残って
+いた（108.59で見つかったHIZ13の欠落と全く同型のバグ）。
+
+**診断2：HIZ7とOUT2のVDD/VSSバス割り当てが物理的に入れ替わって
+いた。** 同じくLVSの実ネット比較（`each_net_pair`→
+`each_subcircuit_pin`）で、レイアウト側のVDDネットにOUT2が、
+VSSネットにHIZ7が誤って含まれていることを確認。
+`gio_connections.json`では`HIZ7: {"net": "VDD", ...}`、
+`OUT2: {"net": "VSS", "note": "permanently tied low (VSS) --
+open-drain SDA drive data"}`と明記されている一方、HIZ7のパッドは
+物理的にBOTTOM辺（VSSバスに近い側）、OUT2のパッドはTOP辺（VDD
+バスに近い側）にあり、108.59時点の実装は「パッドの物理位置に
+近い方のバス」へ単純に配線してしまっていた——電気的に必要な
+接続先を無視した、108.59とは別種の新規バグ（108.59自体が
+GIOサブサーキットレベルの比較失敗でブロックされていたため、
+このバグはこれまで一度もLVSで露見していなかった）。
+
+**修正の試行錯誤**（詳細は`route_gio_core_v10.py`本文のコメントに
+残してある）：
+1. HIZ1をDIS_CHAIN_POINTSから削除し、他の同側タイ（HIZ15/HIZ9/
+   HIZ10と同型）としてHIZ_VDD_VSS_TIESに`HIZ1_VDD_tie`を追加。
+2. HIZ7/OUT2はパッドが目的バスと反対側の辺にあるため、ダイ内部を
+   縦断する新規配線（"LONG_TIES"）が必要——1回目（各ピン自身の
+   X座標で単純に縦一直線）は実機DRCでM2 space違反9件、原因は
+   コアセル自身の内部M1/M2配線（`begin_shapes_rec()`の再帰検索で
+   のみ見える、`each_shape()`では見落とす）。2回目（X=790/797の
+   狭い専用コリドー、離隔マージン付きで再検証）はDRC違反が8件に
+   減ったが、TAP2/TAP3タップセル列（X=800.2-803.6）とコア内部
+   配線（X=784.0-787.4）の両方に引っかかっていた。3回目、離隔
+   マージンを正しく（配線半幅+Smin=±3.7um）取った全面再走査で、
+   左右とも唯一のクリアな隙間（787.4-800.2 / -800.2--787.4、
+   幅12.8um）を発見——1本は入るが2本は入らない（2本分必要な
+   14.8umに2um不足）ため、HIZ7はX=-794、OUT2は反対側のX=+794へ
+   （OUT2はY=820のM1で約1400umの長い横引き）割り当て、
+   `v10_top_routed.gds`単体では実機DRC完全クリーンを確認。
+
+**しかし`finalize_chip_v10.py`を再実行して`v10_chip_final.gds`を
+生成すると、M2 space違反が5件（既知の無関係な基準値）から14件へ
+悪化。** 原因はfinalize側が後から追加するRING_OSC（リング
+オシレータのスタンダードセル行、Y=-768.9〜-645.8の全幅に渡って
+電源ストラップが1枚の連続形状として存在し、X=-798.2〜708.4の
+どこにも隙間が無い）とOPENSUSI_LOGO（X=-791.5〜791.5、
+Y=-493.4〜-180.4のドットパターン）が、3回目のX=∓794コリドーの
+すぐ脇に被さっていたため——`v10_top_routed.gds`だけを見ていた
+これまでの検証では見えなかった（finalizeが後から追加する内容は
+`route_gio_core_v10.py`単体の出力には存在しない）。RING_OSCの
+電源ストラップは1枚の連続形状で、ダイ内部（|X|概ね800未満）を
+縦断するどんなX位置を選んでも隙間が無いことを直接確認——
+カーテシアン座標でダイ内部を貫く方式そのものが行き詰まった。
+
+**最終的な修正方針：ダイ内部を貫く配線をやめ、既にDISチェーンで
+実績のあるリング配線方式（`ring_waypoints()`/`connect_gio_to_gio()`、
+DIS_R=840でP7＋HIZ8個を結んでいる既存の仕組み）に乗り換えた。**
+HIZ7・OUT2それぞれをバスへ直接届けるのではなく、反対側の辺で
+「既に正しいバスへタイ済みのピン」へリング配線で接続する——
+HIZ7（BOTTOM、VDD行き）はHIZ1（TOP、108.63前段で修正済みVDD
+タイ）へ、OUT2（TOP、VSS行き）はHIZ9（BOTTOM、既存VSSタイ）へ。
+HIZ1・HIZ9はどちらも恒久的にVDD/VSSへ固定されたスペアHi-Zピン
+（`gio_connections.json`）で他の電気的意味を持たないため、その
+金属へ物理的に重ねる／viaで繋ぐことはバスへ直接繋ぐのと電気的に
+等価。半径はDIS_R=840から内側へ十分な離隔（M2 Wmin/Smin条件で
+中心間5.4um以上）を取った新規プライベートリング——HIZ7用は
+`HIZ7_VDD_RING_R=834.0`（V9の`VDD_PRIVATE_R`定数を再利用）、
+OUT2用は`OUT2_VSS_RING_R=828.0`（834からさらに6um内側）。どちらも
+X=∓828/834という、TAP列（|X|~800）ともRING_OSC/LOGO（両方とも
+|X|,|Y|<800の内側に収まっている）とも大きく離れた領域を通るため、
+DISチェーン自身と同じ理由で両方とも自然にクリア。
+
+**検証**：
+- `route_gio_core_v10.py`再実行→`drc_check_nrow_fm.py
+  v10_top_routed.gds tr_1um_i2c_slave_async`：M1 width/space=0/0、
+  M2 width/space=1/5、V1 space=0、V1-GC=0——既知の基準値（X≈-964/
+  -1028の無関係な既存5件）と座標まで完全一致、新規違反ゼロ。
+- `finalize_chip_v10.py`再実行→同DRCを`v10_chip_final.gds`に対して
+  実行：結果は上と完全に同一（M2 width/space=1/5、座標一致）——
+  RING_OSC/LOGO追加後も新規違反なしを確認。
+- `klayout.db.LayoutToNetlist`で`v10_chip_final.gds`から物理接続の
+  みのネットを抽出し、`probe_net()`でHIZ7・HIZ1・HIZ15・VDDバスが
+  同一net_id、OUT2・HIZ9・HIZ10・VSSバスが別の同一net_idであることを
+  直接確認——意図通りVDD/VSSがショートなく正しく分離・結線されて
+  いることを、実機LVSに頼らず独立に裏付けた。
+- 途中、via()をHIZ7/OUT2のパッド直上に置く実装ではV1-GC space<1.2
+  違反が新規2件発生（パッド自身のドライバセルOSS_DRVが持つ
+  ゲートコンタクトcont_gに0.9umまで接近、必要1.2um）——他の同側
+  タイ（HIZ_VDD_VSS_TIES）がパッド上にviaを置かずM2の重なりだけで
+  接続している既存パターンに合わせ、via()呼び出しを削除して解消。
+
+修正箇所：`script/route_gio_core_v10.py`（`DIS_CHAIN_POINTS`から
+HIZ1削除、`HIZ_VDD_VSS_TIES`に`HIZ1_VDD_tie`追加、旧`LONG_TIES`
+カーテシアン配線ブロックを`connect_gio_to_gio()`呼び出し2件へ
+置き換え）。出力：`layout/step10/v10_top_routed.gds`・
+`layout/step10/v10_chip_final.gds`（両方再生成、DRC完全クリーン）。
+まだgit commitはしていない。実機LVS・DRCの再実行はユーザーの
+次のステップ待ち。
+
+### 108.64 VDD/VSSのM1バー—電源PAD間10um配線を左右2本ずつ追加、
+計5本・2umスペースに拡張（ユーザー指示）
+
+ユーザー指示：「VSS/VDDのM1バーと電源PADを繋いでいる10umの配線は、
+現状の配線と同じモノを、左右２本づつ、計５本になるように２umスペ
+ースをおいて追加してください。」——`route_gio_core_v10.py`の
+`VDD_GIO_pin`／`VSS_GIO_pin`各セクション（元は`gx,gy`＝実PAD座標
+1本のみ、幅BUS_W=10umのM1/M2ジャンクション）を、X方向に
+`GX_OFFSETS = (-24.0, -12.0, 0.0, 12.0, 24.0)`の5点でループする形に
+変更。中心間隔12um＝配線幅10um＋スペース2umで指示どおり。
+
+**安全性検証**：拡張後のコリドー（VDD側X=176-224、VSS側
+X=-224--176）が、他ネットの形状と衝突していないかを
+`klayout.db.begin_shapes_rec()`（再帰）で確認。付近に見えた
+"VSS"/"VDD"テキストラベルは近接していても紛らわしいだけで、実際に
+その領域を占める形状のセル名を直接調べたところ全て
+`OSS_ESD_5V_VDD`/`OSS_PAD`（VDD側）・`OSS_ESD_5V_VSS`（VSS側）——
+すなわちVDD／VSS自身のボンドパッド構造の一部であり、他ネットとの
+ショートではないと確認（テキストラベルの近接だけでなく、実形状の
+セル名で判定する、というこのプロジェクトで確立済みの手法を踏襲）。
+
+**検証**：`route_gio_core_v10.py`再実行後の出力ログに
+`VDD_GIO_pin_0`〜`_4`（X=176,188,200,212,224）、`VSS_GIO_pin_0`〜
+`_4`（X=-224,-212,-200,-188,-176）を確認。108.63のDRC最終確認
+（`v10_chip_final.gds`に対する`drc_check_nrow_fm.py`）でもこの
+拡張コリドーに起因する新規違反は0件——5件の既知基準値のみ
+（座標もX≈-964/-1028で一致）。
+
+修正箇所：`script/route_gio_core_v10.py`（`VDD_GIO_pin`／
+`VSS_GIO_pin`セクション、それぞれ5点ループ化）。出力：
+`layout/step10/v10_top_routed.gds`・`v10_chip_final.gds`
+（108.63と同じ再生成分に含まれる）。まだgit commitはしていない。
+実機LVS・DRCの再実行はユーザーの次のステップ待ち。
+
+### 108.65 実機DRC/LVSクリーン確認後、V10チップレベルSPICE検証用
+ネットリスト（RING_OSC除外）を`gen_chip_sim_ready_v9.py`のV10版で生成
+
+ユーザーが108.63/108.64の修正を反映した状態で実機KLayout DRC/LVSを
+再実行し「ご苦労さま、DRC/LVSクリーンです。」と確認。続けて
+「Spiceでチップレベルのテストベンチでの動作検証をします。RING_OSCを
+除いたファイルを用意してください。」と依頼。
+
+**方針**：V9側に既に同種のスクリプト`script/gen_chip_sim_ready_v9.py`
+（design_notes.md 104〜106系、ユーザーの過去のngspice全体チップ検証
+依頼で作成済み）が存在し、`schematic/tr_1um_i2c_slave_async_v9_lvs.
+spice`（RING_OSC非統合のLVSリファレンスSPICE——`gen_lvs_spice_top_
+v9.py`が同一実行からRING_OSC統合版と非統合版を兄弟ファイルとして
+両方出力するため、RING_OSC除外は手作業のストリップ不要、非統合版を
+そのまま使うだけで済む設計）から、実ngspiceで走る形へ機械的な5種の
+修正（bare M行→X行変換／ブラケット付きネット名のアンダースコア化／
+PININFOコメント継続行の`*+`修正／ダイオードA=/P=→AREA=/PJ=／
+NMOSE→MNEモデル名修正）を加えて`ngspice/tr_1um_i2c_slave_async_
+sim_ready.spice`を生成する仕組みが既にある（各修正の詳細な診断根拠
+はそのスクリプト自身のdocstringに記載、実機ngspice実行での実エラー
+に基づく）。V10の`schematic/tr_1um_i2c_slave_async_v10_lvs.spice`も
+同一のKLayout LVSライタ規約で生成されているため、同じ5種の欠陥が
+同じ形で存在するはずと判断し、直接調査で確認：
+
+| 項目 | V9 | V10 |
+|---|---|---|
+| bare M行→X行変換対象 | 358行 | 378行 |
+| ブラケット付きネット名 | 39種/152箇所 | 37種/145箇所 |
+| PININFOコメント継続行の不備 | 2箇所 | 2箇所（同一パターン） |
+| ダイオードA=/P=パラメータ | 2箇所 | 2箇所（同一パターン） |
+| NMOSE→MNE | 4箇所 | 4箇所（同一セル、ESDパッド由来） |
+
+変換ロジック（正規表現4関数：`convert`/`debracket`/
+`fix_comment_continuations`/`fix_diode_params`）は完全にバージョン
+非依存——V10用に変更が必要なのは入出力パス定数（`SRC`／`OUT_PATH`）
+のみと判断。なお、V10の`schematic/tr_1um_i2c_slave_async_v10_lvs.
+spice`自体は108.63/108.64のレイアウト側修正（`route_gio_core_v10.py`
+の物理配線）とは無関係——HIZ1/HIZ7/OUT2のネット割り当てバグは
+「レイアウトがスキーマティック（`gio_connections.json`）の記述と
+一致していなかった」ことが原因で、スキーマティック側は最初から
+正しかったため、このLVSリファレンスSPICEを再生成する必要はない。
+
+**実装**：`script/gen_chip_sim_ready_v10.py`を新規作成——
+`gen_chip_sim_ready_v9.py`の変換ロジックを一切変更せず、
+`SRC`を`tr_1um_i2c_slave_async_v10_lvs.spice`、`OUT_PATH`を
+`ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice`に変更した
+だけの版。
+
+**検証**：
+- 実行ログ：`378 bare M行→X行変換（4件がNMOSE→MNE）`／
+  `37種のブラケット付きネット名（145箇所）をデブラケット`／
+  `PININFOコメント継続行2箇所を修正`／`ダイオードパラメータ4箇所を
+  修正`——事前の直接調査で見積もった件数と完全一致。
+- `klayout.db.NetlistSpiceReader`で生成ファイルを実際にパースし、
+  トップサブサーキット`tr_1um_i2c_slave_async`のピン数16
+  （P1-P7, VSS, P9-P15, VDD）、サブサーキット呼び出しが
+  `OSS_FRAME_GIO`と`I2C_SLAVE_ASYNC_NROW_FM`の2つのみ（RING_OSCは
+  含まれない＝除外を確認）、回路総数45件を全て未解決参照なく解決
+  できることを確認（このサンドボックスにはngspice本体が無いため
+  ——design_notes.md 16607——構文レベルの検証はこの方法で実施、
+  実際の`.tran`実行はユーザー環境で行う想定）。
+
+出力：`ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice`
+（新規）。まだgit commitはしていない。
+
+**ユーザーへの申し送り事項**：V9のチップレベルテストベンチ
+（`ngspice/TB/tb_chip_i2c.spice`、`script/gen_chip_tb_v9.py`生成）
+をV10のこのファイルに対して流用する場合、V9のテストベンチは
+RING_OSC不在時のP9/P10（RING_OSCのOUT/OUTD出力を受けるパッド）を
+1GΩ抵抗でVSSへ疑似終端していた（RING_OSCの出力ドライバが無い
+状態でのフローティングノード対策）——V10でも同じ対策が必要になる
+可能性が高い。V10専用のチップレベルテストベンチ（`gen_chip_tb_v10.py`
+相当）はまだ作成していない。
+
+### 108.66 V10チップレベルI2Cテストベンチ（`gen_chip_tb_v10.py`）を
+`gen_chip_tb_v9.py`から新規作成——V10のパッド再割当（108.57）を
+反映、V9固有の既解決バグの深掘り診断は削減
+
+ユーザー依頼：「V10のテストベンチを作ってください。」（108.65の
+申し送り事項を受けて）。
+
+**方針**：`script/gen_chip_tb_v9.py`（SCL=100kHz、`script/test_i2c_
+slave_async.py`のBFMと同一プロトコル形状——SLAVE_ADDR=0x50、
+DATA_WR_VAL=0xA5、DATA_RD_VAL=0x3C、MSBファースト、START/STOP/ACK/
+NACK規約、外付け10kΩ SDAプルアップ）のPWL生成エンジン（`BusBuilder`
+クラス、タイミング定数群、含むT_HOLD/T_RESET_LOW_HOLDの根本原因修正）
+はプロトコル/タイミングレベルであり、ネットリストのバージョンに
+非依存と判断し、そのまま流用。
+
+**流用してはいけないもの——物理パッドマップ**：V10自身のパッド
+ペアリング最適化による端子再割当（`v10_signal_routing_plan.json`、
+108.57）により、V9のTX_PADS/RX_NETS定数をそのまま使うと誤り。
+実際に`ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice`自身の
+`x2 ... i2c_slave_async_nrow_fm`インスタンス化行を、coreサブサーキット
+の正式ピン列（`rst_n scl sda_in tx_data_0..7 sda_oe rx_data_0..7
+rx_valid addr_match rw busy VDD GND`）と位置照合して直接検証：
+
+| | V9 | V10 |
+|---|---|---|
+| TX_PADS（tx_data bit0-7） | P11 P12 P13 P14 P6 P5 P4 P3 | P4 P12 P14 P5 P6 P3 P11 P13 |
+| RX_NETS（rx_data bit0-7） | NC_OUT11/12/13/14/6/5/4/3 | NC_OUT4/12/14/5/6/3/11/13 |
+
+SCL(P1)・SDA(P2)・RSTN(P15)・DIS(P7)は同様の位置照合で不変と確認
+（108.57のパッドペアリング最適化は20本の信号ネットのみが対象で、
+これらは対象外）。
+
+**内部診断ノード名——推測せず`grep`で実在確認**：V10のcoreは
+「再合成」ではなく「同一RTLの再配置」であることを踏まえ、V9の
+テストベンチが参照する内部ネット名（`bit_cnt_0/1/2`、`phase_0/1/2`、
+`last_bit_pending`、`shreg_0`〜`shreg_6`、さらにYosys自動採番の
+`_016_`/`_066_`/`_143_`/`_144_`/`_212_`、`x_505_`等のDFFRBインス
+タンス名、共有クロックnet`_156_`まで）が`tr_1um_i2c_slave_async_
+v10_sim_ready.spice`に同一名でそのまま存在することを直接grepで
+確認——同一合成runの配置替えだったことが伺える。安定して存在が
+確認できたものだけをテストベンチに含めた。
+
+**意図的に削除したもの**：V9のスクリプトに残っていた大量の
+「fine sweep」診断ブロック（`fine_bitcnt0_t*`/`fine_ck_t*`等
+約190件の`.measure`、および`bc0_x*`/`bc1_x*`/`bc2_x*`/ラウンド6-8の
+D論理コーン・リセットチェーンタイムライン探索）と、`.control`末尾の
+「DFFRB slave-hold raceダイアグノスティック」`plot`/`xlimit`ブロック。
+これらは全て、V9で発生した特定の（既に`simulations/DFFRB.spice`
+のMM27でセルレベル修正済みの）DFFRBマスターラッチ競合バグを追跡
+するための一回限りのデバッグ用足場——V10は同じDFFRBセルを変更
+無しで流用している（標準セル本体変更禁止の既定方針）ため、その
+バグ自体が再現する理由がなく、そのまま持ち越すとファイルサイズが
+3倍近くに膨らむだけで検証上の価値が無いと判断し削除。同種の問題が
+V10で疑われた場合、上記で実在確認済みの同じネット名を使って
+`gen_chip_tb_v9.py`側のブロックをそのまま移植できる旨をdocstring
+に明記。
+
+**検証**：
+- 生成後、`xdut`行のノード数が16（トップサブサーキットのピン数と
+  一致）であることを確認。
+- テストベンチ内で参照する全ての内部ノード名
+  （`xdut.x2.<net>`形式）を正規表現で抽出し、`bit_cnt_0/1/2`・
+  `phase_0/1/2`・`last_bit_pending`・`shreg_0`〜`shreg_6`のみで
+  あること（＝実在確認済みのネットしか参照していないこと）を確認。
+- `rd_bit*`測定8件（読み出しデータ8ビット分）、`ack*`測定4件
+  （ADDR+W ACK・DATA ACK・ADDR+R ACK・NACK）を確認。
+- `vtx0`〜`vtx7`（tx_data各ビットの直流源）が新しいTX_PADS
+  （P4,P12,P14,P5,P6,P3,P11,P13）に対しDATA_RD_VAL=0x3C
+  （0b00111100）のビットパターン通りに生成されていることを確認
+  （P4=0,P12=0,P14=1,P5=1,P6=1,P3=1,P11=0,P13=0——期待通り）。
+- `.tran`／`.end`の存在、`vrstn P15`／`vdis P7`／`vscl P1`／
+  `ssda P2`／`rpu P2`の各行が生成されていることを確認。
+- モデルインクルード（`~/Dropbox/.../ip62_models`、ユーザー実機の
+  絶対パス）はこのサンドボックスには存在しないため、klayout.db.
+  NetlistSpiceReaderによる完全パース検証はV9同様に実施不可——
+  上記の構造的チェック（ノード数・参照ネット名の実在確認・ビット
+  パターン照合）で代替。実際の`.tran`実行はユーザー環境で行う想定。
+
+出力：`script/gen_chip_tb_v10.py`（新規）、
+`ngspice/TB/tb_chip_i2c_v10.spice`（新規）。まだgit commitはして
+いない。実機ngspice実行はユーザーの次のステップ待ち。
+
+### 108.67 「14項目のテストベンチ」——単純WRITE+READ版
+（gen_chip_tb_v10.py）ではなくプロジェクト既定の14項目バッチ
+リグレッションテスト（gen_chip_tb_batch14_v9.py系）のV10版を
+新規作成
+
+ユーザー：「ちがいます。１４項目のテストベンチをお願いします。」
+——108.66で作った`gen_chip_tb_v10.py`（単純WRITE→READのみ、〜150個
+の履歴的デバッグ診断付き）ではなく、このプロジェクトで既に確立
+されている「14項目バッチリグレッションテスト」（WRITE→READ→
+不一致アドレス(0x11)NACKの3トランザクション、IRSIM
+（`irsim/irsim_tb.cmd`）・Verilog RTL（`i2c_slave_async_tb.v`）・
+Verilogネットリスト（`i2c_slave_async_net_tb.v`）・V9 SPICE
+（`gen_chip_tb_batch14_v9.py`）の4方式全てで14/14 PASSが確認済みの、
+同一14チェック——design_notes.md 108.3/108.4、18514-18556）を指して
+いたと判明。
+
+**14項目の内訳**（`gen_chip_tb_batch14_v9.py`の`checks`リストと
+完全一致する名称・順序で踏襲）：
+TXN1 WRITE — `busy_after_start`／`ack_addr_write`／
+`addr_match_write`／`rw_write`／`ack_data`／`rx_data`（バイト、
+==0xA5）／`busy_after_stop1`。
+TXN2 READ — `ack_addr_read`／`rw_read`／`read_byte`（バイト、
+==0x3C）／`busy_after_stop2`。
+TXN3 NEG — `nack_wrong_addr`／`addr_match_wrong`／
+`busy_after_stop3`。
+
+**実装**：`script/gen_chip_tb_batch14_v10.py`を新規作成——
+`gen_chip_tb_batch14_v9.py`のWRITE→READ→NACK 3トランザクション
+シーケンス構築ロジックと14チェックの定義をそのまま踏襲しつつ、
+import元を108.66で作った`gen_chip_tb_v10.py`に変更（これにより
+`TX_PADS`/`RX_NETS`/`SCL_PAD`/`SDA_PAD`/`DIS_PAD`/`RSTN_PAD`が
+自動的にV10の実配線（108.66で検証済み）になる）。
+
+**rx_data bit→net対応**：V9版はNC_OUT11/12/13/14/6/5/4/3を直接
+ハードコードしていたが、V10版はgen_chip_tb_v10.py側で既に検証済みの
+`RX_NETS`リストから`{i: RX_NETS[i] for i in range(8)}`として導出——
+同じV10固有パッドマップを2箇所に別々に手打ちして食い違うリスクを
+排除。
+
+**診断専用プローブ（14項目のPASS/FAIL判定には使われない、FAIL時の
+切り分け専用）の内部ネット名——実在確認**：`ngspice/tr_1um_i2c_
+slave_async_v10_sim_ready.spice`に対しV9のこれら診断が参照する
+全内部ネット名を直接grepで確認したところ、`_087_`／`_092_`／
+`_079_`／`_005_`／`sda_oe_r`／`sda_in_row2`／`sda_d`／`qn`／`_077_`／
+`_016_`／`shreg_0`〜`shreg_6`／`txreg_0`〜`txreg_7`／
+`last_bit_pending`／`bit_cnt_0`〜`bit_cnt_2`／`scl_n`／
+`scl_n_row1`〜`scl_n_row3`は同一名で存在を確認したが、V9固有の
+`scl_row2`（V10には無い——代わりに`scl_row1`という別のstart/stop
+検出系クロックネットが存在）、および行バッファ版クロック
+`_156__row0`〜`_156__row3`／`scl_n_row0`（V10のbit_cnt/phase/
+last_bit_pending用DFFRB群は行バッファ無しの素の`_156_`に直接
+クロック供給——各DFFRBインスタンス行を直接確認）は存在しない
+ことを確認。該当箇所は`scl_row2`→`scl_row1`に置換、
+`_156__row0/1/2/3`→素の`_156_`（1回のみ）に、`scl_n_row0`は
+削除して対応。
+
+**検証**：
+- 生成スクリプト内の`assert len(checks) == 14`を通過（実行時に
+  例外なし）。
+- `ngspice/TB/spice_batch14_v10_expected.json`を読み込み、14件の
+  チェック定義（`rx_data`期待値165=0xA5、`read_byte`期待値
+  60=0x3C）が正しく書き出されていることを確認。
+- `xdut`行のノード数16（トップサブサーキットのピン数と一致）を
+  確認。
+- `.measure`文の総数404件——V9版が「14/14 PASS達成」を確認した
+  時点の実測値（design_notes.md 18552「全404個の測定値」）と
+  完全一致——診断プローブも含めた構造がV9と同等規模であることの
+  傍証。
+- テストベンチ本文が参照する全ての内部ネット参照（`xdut.x2.<net>`
+  形式35種、`xdut.<net>`形式のトップレベルエイリアス11種、
+  合計46種）それぞれについて、`tr_1um_i2c_slave_async_v10_sim_
+  ready.spice`中に同一名の識別子が実在することを正規表現で個別に
+  照合——**未発見（欠落）0件**を確認。
+- 削除対象と判断した`scl_row2`／`_156__row0`〜`_156__row3`／
+  `scl_n_row0`のいずれもテストベンチ本文に残っていないことを
+  文字列検索で確認。
+- V9同様、モデルインクルード（ユーザー実機の絶対パス）はこの
+  サンドボックスに存在しないため、klayout.db.NetlistSpiceReaderに
+  よる完全パース検証は実施不可——上記の構造的チェックで代替。
+
+**チェッカー**：`ngspice/TB/check_batch14_v10.py`を新規作成——
+`check_batch14.py`のロジックは完全に汎用（ログをパースしJSONの
+期待値と突合するだけ、バージョン依存の内容なし）のため変更なし、
+参照する期待値JSONファイル名のみ`spice_batch14_v10_expected.json`
+に変更（V9側の`check_batch14.py`／`spice_batch14_expected.json`
+とは独立、相互に上書き・干渉しない）。
+
+出力：`script/gen_chip_tb_batch14_v10.py`（新規）、
+`ngspice/TB/tb_chip_i2c_batch14_v10.spice`（新規）、
+`ngspice/TB/spice_batch14_v10_expected.json`（新規）、
+`ngspice/TB/check_batch14_v10.py`（新規）。
+
+**実機確認**：ユーザーが実機ngspice環境で
+`ngspice -b tb_chip_i2c_batch14_v10.spice > spice_batch14_v10.log 2>&1`
+→`python3 check_batch14_v10.py spice_batch14_v10.log`を実行し、
+**14/14 PASS**を確認：
+
+```
+[t=9500ns]   OK: busy asserted after START                    (5.000V)
+[t=99500ns]  OK: slave ACKed matching address (write)          (0.044V)
+[t=101800ns] OK: addr_match asserted                           (5.000V)
+[t=101800ns] OK: rw indicates WRITE                             (0.000V)
+[t=189500ns] OK: slave ACKed data byte                          (0.044V)
+[t=194000ns] OK: rx_data == 0xA5              (got 0xA5, expected 0xA5)
+[t=209000ns] OK: busy cleared after STOP                        (0.000V)
+[t=309500ns] OK: slave ACKed matching address (read)            (0.044V)
+[t=311800ns] OK: rw indicates READ                              (5.000V)
+[t=319500ns] OK: read byte == 0x3C            (got 0x3C, expected 0x3C)
+[t=419000ns] OK: busy cleared after final STOP                  (0.000V)
+[t=519500ns] OK: unmatched address -> NACK (no slave ack)       (4.950V)
+[t=521800ns] OK: addr_match not asserted for foreign address    (0.000V)
+[t=539000ns] OK: busy cleared after STOP following NACK         (0.000V)
+```
+
+これにより、V10チップは実機KLayout DRC/LVSクリーン（108.63/108.65）
+に続き、SPICEトランジスタレベルでもIRSIM・Verilog RTL・Verilog
+ネットリスト・V9 SPICEと同一の14項目全てで一致する動作を実機
+ngspiceで確認——チップレベルの電気的検証が完了した。まだgit commit
+はしていない。

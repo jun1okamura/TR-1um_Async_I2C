@@ -1,6 +1,6 @@
 # script/ ガイド
 
-`script/`配下の現行スクリプト（全72本）の説明資料。RTL設計からIRSIMチップ
+`script/`配下の現行スクリプト（全81本）の説明資料。RTL設計からIRSIMチップ
 レベル動作検証までの再現可能なパイプラインを構成するスクリプトを中心に、
 v7→v8→v9の版遺産として今も参照される一部の旧版スクリプトも残している
 （該当箇所に明記）。開発過程で使われた真に一回限りのデバッグ・実験用
@@ -14,13 +14,15 @@ v7→v8→v9の版遺産として今も参照される一部の旧版スクリ�
 一部スクリプト（配置・配線の共通基盤、`gen_schematic_v7.py`等）はv9でも
 そのまま再利用されている。
 
-**コアセル単体は現在V10へ移行中**（MUXDFFRB/RSLATCH合成セル統合＋
-配置配線のやり直し）。V10コア（`i2c_slave_async_nrow_fm`、
-`layout/step10/v10_step_9_power_pins_added.gds`）はDRC 0違反・
-コアセル単体LVSクリーンを実機KLayoutで確認済み（design_notes.md
-§108.23〜108.51）。チップレベル（GIO/RING_OSC統合）へのV10反映は
-未実施——現時点の「現行の正式最終成果物」（README.md参照）は
-引き続きV9ベースのチップGDS。詳細は下記「12. V10」参照。
+**V10はチップレベルまで完成済み**（MUXDFFRB/RSLATCH合成セル統合＋
+コア再配置配線＋GIO/RING_OSC統合）。コアセル単体（design_notes.md
+§108.23〜108.51）に続き、チップレベル（GIO⇔コア結線・RING_OSC
+統合・電源/信号配線）も実機KLayoutで**DRC/LVSクリーン**を達成
+（§108.52〜108.65）。実機ngspiceによるSPICEトランジスタレベル
+検証（RING_OSC除外・14項目バッチテスト）でも**14/14 PASS**を確認
+（§108.66〜108.67）。最終チップGDSは`layout/step10/v10_chip_
+final.gds`。詳細は下記「12. V10（コアセル）」「13. V10チップ
+レベル統合」参照。
 
 ## 1. RTL・機能検証
 
@@ -196,7 +198,7 @@ ngspice -b tb_ring_osc.spice   # 実行はローカル環境で（本サンド�
 カップルドラッチ）を使うネットリストへ移行し、配置配線をやり直した
 パイプライン（design_notes.md §108.23〜108.51）。実機KLayoutでの
 コアセル単体DRC 0違反・LVSクリーンを確認済み。チップレベル
-（GIO/RING_OSC統合）への反映はまだ未実施。
+（GIO/RING_OSC統合）への反映は「13. V10チップレベル統合」参照。
 
 | スクリプト | 役割 |
 |---|---|
@@ -230,6 +232,44 @@ python3 gen_lvs_spice_v10.py                        # → schematic/i2c_slave_as
 VDDタイ追加——はdesign_notes §108.50参照。現状ではまだ専用の一括
 エントリポイントスクリプトに統合されておらず、§108.50記載の手順に
 沿ってアドホックに適用したもの。）
+
+## 13. V10チップレベル統合（GIO/RING_OSC結線・DRC/LVS/SPICE検証）
+
+「12. V10」で完成させたコアセル（`i2c_slave_async_nrow_fm`）を、V9と
+同じくGIOフレーム・RING_OSCと結線してチップ全体へ統合するパイプ
+ライン（design_notes.md §108.52〜108.67）。最終チップGDSは
+`layout/step10/v10_chip_final.gds`——実機KLayoutでの**チップレベル
+DRC/LVSクリーン**、実機ngspiceでの**SPICEトランジスタレベル14/14
+PASS**（RING_OSC除外・WRITE/READ/不一致アドレスNACKの14項目
+バッチテスト）を確認済み。
+
+| スクリプト | 役割 |
+|---|---|
+| `assemble_top_v10.py` | V10コアをGIOフレーム上にV9と同一座標（`CORE_OFFSET=(-810.0,-140.0)`）で配置するチップ骨格構築（`assemble_top_v9.py`のCORE_GDSのみV10へ差し替え、design_notes §108.54）。 |
+| `assign_v10_gio_pads.py` | V10の20信号ネットへのGIOパッド再割当（`scipy.optimize.linear_sum_assignment`による最適化、必要レーン数6——V9本体の10-11本より少ない）を`schematic/v10_signal_routing_plan.json`として確定。v2改訂でパッド共有グループの端子タイプ（O/I/B）誤りを修正（design_notes §108.55/108.57）。 |
+| `route_gio_core_v10.py` | V10版GIO⇔コア間の結線ルータ（`route_gio_core_v9.py`をベースに`v10_signal_routing_plan.json`・V10再較正済み電源バスバー座標へ差し替え）。本セッションでHIZ1のDISチェーン誤登録・HIZ7/OUT2のVDD/VSSバス取り違えを修正し、ダイ内部を貫くカーテシアン配線ではなくDISチェーンと同じ`connect_gio_to_gio()`リング配線方式へ切替（108.63）。VDD/VSS電源バー⇔電源PAD間の10um配線を5本（2umスペース）へ拡張（108.64）。 |
+| `finalize_chip_v10.py` | PTECT削除・RING_OSC配置・電源/信号配線（OUT/OUTD/ENB）・OpenSUSIロゴ埋め込みでチップを完成させる最終統合スクリプト（V9の`place_ring_osc.py`等をコア高さ非依存の幾何としてそのまま流用、ENBのみV10向けに再設計、design_notes §108.56/108.57）。本セッションでチップTOPセル直下のM2PIN(49,1)/TXM2(49,0)ピンマーカー16組の追加ステップを新規挿入（V9の`add_top_pins_gio_v9.py`相当が移植漏れだった、108.62——P9/P10 LVS NoMatchの真の根本原因）。 |
+| `gen_lvs_spice_top_v10.py` | V10チップレベルLVS参照SPICE生成（RING_OSC非統合、x1=OSS_FRAME_GIO/x2=core、16実ボンドパッドをトップサブサーキット実ポートとして宣言）。`v10_signal_routing_plan.json`の`terminal`フィールドから8ビットペア共有パッド16端子をプログラム的に上書き（ハードコード回避、108.57のバグ再発防止、design_notes §108.58）。 |
+| `gen_lvs_spice_ringosc_v10.py` | 上記にRING_OSC（x3、V9から無変更）を統合したチップ最終版LVS参照SPICE生成（design_notes §108.58）。 |
+| `gen_chip_sim_ready_v10.py` | `tr_1um_i2c_slave_async_v10_lvs.spice`（RING_OSC除外・LVSクリーン確認済み）から実ngspiceで動く形へ機械変換（bare M行→X行、ブラケット付きネット名解消、PININFOコメント修正、ダイオードA=/P=→AREA=/PJ=、NMOSE→MNEモデル名修正——V9の`gen_chip_sim_ready_v9.py`と同一ロジック、design_notes §108.65）。 |
+| `gen_chip_tb_v10.py` | V10チップ全体のI2C WRITE→READ単発ngspiceテストベンチ（SCL=100kHz）。V10のパッド再割当を反映した`TX_PADS`/`RX_NETS`等を実ネットリストから直接検証して確定（design_notes §108.66）。 |
+| `gen_chip_tb_batch14_v10.py` | プロジェクト既定の14項目バッチリグレッションテスト（WRITE→READ→不一致アドレス(0x11)NACK、IRSIM/Verilog RTL/Verilogネットリスト/V9 SPICEと同一14チェック）のV10版。`gen_chip_tb_v10.py`をimportし`RX_NETS`からbitマップを導出（design_notes §108.67）。companion checker: `ngspice/TB/check_batch14_v10.py`（`check_batch14.py`と同一ロジック、期待値JSONファイル名のみV10専用）。実機ngspiceで**14/14 PASS**を確認。 |
+
+再現手順:
+```sh
+cd script
+python3 assemble_top_v10.py          # V10コア配置（GIOフレーム上、V9と同一座標）
+python3 assign_v10_gio_pads.py       # → schematic/v10_signal_routing_plan.json
+python3 route_gio_core_v10.py        # → layout/step10/v10_top_routed.gds
+python3 finalize_chip_v10.py         # PTECT削除+RING_OSC+ロゴ+M2PIN/TXM2 → layout/step10/v10_chip_final.gds
+python3 gen_lvs_spice_top_v10.py     # → schematic/tr_1um_i2c_slave_async_v10_lvs.spice
+python3 gen_lvs_spice_ringosc_v10.py # → schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice
+python3 gen_chip_sim_ready_v10.py    # → ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice
+python3 gen_chip_tb_batch14_v10.py   # → ngspice/TB/tb_chip_i2c_batch14_v10.spice
+cd ../ngspice/TB
+ngspice -b tb_chip_i2c_batch14_v10.spice > spice_batch14_v10.log 2>&1
+python3 check_batch14_v10.py spice_batch14_v10.log   # 14/14 PASS
+```
 
 ## 削除したスクリプトについて
 
