@@ -1,0 +1,287 @@
+{
+ "_meta": {
+  "purpose": "V10 signal routing plan: V10's real GDS-extracted core pin positions (same CORE_OFFSET=(-810,-140) as V9), GIO-side destinations unchanged from V9 (frame didn't change). Lane/direction to be recomputed fresh."
+ },
+ "nets": {
+  "rst_n": {
+   "core": {
+    "x": 808.5,
+    "y": 345.3,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 530.0,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   }
+  },
+  "scl": {
+   "core": {
+    "x": -808.5,
+    "y": 453.3,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -270.0,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   }
+  },
+  "sda_in": {
+   "core": {
+    "x": -808.5,
+    "y": 447.9,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -530.0,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   }
+  },
+  "sda_oe": {
+   "core": {
+    "x": -808.5,
+    "y": 458.7,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -580.0,
+    "y": 921.7,
+    "edge": "TOP",
+    "layer": "M2"
+   }
+  },
+  "tx_data[0]": {
+   "core": {
+    "x": -197.1,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -530.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[1]": {
+   "core": {
+    "x": 693.9,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -270.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[2]": {
+   "core": {
+    "x": 596.7,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 270.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[3]": {
+   "core": {
+    "x": 499.5,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 530.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[4]": {
+   "core": {
+    "x": 402.3,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -530.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[5]": {
+   "core": {
+    "x": 305.1,
+    "y": 797.4,
+    "edge": "TOP",
+    "layer": "M2"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -270.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[6]": {
+   "core": {
+    "x": 808.5,
+    "y": 312.9,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 270.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "tx_data[7]": {
+   "core": {
+    "x": 808.5,
+    "y": 426.3,
+    "edge": "RIGHT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 530.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[0]": {
+   "core": {
+    "x": -808.5,
+    "y": 469.5,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -620.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[1]": {
+   "core": {
+    "x": -808.5,
+    "y": 474.9,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": -180.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[2]": {
+   "core": {
+    "x": -808.5,
+    "y": 480.3,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 180.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[3]": {
+   "core": {
+    "x": -808.5,
+    "y": 485.7,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": 921.7,
+    "y": 620.0,
+    "edge": "RIGHT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[4]": {
+   "core": {
+    "x": -808.5,
+    "y": 491.1,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -620.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[5]": {
+   "core": {
+    "x": -808.5,
+    "y": 496.5,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": -180.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[6]": {
+   "core": {
+    "x": -808.5,
+    "y": 501.9,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 180.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  },
+  "rx_data[7]": {
+   "core": {
+    "x": -808.5,
+    "y": 464.1,
+    "edge": "LEFT",
+    "layer": "M1"
+   },
+   "gio": {
+    "x": -921.7,
+    "y": 620.0,
+    "edge": "LEFT",
+    "layer": "M2"
+   }
+  }
+ }
+}
