@@ -1,0 +1,28 @@
+* Created by KLayout
+*** My special header ***
+
+* cell RSLATCH
+* pin Q
+* pin QB
+* pin R
+* pin S
+* pin gnd
+* pin vdd
+.SUBCKT RSLATCH Q QB R S gnd vdd
+* device instance $1 r0 *1 10,51.2 PMOS
+XM$1 Q QB \$7 vdd PMOS L=1u W=10.2u AS=28.56p AD=6.12p PS=26u PD=11.4u
+* device instance $2 r0 *1 12.2,51.2 PMOS
+XM$2 \$7 R vdd vdd PMOS L=1u W=10.2u AS=6.12p AD=15.3p PS=11.4u PD=13.2u
+* device instance $3 r0 *1 16.2,51.2 PMOS
+XM$3 vdd S \$8 vdd PMOS L=1u W=10.2u AS=15.3p AD=6.12p PS=13.2u PD=11.4u
+* device instance $4 r0 *1 18.4,51.2 PMOS
+XM$4 \$8 Q QB vdd PMOS L=1u W=10.2u AS=6.12p AD=28.56p PS=11.4u PD=26u
+* device instance $5 r0 *1 8.2,17.9 NMOS
+XM$5 gnd QB Q gnd NMOS L=1u W=3.4u AS=9.52p AD=5.1p PS=12.4u PD=6.4u
+* device instance $6 r0 *1 12.2,17.9 NMOS
+XM$6 Q R gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $7 r0 *1 16.2,17.9 NMOS
+XM$7 gnd S QB gnd NMOS L=1u W=3.4u AS=5.1p AD=5.1p PS=6.4u PD=6.4u
+* device instance $8 r0 *1 20.2,17.9 NMOS
+XM$8 QB Q gnd gnd NMOS L=1u W=3.4u AS=5.1p AD=9.52p PS=6.4u PD=12.4u
+.ENDS RSLATCH

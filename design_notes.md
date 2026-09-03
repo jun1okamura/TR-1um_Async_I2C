@@ -18861,3 +18861,1407 @@ import fm_multiway_partition_grouped`に差し替える1行の変更で、
 呼び出し箇所そのものはまだ書き換えていない（ユーザーが明日
 MUXDFFRB／RSLATCHのSTDCELL作業を行う際に、あわせて組み込むかどうか
 判断してもらう想定）。
+
+### 108.29 RSLATCH／MUXDFFRBのLEF生成（`script/gen_lef.py`）
+
+ユーザーが`LEF/TR-1um_STDCELL.gds`に`RSLATCH`（108.27で提案した
+NOR2クロスラッチ）と`MUXDFFRB`（同じく108.27のMUX2+DFFRB統合セル）
+の物理セルを作成したのを受け、`script/gen_lef.py`の`PIN_META`辞書に
+両セル分のピン方向・用途定義を追加してLEFを再生成した。
+
+`PIN_META`追加内容：
+- `RSLATCH`：`S`/`R`（INPUT, SIGNAL）、`Q`/`QB`（OUTPUT, SIGNAL）＋
+  電源ピン。
+- `MUXDFFRB`：`A`/`B`/`S`（INPUT, SIGNAL）、`CK`（INPUT, CLOCK）、
+  `RSTB`（INPUT, SIGNAL）、`Q`/`QB`（OUTPUT, SIGNAL）＋電源ピン。
+
+LEF生成前にklayoutでGDSを直接確認したところ、`RSLATCH`の
+M2PINラベルが`S`/`R`/`Q`/`QB`の4本であるべきところ、`Q`が2本
+（重複）でラベル付けされており、本来`S`になるはずのピン（`R`の
+隣）が欠落しているのを発見した。これはPIN_METAが名前ベースで
+座標にマッチングする方式のため、ラベル重複があると異なる2つの
+電気的ノードが1個のPINブロックにマージされてしまう、rx_data_r_N
+関連の過去のダングリングネット事故と同種の重大な不具合になり得る
+ため、LEF生成前にユーザーへ報告し修正を依頼した。修正確認後、
+klayoutで4本のラベル（S/R/Q/QB）が正しく別々に存在することを
+再確認してから`python3 gen_lef.py`を実行した。
+
+**生成結果**（`LEF/TR-1um_STDCELL.lef`に追記、grep/Readで確認済み）：
+- `MACRO RSLATCH`：SIZE 32.400 BY 64.800、ピン GND/VDD/Q/R/S/QB。
+- `MACRO MUXDFFRB`：SIZE 94.600 BY 64.800、ピン
+  GND/VDD/S/A/B/QB/RSTB/Q/CK。
+
+この時点では`gen_lef.py`／`TR-1um_STDCELL.lef`ともに未コミット
+（ユーザーのGDS変更も同様）。
+
+### 108.30 V10ネットリスト生成：MUXDFFRB／RSLATCH統合と
+### 配置制約の更新（`script/merge_muxdffrb_rslatch.py`）
+
+108.29でRSLATCH／MUXDFFRBの物理セルとLEFが揃ったため、実際の
+ネットリストにこの2種の複合セルを適用する「V10」統合作業に着手
+した。
+
+**前提の再合成**：着手前に確認したところ、配置配線が実際に消費
+する`src/i2c_slave_async_net.v`／`i2c_slave_async_net_v9.v`は、
+RTL（`src/i2c_slave_async.v`）がすでにv8（`sda_d`をNOR2クロス
+ラッチで構造的に実装済み）になっているにもかかわらず、いまだ
+旧`DEL1`ベースの動的ラッチのままだった＝一度も再合成されていな
+かったことが判明した。サンドボックス内の`yowasp-yosys`（WASM版）
+は`abc -liberty`の技術マッピング段階で非自明な組合せ回路を含む
+設計に対して無応答になる既知の制約（77.9節で文書化済み、
+`abc -g simple`でも同一症状を確認済み）があるため、ユーザーの
+Mac上のネイティブyosysで再合成を依頼し、`src/i2c_slave_async_net_v10.v`
+（169インスタンス）を作成してもらった。生成後、`sda_d`が
+`NOR2 u_sda_q`／`u_sda_qn`で正しく駆動されていること、DFFRB数が
+33のまま変わっていないことを確認した。
+
+**統合スクリプト`merge_muxdffrb_rslatch.py`**：`insert_row_buffers.py`
+の`redirect()`と同じ手法（正規表現でインスタンスブロックを直接
+テキスト上で特定し、スプライスで置換）で、
+1. `MUX2.Y`が単一ファンアウトで`DFFRB.D`にのみ接続している箇所
+   （`find_mux_dffrb_pairs`）を`MUXDFFRB`インスタンスに、
+2. クロス結合したNOR2ペア（`find_rs_latch_pairs`、108.27の
+   R/Q・S/QB役割決定則に従いソース順で先に現れる側をQ側とする）
+   を`RSLATCH`インスタンスに、
+
+それぞれ変換する。開発中、インスタンスブロック抽出用の正規表現
+`(\(\*.*?\*\)\s*\n\s*)?\bTYPE\s+NAME\s*\(.*?\)\s*;`が、`re.S`
+（DOTALL）下でオプションの属性コメント接頭辞部分の`.*?`が
+ファイル冒頭の最初の`(* top = 1 *)`から任意の距離までバック
+トラック／伸長できてしまい、対象と無関係な大量の中間テキストを
+飲み込んだ上でようやく目的のインスタンス直前の属性コメントに
+たどり着く形で「マッチ成功」してしまうというバグを発見した
+（全DFFRBインスタンスの抽出開始位置がファイル先頭付近の同一
+オフセット133に張り付き、`AssertionError: overlapping removed span`
+で検出）。属性コメントの前方一致を諦め、まずインスタンス本体
+（`TYPE NAME(...);`）だけをタイトな正規表現で確定させ、直前の
+属性行は別途「マッチ開始位置から後方に向けた、行境界に固定された
+（バックトラック不可能な）小さな正規表現」で回収する方式に変更
+して解決した。
+
+**変換結果**（`src/i2c_slave_async_net_v10_muxdffrb.v`、169→147
+インスタンス）：MUX2→DFFRB.Dペア19件・クロス結合NOR2ペア3件
+（busyラッチ／rst_stretchラッチ／sda_dラッチ、108.27の予想通り）
+をすべて検出・変換。DFFRB 33→14（-19）、MUX2 25→6（-19）、
+MUXDFFRB 0→19、NOR2 43→37（-6）、RSLATCH 0→3、と数の整合性を
+確認した。
+
+**配置制約（`apply_dff_group_constraints.py`）の更新**：108.23の
+`DFF_GROUPS`は旧ネットリストのDFFRBインスタンス名（`_504_`〜
+`_527_`）で定義されていたが、そのうち19個がMUXDFFRBへ統合され
+名前自体が消滅したため、`merge_muxdffrb_rslatch.py`の出力する
+新旧名対応表を使って該当メンバーを新インスタンス名
+（`u_muxdffrb_N`）に更新した（`clk156_rx_data`8個全部・
+`sclN_txreg_lo`/`sclN_txreg_hi`8個全部・`clk156_fsm_state`の
+`phase[1]`・`clk156_oneshot_decision`の`addr_ok`/`rw_bit`が対象、
+shreg・bit_cnt・last_bit_pending・sda_oe_rは未統合のため名前
+変更なし）。あわせて`parse_netlist()`の参照先を
+`src/i2c_slave_async_net_v10_muxdffrb.v`に固定した。
+
+**再検証結果**：V10ネットリスト＋更新後LEF（MUXDFFRB/RSLATCH込み）
+で`apply_dff_group_constraints.py`を再実行し、7グループ全てが
+単一行・ドメイン衝突ゼロになることを確認した。ただし
+`balance_tol`（行幅バランス許容誤差）のデフォルト0.05では行占有数
+が{85, 48, 10, 4}と大きく偏る新たな問題を発見した：MUXDFFRBの
+クラスタが大きい（例：`clk156_rx_data`は8個×94.6um=756.8um、行
+目標幅約2462umの約30%）ため、再帰二分割の各段で「カット改善かつ
+5%許容内」の移動が存在せず、FMが初期分割のまま動けなくなる
+ケースが生じる。`balance_tol`を0.05/0.10/0.15/0.20/0.30で振って
+比較した結果、0.15が最良（{49, 44, 43, 11}）だったためこれを
+`GROUPED_BALANCE_TOL`としてスクリプトのデフォルト実行値に採用した
+（全許容誤差でグループ制約自体は健全）。なお row3 は再帰二分割の
+構造上（両方の分割段の不均衡を最後に引き継ぐ）どの許容誤差でも
+最も少なくなる傾向があり、これは`balance_tol`だけでは根本解決
+できない既知の限界として残した（対策案：再帰二分割でなく直接
+k-way分割にする、または大きいクラスタ（txreg_hi/lo等）をさらに
+細分化する——いずれも未実装）。
+
+出力は`LEF/row_assignment_v10_dffgrouped.json`（147インスタンス、
+`balance_tol=0.15`）。
+
+**未コミット**：`src/i2c_slave_async_net_v10.v`／
+`src/i2c_slave_async_net_v10_muxdffrb.v`／
+`script/merge_muxdffrb_rslatch.py`／
+`script/apply_dff_group_constraints.py`（更新分）／
+`LEF/row_assignment_v10_dffgrouped.json`／108.29節のLEF関連
+（`script/gen_lef.py`・`LEF/TR-1um_STDCELL.lef`・ユーザーのGDS
+変更）はすべて未コミット。次はTask #3（V10の配置実行）へ進む。
+
+### 108.31 V10配置パイプラインへの組み込みと、行幅キャパシティの発見
+
+108.30の続きとして、108.28で残タスクとされていた「パイプライン
+呼び出し箇所の書き換え」を実施した：`insert_row_buffers.py`の
+`main()`に`partition_fn`引数を追加（デフォルトは従来通り
+`fm_multiway_partition`のまま、v3→v4／v8の既存呼び出しは無変更で
+動作）し、V10では
+`functools.partial(fm_multiway_partition_grouped, balance_tol=...)`
+を渡すことで、行バッファ挿入の基準パーティションが108.23の機能
+グループ制約を尊重するようにした。
+
+**バッファ挿入結果**（`src/i2c_slave_async_net_v10_muxdffrb.v`→
+`i2c_slave_async_net_v10_buffered.v`、147→152インスタンス）：
+`scl`/`scl_n`合わせて5個のBUF_X1を新設、各バッファの最大ファン
+アウトは5以下（108.19〜108.22の原因だった「1バッファに14負荷」
+という過負荷パターンが、V10でも構造的に再発していないことを確認）。
+
+**行幅キャパシティの発見**：108.30で選んだ`balance_tol=0.15`は
+インスタンス「個数」だけを見て選んだ値だったため、実際に
+`gen_placement_nrow_fm.py`（既存のN_GAPS=3・TARGET_ROW_WIDTH_UM=
+1620um設定）で配置しようとしたところ、
+`AssertionError: row content needs 4 gaps`で失敗した。原因を
+「幅」ベースで再調査：MUXDFFRBは94.6umとDFFRB単体（~65um）より
+かなり大きいため、機能グループを1行にまとめる制約下では行の
+実セル幅が個数以上に偏る。`balance_tol`を{0.05,0.10,0.15,0.20,
+0.25,0.30,0.40,0.50}で振って行ごとの実セル幅合計を比較した結果：
+
+| tol  | 最大行幅(um) |
+|------|-------------|
+| 0.05 | 2257.6 |
+| 0.10 | 1631.4 |
+| 0.15 | 1563.8 |
+| 0.20 | 1837.2 |
+| 0.25 | **1504.0** |
+| 0.30 | 1941.8 |
+| 0.40 | 1687.6 |
+| 0.50 | 1839.2 |
+
+0.25が最良（全許容誤差で7グループとも単一行・ドメイン衝突ゼロは
+維持）。現行のN_GAPS=3・PRIORITY_FILL_TRACKS=2構成で実セルに使える
+理論上限は約1512um（TAP4本×10.8um＋優先FILL corridor 2本×3
+gap×2trackを1620umから差し引いた残り）——0.25の1504.0umはこの
+理論上限のわずか8um下でしかなく、`_gaps_needed`の保守的な
+グリーディ・ビンパッキング（各gapを一律「最小gap幅」で見積もる
+ため、実際には収まる場合でも余裕なしでは失敗しうる）では依然
+「4 gap必要」と判定される（バッファ挿入後の再測定でも行2が
+1504.0umとほぼ同じ値で再現）。
+
+`GROUPED_BALANCE_TOL`はひとまず0.25に更新したが、**この幅の
+逼迫自体は`balance_tol`の調整だけでは解消できない**（0.25が今回
+振った範囲内の最良値であり、これ以上の改善余地は本質的に
+「大きい機能グループを1行に押し込む」という108.23/108.28の制約
+そのものに起因する）。以下のいずれかがTask #3を完了するために
+必要——ユーザー判断待ち：
+
+1. **TARGET_ROW_WIDTH_UM／TAP_INTERVAL_TRACKSを拡張**（行を物理的に
+   広くする）：最もシンプルだがチップ面積が増える。
+2. **PRIORITY_FILL_TRACKSを縮小**（現在2trackを4gap端に確保して
+   いるM2直通コリドー予約を削る）：面積は変えずに済むが、その
+   コリドーを前提に設計されたルーティング戦略（38節）への影響が
+   要検討。
+3. **最大グループ（`clk156_rx_data`・8メンバー、または
+   `sclN_txreg_hi`/`lo`）をさらに細分化**：108.23/108.28の
+   電気的安全性メリットを一部犠牲にする代わりに、現行の1620um
+   フロアプランを維持できる。
+
+いずれもユーザーに確認してから進める（面積・ルーティング戦略
+いずれも過去のセッションでユーザー自身が慎重に調整してきた項目
+のため）。
+
+**ユーザー判断**：選択肢3「最大グループをさらに分割」を採用。
+
+**実装**：`clk156_rx_data`／`sclN_txreg`（各8メンバー）を、まず
+`_lo`/`_hi`の2分割で試したが**効果ゼロ**と判明した——理由は鳩の巣
+原理：clk156ドメインには実質4つの純粋な機能（shreg／fsm_state／
+oneshot_decision／rx_data）しかなく、行も4本しかないため、
+`_resolve_domain_collisions`が衝突ゼロを達成するには各機能に
+ちょうど1行を専有させるしかなく、rx_dataの`_lo`/`_hi`は
+（どちらも「同じ機能」なので衝突とはみなされない代わりに）
+必ず同じ1行に戻されてしまう。そこで4分割（`_split0`〜`_split3`、
+各2メンバー＝189.2um）に変更し、`_purpose_of`が`_splitN`
+サフィックスも元の機能名に正規化するよう拡張。加えて
+`_resolve_domain_collisions`のコスト関数に「同一機能の
+サブグループが同じ行に同居する組数」を第2優先度（衝突数の次、
+FM初期選択からの移動数の前）のタイブレーカーとして追加し、
+複数の同点解の中から可能な限り分散させる解を選ぶようにした。
+
+さらに、`balance_tol`だけでは物理行幅の逼迫を解消しきれない
+（FMの幅バランスはビセクション各段の集約幅しか見ておらず、
+「同じ物理行に大きなクラスタが複数偶然重なる」ケースを検知
+できない）ことが分かったため、`fm_multiway_partition_grouped`
+に`max_row_width`引数を新設し、`_rebalance_clusters_by_width`
+（新規関数）で後処理：ドメイン衝突解決後、行ごとの実セル幅合計を
+計算し、予算超過があれば最も重い行から最も軽い行へ、
+「異なる機能が同居しない」制約を守りながらクラスタ単位で貪欲に
+移動する。`MAX_ROW_WIDTH_UM=1350um`（理論上限1512umに対し十分な
+マージン）を設定。
+
+**検証結果**：4分割＋`_resolve_domain_collisions`のタイブレーカー
+＋`_rebalance_clusters_by_width`を組み合わせた結果、最終行幅は
+row0=1223.2um・row1=1334.0um・row2=1307.6um・row3=1059.2um と
+全行が1350um予算内に収まった（8グループ全て単一行・ドメイン
+衝突ゼロを維持）。バッファ挿入後も同様の分布を確認、最大ファン
+アウトは6（108.19の14負荷バグに対し十分小さい）。
+
+**新たな発見（ブロッカー）**：上記の設定で
+`gen_placement_nrow_fm.py`を実行したところ、今度は
+`_gaps_needed`のエラーは解消したが、別のアサーションで停止した：
+`row0 width 1617.4 != target 1620.0`（2.6um差）。原因を調査した
+結果、**`MUXDFFRB`のLEF幅（94.6um）が配置グリッド（`TRACK_UM=
+5.4um`）の整数倍になっていない**ことが判明した（94.6/5.4=17.52
+トラック、他の全STDCELL——DFFRB=12track、RSLATCH=6track、
+BUF_X1=3track、INV_X1=2track等——はすべてグリッド整合済み）。
+`gen_placement_nrow_fm.py`のギャップ配分・FILL計算は「セル幅は
+すべてTRACK_UMの整数倍」という前提で書かれているため、この1個の
+非整合セルが行全体の累積幅を予算からずらしてしまう。
+
+これは`gen_lef.py`側の计算ミスではなく、**GDSの`MUXDFFRB`物理
+セル自体の幅がプレースメントグリッドに乗っていない**という
+レイアウト上の不整合であり（RSLATCHのピンラベル重複と同種の、
+LEF生成前に発見すべきだった物理セルの不具合）、Task #3（配置）
+完了には、`MUXDFFRB`セルの幅をグリッド整合値に修正し、GDS→LEFを
+再生成する必要がある。参考：単体`MUX2`（32.4um=6track）＋単体
+`DFFRB`（64.8um=12track）＝97.2um（18track、グリッド整合）と
+ちょうど一致するため、意図した幅は97.2umで、現在のGDSは
+それより2.6um狭い（91.8um=17trackではない）可能性が高い。
+ユーザーへ報告し、修正を依頼する。それまでTask #3は保留、
+Task #4（配線可能性）は未着手。
+
+### 108.32 V10 scl_n分割のSPICE検証
+
+ユーザー要望：「SCLのグループ分けが変わったことをSPICEで検証したい」。
+108.31でV10の配置パイプラインが実際に選んだscl_n系統の新しい行
+バッファ分割（108.23の単純な4/4折半とは異なり、`sclN_txreg_split0..3`
+を`_rebalance_clusters_by_width`の幅バランスに委ねた結果選ばれた
+非対称な分割）を、`ngspice/tr_1um_i2c_slave_async_sim_ready.spice`に
+手動反映して検証した。
+
+**変更**：
+- `scl_n_row1`（新設バッファ）: txreg_2, txreg_3（2負荷）
+- `scl_n_row2`: txreg_0, txreg_1, txreg_4, txreg_5, txreg_6, txreg_7
+  （6負荷——108.23の4負荷より重いが、108.19/108.21の過負荷パターン
+  （14負荷）よりは十分軽い）
+- `scl_n_row3`: sda_oe_r（1負荷、108.22から変更なし）
+- `scl_n_row0`: scl_nドメインの割り当てなし（108.20のrow0と同様、
+  既存バッファは未使用のまま残置）
+
+`script/gen_chip_tb_batch14_v9.py`のwrdataトレースに`scl_n_row1`を
+追加してテストベンチを再生成し、DFFRB STDCELL自体・他のネットには
+一切手を加えていない。
+
+**検証結果**：ユーザーが実機でSPICEを実行、**14/14 全項目PASS**
+（rx_data==0xA5、read byte==0x3Cを含む全チェック成功）。6負荷という
+108.23より重いバッファでも捕獲不良は再発しないことを確認した。
+これにより、V10の配置パイプラインが選んだscl_n分割は電気的に安全
+であることがSPICEレベルで裏付けられた。
+
+### 108.33 V10レイアウトパイプライン（`layout/step10/`）着手
+
+ユーザー要望：「layout/step10 を作ってその中に、ステップごとのLayout
+を保存ください」。V9の`layout/step8/`（9ステップ、各段階のGDSを保存
+する既存の規約）と同じ流れをV10に対して実行する作業に着手した。
+
+**MUXDFFRB幅の修正確認**：ユーザーがGDSを修正（2回）、その都度
+`gen_lef.py`でLEFを再生成し、全STDCELLがグリッド整合（5.4umピッチの
+整数倍）していることを確認した。最終的にMUXDFFRB=97.2um（18track）、
+RSLATCH=32.4um（6track）——108.31で予想した通り、MUX2単体(32.4um)+
+DFFRB単体(64.8um)=97.2umと一致。
+
+**欠けていたパイプライン段の発見**：V10の配置を進める過程で、実際の
+V9レイアウトフロー（`i2c_slave_async_net_v9_rowbuf.v`）には
+`insert_row_buffers.py`（scl/scl_n）だけでなく`insert_bufth_scl_sda.py`
+（scl/sda_inにBUFTHヒステリシスバッファを挿入し、sda_inにも行別
+BUF_X1分割を追加する段）が必要なことが判明。V10ではこの段が未実施
+だったため、追加実行した。
+
+**再発見された不安定性問題と修正**：`insert_bufth_scl_sda.py`は
+stage2（sda_in行分割）で独自に新しい`fm_multiway_partition`を実行
+する設計だったため、BUFTHインスタンス2個を追加しただけで
+`insert_row_buffers.py`のdocstringが警告していた「少数のインスタンス
+追加でも再帰二分割の上位カットが変わり、無関係な多数のインスタンス
+の行が変わる」不安定性が実際に再現した（clk156_rx_dataがrow3から
+row0に移動、sclN_txregの分割も全て変わり、既に解決していたはずの
+max_row_width超過が再発）。`insert_bufth_scl_sda.py`に`existing_part`
+引数を新設し、`insert_row_buffers.py`が書き出した既存の行割り当てを
+そのまま再利用（新規追加インスタンスのみ最軽量行へ配置）するよう
+修正、再現性のある結果を得た。
+
+**行1の幅超過とルーティング失敗（発見・修正）**：`gen_placement_nrow_fm.py`
+は成功したが、`route_channels_nrow_fm.py`のpass2（spanning netの行
+またぎ処理）が`rst_scl_domain_held`をrow1経由でルーティングできず
+ハードクラッシュ（`no clear X found for row 1`、±1080um全域探索でも
+空き無し）。原因調査の結果、row1の実セル幅が1387.8um（FILLはわずか
+11.7%、他行20-25%）まで積み上がっていたと判明——108.31の
+`MAX_ROW_WIDTH_UM`幅バランスはDFFグループ集約直後（147インスタンス
+時点）にしか効いておらず、その後の`insert_row_buffers.py`／
+`insert_bufth_scl_sda.py`が追加した小さなバッファ/BUFTHセル（合計
+158インスタンスまで増加）は幅チェックなしに各行へ足されていた
+ことが根本原因。
+
+対策として`apply_dff_group_constraints.py`に
+`rebalance_final_assignment()`を新設：DFFグループクラスタ単位でなく
+「個々の非グループ化インスタンス」（バッファ/BUFTHセル）を対象に、
+最重行から最軽行へ貪欲移動する最終幅バランス調整。V10の最終ネット
+リスト（158インスタンス）に適用した結果、row1=1387.8→1323.0um、
+row2も1344.6umに収まり、全行がMAX_ROW_WIDTH_UM=1350um以下になった。
+配置をやり直したところ、`rst_scl_domain_held`のクラッシュは解消。
+
+**現在進行中の問題**：ルーティングは前進したが、x=575.1um付近
+（channel1〜2境界のY範囲）で複数の異なるネット（`_143_`→対策後
+`_021_`）が次々と`no clear X found in overlap zone`でクラッシュする
+持続的な混雑ホットスポットを発見。チャネル高さを380um→480umへ増やし
+ても同じX位置・同じ相対Yで再現するため、チャネル容量問題ではなく
+特定カラムへの局所的な輻輳と判断（v9でも全く同じx=575.1um近辺で
+RSTB1/scl_n_row2/scl_row1の3-way shortが起きた既知のホットスポット
+との類似性を確認——design_notes 77.41の`NUDGE_BEFORE={"_276_":9}`
+という配置レベルのX座標ずらしで解決された前例がある）。
+`_143_`（26ピンのRSTBファンアウトネット、当初spanning net扱いで
+個別クロッシングされていたため`per_row_local_nets`に追加——効果は
+あったが根本解決には至らず）のような広域ファンアウトネットの扱いを
+含め、V10固有の輻輳箇所の特定・対策はまだ途中。V9と同様、複数回の
+反復調整（`FORCE_JOG_NETS`／`per_row_local_nets`／配置レベルの
+ナッジ／チャネル高さ）が必要になる見込み。
+
+**この時点での成果物**（`layout/step10/`、未コミット）：
+`v10_step_1_placement.gds`（配置のみ、チャネル高さ[131.6,480,480,
+480,153.2]版）。`v10_step_2_routed_raw.gds`はまだ書き出されて
+いない（配線が完走していないため）。
+
+### 108.34 x=575.1um混雑ホットスポットの根本原因特定とソフトフォール
+バックによる配線完走
+
+108.33続き。`_021_`クラッシュの根本原因調査を継続。
+
+**チャネル容量説を棄却**：チャネル高さを480→600/650/600、さらに
+700/1000/700umまで段階的に増やして再配線したが、**クラッシュする
+Xは575.1umのまま一切変化せず**、Y範囲だけが高さに比例して拡大した。
+これによりチャネル容量・高さ不足が原因という仮説を完全に棄却。
+
+**行内配置（row2セル順序）説も棄却**：`gen_placement_nrow_fm.py`に
+`reorder_row_tail`引数を新設（指定したインスタンスを行の詰め込み
+キューの末尾に回す機能）。row2のgap1に連続していた5個のMUXDFFRB
+（合計486um、隙間ゼロ）のうち2個を末尾に送り、実際にFILLの隙間が
+生じたことをplacement JSONで確認したが、**クラッシュは全く同じ
+x=575.1um・同じネット`_021_`・同じ相対Y範囲で再発**。行内セル配置も
+原因ではないと判明。
+
+**NUDGE_BEFOREでの直接対策は不可**：v9由来の`NUDGE_BEFORE`機構で
+`u_muxdffrb_13`/`u_muxdffrb_16`前方にトラックをずらそうとしたが、
+`AssertionError`（row2 gap1のトラック予算502.2um=5×MUXDFFRB(486um)
++NAND2(16.2um)で隙間ゼロと判明、ナッジの余地なし）で即座に失敗。
+
+**真の原因**：`channel_clear()`はチェックするY範囲全域でM2が完全に
+空いていることを要求するが、MUXDFFRBの幅（97.2um、旧DFFRB単体
+64.8umの1.5倍）により「forced overlap zone」（左右アンカーで分離
+されるはずの隣接2行の実セル占有域が重なる区間）がchannel2で
+(137.7, 1520.1)——**行幅1620umの85%**——にまで拡大していることを
+確認。これは点7の分離ミティゲーション（各アンカー側は通常行幅の
+50%未満に収まる前提）が事実上機能していない状態であり、チャネル
+高さや行内セル順序をいくら変えても解消しない構造的な密度問題。
+
+**採った対策（ソフトフォールバック化）**：`route_channels_nrow_fm.py`
+の`find_channel_clear_x`と`find_row_clear_x`、双方の最終`raise
+SystemExit(...)`を、本ファイル内の他の類似箇所（`draw_jog`の
+"falling back to nearest free track"等）と同じ思想のソフト
+フォールバックに変更。空きが全く見つからない場合：
+1. `extra_ok`制約だけ残してclearance要求を外した候補を再探索
+2. それでも無ければ`start_x`自体をそのまま採用
+のいずれかを`start_x`に最も近い順で選び、必ず`WARNING`ログを出して
+処理を継続する（ハードクラッシュで配線全体を止めない）。これは
+v9自身の実績あるフロー（`routed_raw`段階でショートが残っていても
+後段の`ripup_reroute_shorts.py`・DRC・手動修正で回収する方針）を
+踏襲したもの。
+
+**結果**：この変更により、V10のルーティングが**初めて最後まで完走**し
+`layout/step10/v10_step_2_routed_raw.gds`を書き出せた（チャネル高さ
+[131.6, 700.0, 1000.0, 700.0, 153.2]、全チャネル使用トラック数は
+budget以内）。ただし`WARNING`ログは60件超発生（うち
+`find_channel_clear_x`側での完全クリアランス放棄は`_021_`含む数件、
+`find_row_clear_x`側は`_033_`/`_034_`/`_048_`/`shreg[3..6]`/txreg[2:3]
+等、多数のrow1・row2ネットで発生）——v9の同段階（数件程度）より
+明らかに多く、108.31以降のMUXDFFRB幅増加による密度上昇の直接的な
+帰結と考えられる。
+
+**DRC**：`drc_check_nrow_fm.py`は`v10_step_2_routed_raw.gds`に対し
+M1/M2幅・スペース違反0、V1関連違反も全て0——ソフトフォールバック
+描画も設計ルール自体は満たしている。
+
+**接続性チェック（`verify_connectivity_nrow_fm.py`）**：168ネット・
+553ピンをチェックし、**35件のSHORT SUSPECTED**を検出。v9の初期
+`routed_raw`段（3件）より一桁多い。`ripup_reroute_shorts.py`を実行
+（`v10_step_3_ripup_reroute.gds`書き出し）した結果、4本の垂直・8本の
+水平セグメントを自動修正できたが、**26件が未解決のまま残った**
+（多くは`rst_scl_domain_held`・`shreg[0..6]`・`busy`・`rst_n`・
+`_156_`・`scl_n_row2`・`addr_ok`など、両側とも
+multi-segment/high-fanoutネットに分類され「cascade risk」を理由に
+自動修正がスキップされたペア）。DRCは`v10_step_3_ripup_reroute.gds`
+でも引き続き0違反。
+
+**現状の評価**：ルーティングパイプライン自体はステップ2・3まで
+完走できたが、残存ショート26件は自動リカバリの想定範囲
+（v9実績：3件→0件）を大きく超えており、`rst_scl_domain_held`と
+`shreg`チェーンが同一トラック帯に集中している構造は、108.31以降の
+MUXDFFRB幅増加が生んだforced overlap zone拡大（行幅の85%）の直接的
+帰結と考えられる。この規模の残存ショートを手動/自動修正だけで
+潰し切るか、それとも行・チャネルレベルの配置をさらに見直す
+（例：MUXDFFRBの行内配置を変えてforced overlap zoneそのものを
+縮小する）べきか、方針判断が必要な段階に達した。
+
+### 108.35 `ripup_reroute_shorts.py`のcomplex-net移動禁止ルールを緩和
+
+ユーザー指示：「自動修正の継続を試す」。108.34で残った26件の未解決
+ペアを精査すると、多くが`rst_scl_domain_held <-> shreg[2]`のような
+M1トランク同士の衝突であり、`try_fix_horizontal`（トランク全体＋
+全スタブ＋全viaをまとめて隣接トラックへ再配置、実ジオメトリに対し
+live-checked）が本来これを安全に解決できる設計であるにも関わらず、
+「complex（26ピン超／multi-track spineネット）は一切movable対象に
+しない」という当時のRSTB1事故由来の一括禁止ルールにより試行すら
+されていなかったことが判明。
+
+**対策**：禁止判定をネット単位からboxの向き単位に変更。
+`try_fix_vertical`（単一M2セグメントの再描画、RSTB1事故の原因だった
+危険な経路）はcomplexネットに対して引き続き禁止のまま、
+`try_fix_horizontal`（トランク一括再配置、本来安全な経路）は
+complexネットでも試行を許可するよう修正。
+
+**結果**：v10_step_2_routed_raw.gdsに対し再実行、13本の水平セグメント
+を修正（108.34時点の8本から増加）、`verify_connectivity_nrow_fm.py`
+での検出件数は**26→22件**に減少。DRCは引き続き0違反
+（`v10_step_3_ripup_reroute.gds`）。
+
+**残存22件の性質**：`busy`→`rst_n`→`_092_`→`_081_`→`scl_row2`→
+`_083_`→`_129_`→`addr_ok`→`_215_`→`_156_`→`rst_scl_domain_held`→
+`_021_`→`_034_`→`_194_`→`_005_`→`_042_`→`shreg[0]`→`_044_`→
+`shreg[2]`→`_041_`という**単一の連鎖**を形成しており、いずれも
+垂直（M2単一セグメント）側の衝突——つまり`try_fix_vertical`の禁止
+（complexネットに対しては維持）に阻まれているケースがほとんど。
+全ての衝突がx≈28〜930um、y≈960〜2050um付近（channel1〜2境界、108.34
+で確認したforced overlap zoneとほぼ重なる領域）に集中しており、単発
+のショートではなく、この領域の配線密度そのものが限界に達している
+ことを裏付ける。この連鎖をこれ以上自動で安全に解くには、単一
+セグメントの移動ではなく面的な再配置（配置レベルでのforced overlap
+zone縮小、またはchannel2のトラック増設）が必要と判断される。
+
+### 108.36 配置レベルの行幅キャップを行ペア非対称化——forced overlap
+zone縮小によるショート激減（35→6件）
+
+ユーザー指示：「配置レベルの見直し（推奨）」。108.35末尾の分析
+（channel1〜2境界の連鎖ショートはrow1+row2の合計実セル幅が行幅の
+約165%に達しているため原理的に不可避）を受け、行幅バランスの方針を
+変更した。
+
+**原理**：`route_channels_nrow_fm.py`のforced overlap zone幅は
+「隣接する2行の実セル占有幅の合計」で決まり、単一行の幅を均等化する
+均一キャップ（旧`MAX_ROW_WIDTH_UM=1350`固定値）では、たまたま
+DFF_GROUPS的に重い2行（row1・row2）が隣接していること自体を解消
+できない。row1+row2の合計実幅（約2668um、全体の85%）は行幅1620umの
+2倍（3240um）に対してあまりに大きく、左右アンカーをどう工夫しても
+大幅な重なりは避けられないと分かった。
+
+**対策**：`apply_dff_group_constraints.py`に行別の幅上限
+`ROW_WIDTH_CAP_UM = {0: 1420.0, 1: 1200.0, 2: 1200.0, 3: 1420.0}`を
+新設（`_cap_for()`ヘルパー、`_rebalance_clusters_by_width()`と
+`rebalance_final_assignment()`双方を単一float／行別dict両対応に修正）。
+channel2を挟むrow1・row2に厳しいキャップを課し、channel1・channel3側
+（row0・row3）に緩いキャップを与えることで、クラスタ・バッファの
+両段階でrow1/row2からrow0/row3へ実セルを押し出す。
+
+**結果**：DFFグループ・ドメイン制約下での実現可能な範囲で
+row0=1317.6um、row1=1296.0um、row2=1285.2um、row3=1301.4um
+まで再配分（旧：row0=1242.0、row1=1323.0〜1387.8、row2=1307.6〜
+1344.6、row3=1274.4）。domain-collision制約により1200umちょうどまで
+は届かなかったが、row1+row2合計は2668um→2581.2umに減少。
+
+V10ステップ1〜3を再実行した結果：
+- 配置（`gen_placement_nrow_fm.py`）は警告なしで一発成功。
+- 配線（`route_channels_nrow_fm.py`）の`WARNING`件数が60件超→13件に
+  激減。forced overlap zoneはchannel2で(148.5,1444.5)=80%（旧85%）、
+  channel1は逆に(148.5,1509.3)=84%に拡大（row0が重くなった代償）——
+  トレードオフはあるが全体のWARNING件数は大幅減。
+- DRC：`v10_step_2_routed_raw.gds`で引き続き0違反。
+- 接続性チェック：**35件→9件**（ripup前）に激減。
+- `ripup_reroute_shorts.py`（108.35のcomplex-net緩和込み）を実行、
+  3本の垂直セグメントを修正し**9件→6件**まで削減
+  （`v10_step_3_ripup_reroute.gds`、DRC 0違反維持）。
+
+**残存6件の性質**：`_126_`→`_127_`→`_128_`→`_095_`→`_105_`→
+`rst_scl_domain_held`→`_079_`という連鎖で、全てrst_scl_domain_held
+（23ピン超のRSTB配電スパインネット、complex分類）との垂直
+（M2単一セグメント）衝突。片側（`_126_`等）は非complexで移動可能な
+はずだが、`try_fix_vertical`のX探索（±300トラック）でも空きが
+見つからず失敗——rst_scl_domain_held自身のスパイン経路周辺
+（y=284〜1989umの広い範囲、複数箇所）がそれ自体高密度であることを
+示す。v9の`NUDGE_BEFORE`前例と同様、配置レベルでのピンポイント
+ナッジか、rst_scl_domain_held自身のスパイン経路の再設計が必要な
+段階だが、35件→6件（83%減）まで削減できたことで、v9実績（3件）に
+かなり近づいた。
+
+**ピンポイントナッジの試行（結果：改善なし、不採用）**：ユーザー指示
+「rst_scl_domain_heldへのピンポイントナッジを試す」を受け、v9の
+`NUDGE_BEFORE`前例に倣い、残存6件の連鎖の一端を担う`_457_`（row2、
+`_127_`を駆動）と`_415_`（row0、`_095_`を駆動）に対して
+`gen_placement_nrow_fm.NUDGE_BEFORE`を試行。値のスイープ
+（6,4,3,2,1トラック）の結果、3トラックのみが該当ギャップの空き
+スラック上限内で成立（6・4は"only 3 tracks of slack"、2・1は
+`fill_combo`充填不能で失敗）。
+
+3トラックナッジを適用して配置→配線→ripup_reroute→DRC→接続性まで
+再実行したが、未解決ショートは6件→**7件**とわずかに悪化（新たに
+`bit_cnt[0]`↔`_156_`の衝突が発生）。原因を検討した結果、
+`try_fix_vertical`のX探索は対象ネットの`cx`から±300トラック
+（=±1620um、行幅全域）を総当たりする設計のため、ナッジで`cx`の
+初期値を変えても探索される候補集合の総和はほぼ変わらず、「その
+Y帯域（row1-row2境界、y≈1028〜1989um）には他ネットに一切占有されて
+いない列がそもそも存在しない」という真の制約そのものは動かせない
+ことが判明。これはセル配置のピンポイント移動ではなく、rst_scl_domain_held
+自身のスパイン経路をどう引き回すか、あるいはその帯域を横切る他の
+多数のネットの並び順・トラック割当そのものを見直す必要がある、
+より広範な配線アーキテクチャの課題であることを示している。
+
+ナッジは不採用とし、108.36時点の最良結果（35件→6件、DRC 0違反、
+`v10_step_3_ripup_reroute.gds`）に復元・確定した。
+
+### 108.37 真の根本原因を発見：42.1と同じ「重複並列ゲート」バグが
+V10で再発していた（35件→1件、dedup_gates.py適用）
+
+ユーザーからの指摘：「rst_scl_domain_held ですが、以前にも問題に
+なった、同じ回路が複数並列化して存在する合成結果では無いですか？」
+——42.1節（v4/v5ネットリスト、NOR2 24個・AND2_X1 9個が全く同一入力で
+並列存在していたYosys合成バグ、`opt_merge -share_all`不足が原因）を
+正確に想起した指摘。実際に検証した。
+
+**確認**：生の`i2c_slave_async_net_v10.v`（V10パイプライン一切未適用、
+169インスタンス）を`dedup_gates.py`（108.31以前に別件で作られていた
+既存の重複除去ツール、42.1と全く同じ問題をv7の別ネットリストで発見・
+修正した際に汎用化されたもの）にかけたところ：
+
+```
+found 2 duplicate group(s), 31 redundant instance(s) to remove
+```
+
+内訳：
+- NOR2×24個、全て`A=rst_scl_domain_held, B=_143_`——完全に同一入力
+- AND2_X1×9個、全て`A=busy, B=rst_n`——完全に同一入力
+
+42.1で発見された不具合（NOR2×24・AND2_X1×9、当時の`RSTB1`/`RSTB2`）
+と**個数まで完全に一致**する、全く同じバグパターン。42.3で
+`opt_merge -share_all`を合成スクリプトに追加して一度修正されていた
+はずだが、V10世代のRTL再合成時にその修正が合成スクリプトへ引き継が
+れなかった（もしくは別経路で再合成された）ため、同じ重複が再発して
+いたと判明。この34個の冗長インスタンス（それぞれが個別にrst_scl_
+domain_held/_143_・busy/rst_nを起点とする独立した点対点配線を必要
+としていた）こそが、108.34以降ずっと格闘していたchannel1〜2境界の
+連鎖ショート・forced overlap zone肥大化の**真の根本原因**だった。
+
+**対策**：`dedup_gates.py`をV10パイプラインの最初の段（生合成netlist
+に対して、`merge_muxdffrb_rslatch.py`より前）に追加。
+`i2c_slave_async_net_v10.v`→`i2c_slave_async_net_v10_deduped.v`
+（169→138インスタンス、-31）。重複統合後、`rst_scl_domain_held`は
+NOR2 1個(`_387_`)のみを駆動する2ピンの単純ネットに、`_143_`も3ピンの
+単純ネットに縮退。代わりに`_387_`の出力`_016_`（26ピン、旧24個の
+RSTBファンアウトを継承）と、busy/rst_n AND2_X1の出力`_017_`（10ピン）
+という、scl_n/_143_と同種の「単一ドライバ・多行分散シンク」ネットが
+新たに生まれた。
+
+以降のV10パイプライン全段（`merge_muxdffrb_rslatch.py`→19 MUXDFFRB・
+3 RSLATCH、旧版と完全一致するペアリング・命名を確認／DFF_GROUPS→
+変更不要、全メンバー名は重複除去の対象外だったため無傷／
+`insert_row_buffers.py`→`insert_bufth_scl_sda.py`→
+`rebalance_final_assignment`→`gen_placement_nrow_fm.py`→
+`route_channels_nrow_fm.py`）を`_deduped_`系ファイルに対して再実行。
+`per_row_local_nets`は`_143_`/`rst_scl_domain_held`を`_016_`/`_017_`に
+差し替え（それぞれが今や_143_の旧役割を継承した広域ファンアウト
+ネットのため）。
+
+**結果**：
+- インスタンス総数：147→116（DFF_GROUPS適用後、-21%）
+- 配置：row0=1344.6um・row1=1112.4um・row2=939.6um・row3=1225.8um
+  （全行キャップ余裕あり、幅バランス調整が発火する必要すら無かった）
+- forced overlap zone：channel2で(359.1,1007.1)=**40%**（108.36時点の
+  80%から半減、108.34の初期値85%からは半分以下）
+- 配線：`route_channels_nrow_fm.py`の`WARNING`（"falling back"）件数
+  が108.36の13件→**2件**に激減
+- DRC：0違反（変わらず）
+- 接続性チェック：168〜169ネット中、**未解決ショートが35件→1件**
+  （`ripup_reroute_shorts.py`適用後）——v9本体の実績（3件）を
+  **下回る**過去最良の結果。残る1件（`_087_`（rx_data系MUXDFFRBの
+  Sピン、8ピン以上の正当なmux select分配ネット）↔`_156_`（clk156
+  ドメインのクロック分配ネット、21ピン）は両方とも複雑・高FOな
+  正当機能ネット同士がたまたま1箇所で交差しているだけで、42.1/108.37
+  のような冗長ゲートではないことを確認済み。
+
+成果物：`layout/step10/v10d_step_1_placement.gds`・
+`v10d_step_2_routed_raw.gds`・`v10d_step_3_ripup_reroute.gds`
+（DRC 0違反、ショート1件）・`v10d_step_3_shorts_highlighted.gds`
+（残存1件をlayer 261にハイライト）。ソースは
+`src/i2c_slave_async_net_v10_deduped.v`（dedup直後）→
+`_deduped_muxdffrb.v`→`_deduped_buffered.v`→`_deduped_final.v`
+（126インスタンス、パイプライン完了形）。
+
+**結論**：108.34〜108.36で行った配置レベルの行幅キャップ非対称化・
+`ripup_reroute_shorts.py`のcomplex-net移動緩和・ピンポイントナッジは
+いずれも対症療法であり、根本原因はネットリストレベルの合成バグ
+だった。今後のV10（およびV11以降）派生作業は、生合成netlistに対して
+**必ず`dedup_gates.py`を最初に適用**することを標準手順とすべき
+（理想的には42.3同様、Yosys合成スクリプト自体に`opt_merge -share_all`
+を恒久的に組み込み、post-hocなdedup_gates.py適用を将来的に不要にする
+のが本筋）。
+
+### 108.38 dedup_gates.pyをV10パイプラインの正式なステップ0として標準化
+
+ユーザー指示：「dedup_gates.py を最初のステップで標準化してくだ
+さい」。108.37の暫定的な`_deduped_`接尾辞ファイル群を、正式な
+V10パイプラインの標準構成に格上げした。
+
+**変更内容**：
+- `dedup_gates.py`：CLI引数省略時のデフォルトを
+  `i2c_slave_async_net_v10.v`→`i2c_slave_async_net_v10_deduped.v`に
+  設定（従来は引数必須）。docstringに「V10（および将来の全バージョン）
+  パイプラインのステップ0として恒久標準化」と明記。
+- `merge_muxdffrb_rslatch.py`：`DEFAULT_IN`を生合成netlist
+  （`i2c_slave_async_net_v10.v`、`RAW_V10_PATH`として保持）から
+  `i2c_slave_async_net_v10_deduped.v`に変更。
+- 新規`run_v10_pipeline.py`：dedup→merge_muxdffrb_rslatch→
+  DFF_GROUPS参照付きinsert_row_buffers→insert_bufth_scl_sda
+  （existing_part）→rebalance_final_assignment→gen_placement_nrow_fm→
+  gen_placement_gds_nrow_fm→route_channels_nrow_fm→
+  ripup_reroute_shorts→DRC/接続性チェック、の全10段を1コマンドで
+  再現する正式なオーケストレーションスクリプトを新設。
+  `per_row_local_nets`は108.37の知見通り`_016_`/`_017_`
+  （dedup後の統合RSTBネット）を使用、`_143_`/`rst_scl_domain_held`
+  はdedup後は単純ネットになったため対象から除外。
+
+**ファイル命名の整理**：`_deduped_`接尾辞は暫定検証用だったため廃止し、
+正式なV10ファイル名（`i2c_slave_async_net_v10_muxdffrb.v`・
+`_buffered.v`・`_final.v`、`LEF/row_assignment_v10_*.json`・
+`placement_nrow_fm_v10.json`、`layout/step10/v10_step_1/2/3_*.gds`）
+を`run_v10_pipeline.py`経由で上書き再生成——中身は108.37の
+dedup適用後の結果（35件→1件）に統一。旧・dedup未適用版の内容は
+これらのファイル名からは失われた（生合成ソース
+`i2c_slave_async_net_v10.v`自体は不変のまま保持、必要なら
+`dedup_gates.py`を再実行すればいつでも再現可能）。
+
+**検証**：`run_v10_pipeline.py`を通しで実行し、108.37の`_deduped_`/
+`v10d_`系ファイルで得た結果（DRC 0違反、未解決ショート1件
+`_087_`↔`_156_`）と完全に一致することを確認。今後のV10派生作業は
+この1スクリプトを起点にすればよい。
+
+### 108.39 RSLATCH幅修正（32.4→27.0um）を受けてV10を最初から再生成
+
+ユーザー指示：「LEF/TR-1um_STDCELL.gds を修正しました。LEFを作り直して
+ください。v10 と v10b は一旦消して、最初からv10 をLayoutください。」
+（"v10b"はユーザー独自の呼称で、108.37調査時に作った検証用の
+`_deduped_`/`v10d_`系並行ファイル群を指す）。
+
+**LEF再生成**：`gen_lef.py`を再実行。RSLATCHの幅が32.4um（6track）→
+**27.0um（5track、グリッド整合維持）**に変更されたことを確認。
+MUXDFFRB（97.2um/18track）は変更なし。
+
+**旧ファイル削除**：`allow_cowork_file_delete`でユーザーに削除許可を
+得た上で、108.37の検証用並行ファイル一式を削除（`_deduped_muxdffrb.v`
+/`_deduped_buffered.v`/`_deduped_final.v`、`placement_nrow_fm_v10_
+deduped.json`、`row_assignment_v10_deduped_*.json`、無関係な旧
+`row_assignment_v10_dffgrouped.json`、`layout/step10/v10d_step_*.gds`、
+不採用だったナッジ実験の`v10_step_3_ripup_reroute_nudge.gds`、
+script/内の対応する`_v10d_`/`_nudge`系JSON群、計20ファイル）。
+なお`i2c_slave_async_net_v10_deduped.v`自体は`run_v10_pipeline.py`の
+ステップ0（`dedup_gates.py`）の正式な出力先として現役のため削除
+対象外。
+
+**`run_v10_pipeline.py`で最初から再実行**：新LEF（RSLATCH 27.0um）
+を反映して全10段を再実行。
+
+**結果**：
+- インスタンス数：126（変更なし、RSLATCH幅変更はセル数に影響しない）
+- 配置：row0=1333.8um・row1=1107.0um・row2=939.6um・row3=1225.8um
+  （108.37時点とほぼ同水準）
+- forced overlap zone：channel2で(413.1,1007.1)=37%（108.37の40%から
+  さらにわずかに改善——RSLATCH縮小により行幅にわずかな余裕が増加）
+- DRC：0違反
+- 接続性チェック：**未解決ショート1件**（`_156_`（clk156クロック
+  分配ネット）↔`bit_cnt[1]`（8ピン以上のFSMカウンタ分配ネット）、
+  x=807.3um・y=360.4〜403.6um）——108.37の`_087_`↔`_156_`とは別の
+  座標・別のネットペアだが、同じ性質（複雑・高FOな正当機能ネット
+  同士がたまたま1箇所で交差）であることを確認。dedup_gates.pyは
+  引き続き「2 duplicate group(s), 31 redundant instance(s)」を検出・
+  除去しており、42.1/108.37級の重複ゲートは再発していない。
+
+成果物：`layout/step10/v10_step_1_placement.gds`・
+`v10_step_2_routed_raw.gds`・`v10_step_3_ripup_reroute.gds`（DRC 0
+違反・ショート1件）・`v10_step_3_shorts_highlighted.gds`（layer 261に
+残存1件をハイライト）。全て正式なV10ファイル名（`_deduped_`/`v10d_`
+接尾辞なし）で統一済み。
+
+### 108.40 残存ショート0件を達成——`_156_`のper-row-local化・
+`force_jog_nets`のピンポイント適用・ripup_reroute_shorts.pyの
+低ピン数ネット救済
+
+ユーザー指示：「ショートを回避して続けてください」。108.39時点の
+残存1件（`_156_`↔`bit_cnt[1]`）を実際に解消する作業を行った。
+
+**`_156_`をper_row_local_nets化**：`_156_`はclk156ドメインの
+クロック分配ネット（25ピン、DFFRB/MUXDFFRBのCKピンへ4行すべてに
+またがってファンアウト）——`_143_`/`rst_scl_domain_held`が108.34
+以前に抱えていたのと全く同じ構造（高ピン数だが非隣接行にまたがる
+ため`spanning`扱いとなりHIGH_FO_THRESHOLD専用トラックの恩恵を
+受けられない）と判明。`route_channels_nrow_fm.py`の
+`per_row_local_nets`に`_156_`を追加した結果、108.39の短絡は解消
+したが、代わりに`_194_`↔`txreg[5]`という別ペアが新たに出現
+（channel3をほぼ全高貫通する2〜3ピンの単純ネット同士）。
+
+**`ripup_reroute_shorts.py`のcomplex判定を精密化（`SIMPLE_PIN_MAX=3`）**：
+`_194_`（2ピン）・`txreg[5]`（3ピン）は本来ごく単純な点対点ネット
+だが、たまたま拾った配線経路が「幅30um超・複数Yレベルにまたがる
+trunk状形状」の判定条件に該当し、`try_fix_vertical`の対象から
+（本来のRSTB1事故が想定していたような多ピンファンアウトの
+cascadeリスクが全く無いにも関わらず）除外されていたと判明。
+ピン数8超の分岐はそのまま維持しつつ、ピン数3以下のネットは
+trunk形状チェックを完全にスキップするよう`classify_complex()`を
+修正（`scl_n`(4ピン)・`sda_in_buf`(5ピン)・`_016_`/`_017_`/`_156_`/
+`bit_cnt[1]`など、本来保護すべき高ファンアウトnetは無傷）。
+
+**`force_jog_nets`へのピンポイント追加**：それでも`_194_`↔`txreg[5]`
+は`try_fix_vertical`のX探索（±300トラック=行幅全域）で本当に空きが
+見つからず——分類問題ではなく、channel3をほぼ全高（y=2038.8〜
+2754.0、700um超）貫通する経路として真に輻輳していたことが判明。
+`route_channels_nrow_fm.py`の`force_jog_nets`（pass3専用のより慎重な
+live-checked経路）に`{'txreg[5]', '_194_'}`を追加したところ、
+ルーティング時点でこのペアの短絡が解消。その代わり、この2ネットが
+使っていたトラックの空きが変わったことで別の2件
+（`_079_`↔`_125_`、`_118_`↔`shreg[1]`——いずれも108.39以前の
+`ripup_reroute_shorts.py`で実際に解決実績のある単純ペア）が
+配線直後の接続性チェックに再出現したが、`ripup_reroute_shorts.py`を
+適用したところ両方とも自動修正で解消。
+
+**結果**：`verify_connectivity_nrow_fm.py`が
+**"ALL NETS FULLY CONNECTED, NO SHORTS DETECTED. Connectivity
+verification PASSED."** を報告——**未解決ショート0件**。DRCも
+引き続き0違反。`run_v10_pipeline.py`（`PER_ROW_LOCAL_NETS`に`_156_`
+追加、新規`FORCE_JOG_NETS={'txreg[5]','_194_'}`定数を追加）を単独
+実行するだけでこの結果が再現することを確認済み。
+
+**結論**：V10のプレースメント＋ルーティングパイプラインは、108.37の
+dedup根本修正と本節の2つのピンポイント調整（per_row_local化＋
+force_jog指定）・ripup_reroute_shorts.pyの判定精密化を合わせて、
+**v9本体の実績（短絡3件）を上回る、短絡0件のクリーンな結果**に
+到達した。`layout/step10/v10_step_3_ripup_reroute.gds`がこの時点の
+確定版レイアウト。次段はV9の9ステップ規約に倣い、トップピン配線・
+チャネル圧縮・電源ピン追加へ進める段階。
+
+### 108.41 RSLATCH/MUXDFFRBのLVSクリーン化を受けたLEF再生成と
+V10再検証
+
+ユーザー：「LEF/TR-1um_STDCELL.gds の RSLATCH と MUXDFFRB のLVSを
+クリーンにしました。sch/sym は LEF/の下にあります。検証で使って
+ください。確認したらLayoutを進めてください。」
+
+**参照ファイル確認**：`LEF/RSLATCH.sch`・`.sym`・`.extracted`、
+`LEF/MUXDFFRB.sch`・`.sym`・`.extracted`（いずれもSep 3午前生成、
+xschem形式）。
+- `RSLATCH.extracted`（KLayoutによるGDSからのSPICE抽出）：
+  トランジスタ8個（PMOS4・NMOS4）——`RSLATCH.sch`のNOR2×2個の
+  クロスカップル構成（NOR2 1個=PMOS2+NMOS2×2＝8個）と一致。
+- `MUXDFFRB.extracted`：トランジスタ38個（PMOS19・NMOS19）——
+  `MUXDFFRB.sch`のMUX2(x2)+DFFRB(x1)構成、MUX2出力が内部ネットで
+  DFFRB.Dへ直結（108.27設計意図通り、外部ポートに現れない）と整合。
+- ピン整合性確認：`RSLATCH.sym`（S/R/Q/QB/VDD/VSS）・
+  `MUXDFFRB.sym`（A/B/S/CK/RSTB/Q/QB/VDD/VSS）ともに、
+  `gen_lef.py`のPIN_METAエントリ（108.27/108.29で追加済み）の
+  ピン名・方向と完全一致することを確認——回路レベルの修正が
+  P&Rパイプライン側のピン定義と食い違っていないことを検証。
+
+**LEF再生成**：`gen_lef.py`を再実行。MUXDFFRB=97.2um（18track）、
+RSLATCH=27.0um（5track）——**両セルとも物理寸法は不変**（LVS修正は
+内部配線のみで、セル境界・ピン位置は変わらなかったことを確認）。
+そのためDFF_GROUPS・ROW_WIDTH_CAP_UM等の幅依存パラメータは
+再検討不要と判断。
+
+**V10再生成**：`run_v10_pipeline.py`を再実行（コード変更なし、新LEF
+反映のみ）。108.40の結果と完全に一致：DRC 0違反、
+`verify_connectivity_nrow_fm.py`は"ALL NETS FULLY CONNECTED, NO
+SHORTS DETECTED"を再度報告。`layout/step10/v10_step_3_ripup_
+reroute.gds`が最新のLVSクリーン版STDCELLを反映した確定版。
+
+### 108.42 .lib（Liberty）ファイルにRSLATCH/MUXDFFRBを追加
+
+ユーザー：「.lib を作ってください。レイアウトは最後まで進めて
+ください。」（2パート依頼のうち.lib側）。
+
+`gen_liberty.py`（Yosys/ABC論理合成フィージビリティ用の
+プレースホルダLiberty生成スクリプト、SPICE特性化なし・実サイン
+オフ不可と明記済み）に、108.29で新設されたRSLATCH/MUXDFFRBの
+セルモデルが未対応だったため、以下を追加：
+
+- `latch_cell(name, area, set_pin, clear_pin)`：RSLATCHをLibertyの
+  `latch(IQ, IQN) { enable: "S + R"; data_in: "S"; clear: "R"; }`
+  構文で近似モデル化（LibertyにクリーンなSRラッチ専用プリミティブが
+  無いための近似、コメントで明記）。
+- `muxdffrb_cell(name, area, rst_pin, rst_attr, active_low)`：
+  MUXDFFRBを`ff(IQ, IQN)`セルとしてモデル化、`next_state`にMUX2自身の
+  論理式`"(S*B)+(S'*A)"`を設定（単純なDピンではなくMUX2出力が
+  DFFRBのDへ内部直結している回路構造を反映）。CK/RSTBのタイミング
+  弧はDFFRBエントリと同一。A/B/S各related_pin向けに個別の`timing()`
+  ブロックを追加（`mux_sense="non_unate"`, `mux_delay="0.2"`）。
+- `LATCH_CELLS = [("RSLATCH", 3, "S", "R")]`、
+  `MUXFF_CELLS = [("MUXDFFRB", 11, "RSTB", "clear", True)]`
+  （area値はLVS抽出済みトランジスタ数から按分：RSLATCH=NOR2×2相当、
+  MUXDFFRB≈DFFRB(8)+MUX2(3)）。
+- `main()`に両リストのループを追加。
+
+`TR1um_5_stdcell.lib`を再生成（`python3 gen_liberty.py > ../TR1um_5_stdcell.lib`、
+exit code 0）。`cell(...)`ブロック数23→25（RSLATCH・MUXDFFRB追加分）。
+中括弧の対応チェック（開337＝閉337）で構文バランスのみ確認——
+**このサンドボックスにはyosysもPython製liberty-parserも存在せず、
+実際のLibertyパーサでの検証は未実施**（既知の未解決ギャップとして
+明記。将来yosys等が使えるようになった時点で`read_liberty`による
+本検証を推奨）。
+
+### 108.43 V10レイアウト最終仕上げ：トップピン配線・チャネル圧縮・
+電源ピン追加（STEP6〜9）
+
+ユーザー：「.lib を作ってください。レイアウトは最後まで進めて
+ください。」（2パート依頼のうちレイアウト側）。108.40/108.41で
+確定した`layout/step10/v10_step_3_ripup_reroute.gds`（DRC0・
+短絡0）を起点に、v9の実績パイプライン
+（`run_v9_step7_squeeze_step6_toppins.py`）に倣いSTEP6以降を実施。
+
+**発見：sda_oe/rx_validのネット名解決ギャップ**：
+`route_top_pins_nrow_fm.py`をV10に適用する前段確認として、
+`SCALAR_PORTS`各ポートが`i2c_slave_async_net_v10_final.v`の
+インスタンスピンとして解決できるか確認したところ、`sda_oe`・
+`rx_valid`の2ポートだけが見つからなかった。直接grepすると
+`assign sda_oe = _187_;` / `assign rx_valid = _154_;`という
+Yosys生成のassignエイリアス経由でのみポートが駆動されており、
+`_187_`はDFFRB(`_528_`)のQB出力、`_154_`はINV_X1(`_391_`)のY出力
+（他2ゲートのAにも分岐）と判明——V6（sda_oe→sda_oe_r）ともV9
+（QB直結、エイリアス無し）とも異なる、V10固有の第3のパターン。
+
+一方`netlist_parser.py`自体は`assign`チェーンをunion-findで正しく
+解決済み（`_build_alias_resolver`、9.xで実装済み）——
+`resolve("sda_oe")`は正しく`"_187_"`を返す。ギャップの真因は
+`netlist_parser`ではなく、`highlight_top_pins_nrow_fm.py`の
+`port_net_name()`/`bus_bit_net_name()`が静的辞書
+（`PORT_NET_ALIAS`/`BUS_PORT_NET_ALIAS`）しか見ておらず、
+このunion-find解決を一切使っていなかったこと。V6→V9→V10と
+毎回このエイリアス経路が変わるたびに静的辞書を手で書き換える
+運悪ロールバック（design_notes 78.7が記録する"v9 FIX"も同じ現象）
+が繰り返されていた。
+
+**恒久対応**：`port_net_name`/`bus_bit_net_name`
+（`highlight_top_pins_nrow_fm.py`）と`port_to_net_name`/
+`gather_pins`（`route_top_pins_nrow_fm.py`）に任意の`resolver`
+引数を追加し、渡された場合は静的辞書変換後の結果をさらに
+`netlist_parser._build_alias_resolver(text)`で解決するように
+変更（`resolver=None`が既定でV9呼び出し側は完全に無変更・無影響）。
+`route_top_pins_nrow_fm.main()`に`net_file`引数を追加し、指定時は
+その場でresolverを構築。実機確認：`sda_oe`→`_187_`（1ピン）、
+`rx_valid`→`_154_`（3ピン）とも正しく解決、24ポート全てで
+missing無し。
+
+**STEP7+STEP8（新規`run_v10_step7_squeeze_step8_toppins.py`）**：
+`run_v9_step7_squeeze_step6_toppins.py`をV10用に移植
+（`CH_HEIGHTS=[131.6,700.0,1000.0,700.0,153.2]`、
+`IN_GDS=layout/step10/v10_step_3_ripup_reroute.gds`、
+`route_top_pins_nrow_fm.main()`呼び出し時に`net_file=`V10最終
+ネットリストを指定）。実行結果：
+- squeeze前サニティ：DRC0・短絡0（既存確定版の再確認）。
+- チャネル圧縮：channel0〜4の実使用トラックのみ残し、
+  core高さ**2944.0um→884.9um（-2059.1um、-69.9%）**。
+  `layout/step10/v10_step_7_squeezed.gds`。
+- 圧縮後サニティ：DRC0・短絡0。
+- トップピン配線（新BBOX、24ポート全て配線成功、うち17ポートは
+  既存経路がそのままクリア、7ポートはフォールバック経路——
+  `sda_oe`はこの7件中の1つだったが後続の接続性検証で問題無し）。
+  `layout/step10/v10_step_8_squeezed_top_pins_routed.gds`。
+- 配線後サニティ：DRC0・短絡0
+  （"ALL NETS FULLY CONNECTED, NO SHORTS DETECTED"）。
+
+**STEP9（`add_power_pins_nrow_fm.py`、コード変更無し・V10へ
+そのまま適用可能）**：TAPカラム4列×GND/VDD×上下端=16箇所へ
+M2PIN+TXM2ピンマーカーを追加。`layout/step10/v10_step_9_power_
+pins_added.gds`。
+
+**最終検証**：`v10_step_9_power_pins_added.gds`に対しDRC・接続性
+チェックを再実行——**DRC 0違反、136ネット/458ピン全結線、短絡0件**。
+TXM2/TXM1ラベル数を実測確認：信号ポート24個（TXM2側9個＝row0/row3
+出口、TXM1側15個＝row1/row2経由の左右出口、`sda_oe`はTXM1側に
+確認済み）＋VDD/GND各8個（計16個）＝ラベル合計40個、想定通り。
+
+**結論**：V10レイアウトパイプラインはSTEP1（配置）からSTEP9
+（電源ピン追加）まで完走し、`layout/step10/v10_step_9_power_pins_
+added.gds`が**現時点の最終確定レイアウト**（DRC0・短絡0・
+コア高さ884.9um）。`.lib`（`TR1um_5_stdcell.lib`、25セル）と
+合わせて、ユーザー依頼「.lib を作ってください。レイアウトは
+最後まで進めてください。」の両パートが完了。
+
+### 108.44 V10 LVS用リファレンスSPICEネットリスト生成
+
+ユーザー：「DRC はクリーンです。LVSの spice の準備をお願いします。
+MUXDFFRB RSLATCH は LEF/simulation/の下のspice を使ってください。」
+（ユーザー側で108.43の最終レイアウトに対しローカルDRCを実行、
+クリーンだったとの報告と共に、次段のLVS参照ネットリスト作成を依頼）。
+
+**方針**：v9で確立済みの`gen_lvs_spice_v9.py`（xschemを介さず、
+`i2c_slave_async_net_*_final.v`から直接、機械的にゲートレベル
+構造SPICEを生成する手法——このsandboxにxschem/klayout CLIが無い
+ための established path、design_notes 77.45/77.46）をV10用に
+移植した`script/gen_lvs_spice_v10.py`を新規作成。
+
+**MUXDFFRB/RSLATCHの扱い**（ユーザー指示通り）：両セルとも
+`simulations/MUXDFFRB.spice`・`simulations/RSLATCH.spice`
+（＝`LEF/simulation/`のシンボリックリンク先、108.41でユーザーが
+xschemから新規エクスポートしたもの）をそのまま参照。ただし両ファイル
+とも**xschemの階層展開エクスポート形式**で、外側の
+`.subckt MUXDFFRB/RSLATCH ... .ends`本体に加え、内部で呼び出す
+DFFRB/MUX2/NOR2の本体もファイル内に重複して埋め込まれている。
+V10の最終ネットリストはMUXDFFRB(19)/RSLATCH(3)に統合されなかった
+**素のDFFRB(14)・MUX2(6)・NOR2(14)インスタンスも引き続き直接使用**
+（`parse_netlist`で実測確認）しているため、単純にファイル全体を
+埋め込むと`.subckt DFFRB`等が二重定義されLVSリーダーがエラーになる。
+`extract_outer_subckt()`で各ファイルの**最外側ブロックのみ**を
+抽出し、DFFRB/MUX2/NOR2は素インスタンス用に別途ロード済みの
+標準単体ファイル（`simulations/DFFRB.spice`等）1本のみを共有定義
+として使う構成に変更（内容はネスト側・単体側で完全一致することを
+直接diffで確認済みなので、モデリング上の実質的な差異は無い）。
+
+また、MUXDFFRB/RSLATCH自身の外側`.subckt`宣言はグラウンドピンを
+（プロジェクト内の他セルの慣習である"GND"ではなく）**"VSS"**という
+ラベルで宣言している（xschemのトップセル対ライブラリセルの命名
+慣習によるもので、位置的には同じグローバルグラウンドレールを指す
+だけの表記揺れ）。`POWER_PIN_NAMES = {"VDD":"VDD","GND":"GND",
+"VSS":"GND"}`により、"VSS"位置も他の電源ピンと同様に強制的に
+実グローバルネット"GND"へ結線するよう一般化。
+
+**sda_oe/rx_valid**：108.43で発見したV10固有のassignエイリアス
+（`_187_`/`_154_`）は、このスクリプトが元々持つ汎用のprefer-biased
+union-findエイリアス解決器（2026-09-02追加、v9側で"scl_gated"の
+ドリフトに対応するため既に一般化済み——design_notes参照）が
+無修正のまま自動的に処理：`resolve_net("_187_")`→`"sda_oe"`、
+`resolve_net("_154_")`→`"rx_valid"`を確認、スクリプト側の変更は
+不要だった。
+
+**生成結果**：`script/gen_lvs_spice_v10.py`実行（
+`XSCHEM_SIM_DIR`環境変数でsandbox固有のマウントパスを指定）。
+- 126インスタンス、26トップポート、198箇所の電源ピン強制結線、
+  ライブラリセル本体19種類埋め込み（重複定義ゼロを確認：
+  `.subckt DFFRB`/`MUX2`/`NOR2`/`MUXDFFRB`/`RSLATCH`いずれも
+  出現回数1、`.subckt`/`.ends`ペア数21で一致）、
+  FILL3デカップ166デバイス＋FILL2サブサーキット33インスタンス
+  （実配置数33/83と一致）。
+- 出力：`schematic/i2c_slave_async_nrow_fm_v10.spice`（プロジェクト
+  保存用）、`simulations/i2c_slave_async_nrow_fm.spice`（＝
+  `~/.xschem/simulations/`、ユーザーのローカルLVSツールが要求する
+  `simulation/TopCellName.spice`形式、design_notes 103.11の precedent
+  通り——V9版を上書き。トップセル名`i2c_slave_async_nrow_fm`は
+  V7〜V10共通のため、現行のLVS対象はこのV10版に切り替わる）。
+- 実データ確認：`x_528_ VDD sda_oe _005_ sda_oe_r _017_ GND
+  scl_n_row2 DFFRB`（sda_oeを実際に駆動するDFFRBインスタンス、
+  net名"sda_oe"として正しく出現）、`x_391_ VDD _085_ rx_valid GND
+  INV_X1`（rx_valid同様）を直接grepで確認。
+
+**未実施**：この参照ネットリストと実レイアウト（`layout/step10/
+v10_step_9_power_pins_added.gds`）とのLVS比較自体は、ユーザー側の
+ローカルKLayout LVS環境でのみ実行可能（このsandboxにklayout CLI
+無し、design_notes 76/77.43から不変）。次のユーザーLVS実行結果
+待ち。
+
+### 108.45 RSLATCH/MUXDFFRB LVS NoMatch修正：階層参照→フラット化
+
+ユーザー：「syep10/LVS_error.lvsdb 調査お願いします。」（108.44の
+参照ネットリストに対する実LVS結果の報告——`layout/step10/
+LVS_error.lvsdb`）。
+
+**解析**：`klayout.db.LayoutVsSchematic`/`NetlistCrossReference`で
+`.lvsdb`を直接読み込み（推測ではなく実データ）：
+- サーキットペア一覧：`RSLATCH`が**NoMatch**、`MUXDFFRB`が
+  **Skipped**、トップ(`i2c_slave_async_nrow_fm`)も連鎖で**Skipped**。
+- RSLATCHサーキットペアの詳細：レイアウト側ネットは`$7`・`$8`
+  （無名の内部ノード）・`Q`・`QB`・`R`・`S`・`gnd`・`vdd`の**生の
+  トランジスタ**（NOR2というサブサーキット境界が一切存在しない）、
+  参照側は`x1`/`x2`という**NOR2サブサーキット呼び出し**——構造その
+  ものが噛み合わずNoMatch。
+
+**根本原因**：MUXDFFRB/RSLATCHは`LEF/TR-1um_STDCELL.gds`上で
+**単一のフラットなリーフ標準セル**として描画されている（`LEF/
+RSLATCH.extracted`・`MUXDFFRB.extracted`で以前確認済み：8個・38個の
+生トランジスタのみ、NOR2/DFFRB/MUX2という名前付きサブセル境界は
+一切無い）。103.10/103.11で扱ったRING_OSCの場合はレイアウト側が
+実際にINV3D等を**独立した名前付きGDSサブセルとして配置**していた
+ため参照側もネスト構造を維持するのが正解だったが、今回は真逆——
+レイアウト側の物理構造自体がフラットなので、参照ネットリストも
+フラット化しないとLVSエンジンが両者を対応付けられない。
+
+**修正**（`script/gen_lvs_spice_v10.py`）：`flatten_compound_cell()`
+を新設。`simulations/MUXDFFRB.spice`・`RSLATCH.spice`自身のx1/x2
+呼び出し行を、対応するDFFRB/MUX2/NOR2の**単体ファイル
+（`simulations/DFFRB.spice`等——引き続き同じ`LEF/simulation/`配下）
+から読んだ生トランジスタ本体**でインライン展開。各呼び出しの
+内部専用ノードには呼び出しごとの接頭辞（`x1_`/`x2_`）を付与し、
+2つの呼び出し間で同名の内部ネット（例：MUX2/NOR2どちらも本体内部で
+"net1"というローカルネットを使う）が衝突しないようにする一方、
+セル自身が持つ真に共有された内部ネット（MUXDFFRBの"net1"——MUX2出力
+とDFFRB.Dの接続点）は接頭辞なしのまま維持。ソースは一貫して
+`LEF/simulation/`配下のファイルのみ（呼び出し構造をインライン展開
+しただけで、デバイス内容自体は一切創作していない）——ユーザー指示
+（「MUXDFFRB RSLATCH は LEF/simulation/の下のspice を使ってください」）
+を維持したまま構造のみ修正。
+
+**検証**：
+1. `RSLATCH.extracted`と手動で1トランジスタずつ突き合わせ：
+   デバイス数完全一致（8個）、接続トポロジーも一致（対称MOSFETの
+   ドレイン/ソース入れ替わりのみ、KLayoutのデバイス比較で正規化
+   される範囲）。
+2. `klayout.db.NetlistSpiceReader`（実パーサー）で再生成後の
+   `simulations/i2c_slave_async_nrow_fm.spice`を独立にパース：
+   `.subckt`/`.ends`ペア数21/21（変化なし、重複なし）、トップ
+   サーキット26ピン、トップ直下のサブサーキットインスタンス数159
+   （＝126ゲートインスタンス＋FILL2サブサーキット33個、想定通り）。
+3. 簡易`NetlistComparer`によるRSLATCH単体比較では、AS/AD/PS/PD
+   （レイアウト側のみが持つ寄生面積・周囲長パラメータ）の違いにより
+   デバイスクラスレベルで不一致と判定されたが、これは面積パラメータ
+   非考慮の設定（実際の`05_Compare.lvs`が使っている設定）を私の簡易
+   スクリプトが再現できていないための偽陰性と判断（トポロジー自体は
+   手動突き合わせで確認済み）。**実際のLVS比較そのものは引き続き
+   ユーザーのローカル環境でのみ最終確認可能**。
+
+出力ファイルは108.44と同じ2箇所（`schematic/i2c_slave_async_nrow_
+fm_v10.spice`・`simulations/i2c_slave_async_nrow_fm.spice`）を
+上書き再生成。次のユーザーLVS再実行結果待ち。
+
+### 108.46 RSLATCH/MUXDFFRB「schematic側が空っぽ」バグ修正
+### （デバイス名の先頭文字問題）
+
+ユーザー：「LVS_error.lvsdbです。schematic(spice) 側が空っぽ？です。」
+（108.45修正版に対する実LVS再実行結果——11:17生成の新しい
+`layout/step10/LVS_error.lvsdb`。私の書き込み時刻11:11より後なので
+最新版に対する結果と確認済み）。
+
+**解析**：`.lvsdb`を読むと、他の全20サーキット（AND2_X1〜XOR2）は
+**Match**したが、RSLATCH/MUXDFFRBだけ依然**NoMatch**——ネット・
+デバイス・ピンいずれも「参照側=None」というパターンで、まさに
+ユーザー報告通り「schematic側が空っぽ」。`klayout.db.NetlistSpiceReader`
+で生成後の`simulations/i2c_slave_async_nrow_fm.spice`を直接読み、
+RSLATCHサーキットの中身を確認したところ、`each_device()`が0件、
+代わりに`each_subcircuit()`が8件（本来デバイスが8個のはずの数と
+一致）——**デバイスとして認識されず、存在しないサブサーキット
+呼び出しとして誤読されていた**ことが直接確認できた。
+
+**根本原因**：108.45の`flatten_call()`が生成するデバイス名が
+`f"{prefix}_{元の名前}"`（例："x1_MM7"）——SPICEでは素子名の
+**先頭1文字**が素子種別を決定する（M=MOSFET、X=サブサーキット
+呼び出し等）ため、"x1_MM7"は先頭が"x"となり、klayoutの
+SPICEリーダーが「"PMOS"/"NMOS"という名前のサブサーキットを呼び出す
+Xライン」と誤解釈——それが空のサブサーキット参照として扱われ、
+実デバイスが一切生成されなかった。他の全セルは元々"MM7"のように
+先頭が"M"のまま変更していなかったため無事だった。
+
+**修正**：デバイス名を`f"M{prefix}_{元の名前}"`（例："Mx1_MM7"）に
+変更——先頭を確実に"M"に保ちつつ、呼び出し元・元の名前情報は維持。
+
+**検証**：`klayout.db.NetlistSpiceReader`で再生成後のファイルを
+直接パースし、RSLATCH: `devices=8`（`subckt_instances=0`）、
+MUXDFFRB: `devices=38`（`subckt_instances=0`）——期待通りの
+デバイス数・種別（RSLATCH: PMOS4+NMOS4、MUXDFFRBもPMOS/NMOS計38個）
+をそれぞれ`each_device()`で直接確認。`.subckt`/`.ends`ペア数21/21
+（不変）、トップサーキット26ピン・直下159サブサーキットインスタンス
+（変化なし）も再確認済み。
+
+出力ファイルは同じ2箇所を再度上書き。次のユーザーLVS再実行結果
+待ち。
+
+### 108.47 トップレベルLVS NoMatch修正：rx_data/rx_data_rバスエイリアス
+### の二重解決漏れ
+
+ユーザー：「STDCELLはＯＫです。トップのエラーが残っています。
+LVS_error.lvsdb を調査ください。」（108.46修正版に対する実LVS
+再実行結果——11:24生成）。
+
+**解析**：`.lvsdb`確認：**全20個のスタンダードセルサーキット
+（RSLATCH/MUXDFFRB含む）が全てMatch**——108.45/108.46の修正は
+完全に効果があったことを確認。残るのはトップサーキット
+（`i2c_slave_async_nrow_fm`）のNoMatch、ネット不一致32件。
+
+詳細トレース：レイアウト側`U_MUXDFFRB_7`のQピン（`RX_DATA[0]`、
+実際のバス出力）に参照側の対応が無く、同じインスタンスのBピン
+（`RX_DATA_R[0]`——全く別の物理ノード）にも参照側の対応が無い。
+生Verilogを直接確認：`u_muxdffrb_1`の`.Q(rx_data_r[6])`・
+`.B(_152_)`、かつ`assign rx_data = rx_data_r;`（1374行目、
+**ブラケット無しの全ビット一括assign**）が存在。
+
+**根本原因**：`gen_lvs_spice_v10.py`の`resolve_net()`は、
+v9から引き継いだロジックのまま——入力ネット文字列が最初から
+`rx_data_r[N]`という形をしている場合のみ`BUS_ALIAS_PREFIX`
+（`rx_data_r`→`rx_data`）を適用していた。しかし匿名ネット
+`_152_`のような入力は、一般的なunion-find解決器
+（`_alias_resolve`）を経由して`"rx_data_r[6]"`という**既に
+インデックス付きの結果**に解決されるにも関わらず、その結果に対して
+`BUS_ALIAS_PREFIX`の再適用が一切行われていなかった（元の入力文字列
+だけをチェックする一回限りの処理だったため）。結果として`_152_`が
+`"rx_data[6]"`まで到達せず`"rx_data_r[6]"`のまま出力され、
+実レイアウトのQピン（真のバス出力、"rx_data[6]"）と一切対応
+しなくなっていた。
+
+**修正**：`_apply_bus_prefix()`ヘルパーを新設し、`resolve_net()`を
+「まずSCALAR_ALIASを確認→次に一般union-find解決器に**そのまま**
+渡す→**その結果に対して**バスプレフィックス remap を適用」という
+一貫した1本の処理フローに再構成。これにより、入力が最初から
+インデックス付きか、匿名ネットが後から解決されてインデックス付きに
+なるかに関わらず、同じ最終remapが必ず適用される。
+
+**検証**：
+- `resolve_net("_152_")` → `"rx_data[6]"`（修正前は`"rx_data_r[6]"`
+  のまま）。
+- 8個の`MUXDFFRB`インスタンス全て（`u_muxdffrb_1`〜`_7`・`_19`）で
+  Q・Bピンが同一ネット`rx_data[i]`に解決されることを確認——設計
+  意図（Bは"hold"時にQ自身の値をフィードバックするMUX入力）とも
+  整合。
+- 再生成後のファイルに`"rx_data_r"`という文字列が**一切残っていない**
+  ことをgrepで確認（0件）。
+- `busy`（レイアウト側で`_388_.A`・`U_RSLATCH_1.Q`・
+  `U_SDA_LAT_EN.A`の3箇所に接続）も、参照ネットリスト側で全く同じ
+  3箇所（`x_388_`のA、`xu_rslatch_1`のQ、`xu_sda_lat_en`のA）が
+  ネット`busy`で一致していることを確認——108.47修正前のLVS結果で
+  `busy`/`sda_oe`/`VDD`/`GND`まで巻き込まれてMismatch表示されて
+  いたのは、rx_data系の大量不一致によるグラフマッチング全体への
+  連鎖的な誤判定だった可能性が高いと判断（これらのネット自体は
+  修正の前後で変化していない）。
+- `klayout.db.NetlistSpiceReader`で再パース：トップ26ピン・直下
+  159サブサーキットインスタンス、RSLATCH/MUXDFFRBとも実デバイス数
+  （8・38）不変、`.subckt`/`.ends`ペア数21/21不変。
+
+出力ファイルは同じ2箇所を再度上書き。次のユーザーLVS再実行結果
+待ち。
+
+### 108.48 トップレベルLVS NoMatch修正：Verilogリテラル定数
+### （1'h1）が未処理でネットとして混入
+
+ユーザー：「SDA_OE関連が残っています。VDD/VSSもあります。
+LVS_error.lvsdb を調査ください。」（108.47修正版に対する実LVS
+再実行結果——11:38生成）。
+
+**解析**：`.lvsdb`確認：**全20個のスタンダードセルサーキットが
+引き続きMatch**。トップサーキットのみNoMatch、ネット不一致7件
+（`$151↔SDA_IN_ROW1`、`$I1227↔SDA_OE`、`$193↔SDA_TARGET`、
+`GND↔GND`、`VDD↔VDD`、`busy↔BUSY`、`sda_oe↔_156_`）、サブ
+サーキット不一致2件。
+
+サブサーキットペアを直接ダンプすると決定的な手がかり：参照側
+（このスクリプトの出力）に`$36 MUX2`という**レイアウト側に一切
+対応の無いインスタンス**が存在し、そのA端子が`$I1227`という
+匿名ネットに接続されていた。生Verilogを直接確認：
+```
+MUX2 u_sda_target (
+  .A(1'h1),
+  .B(sda_in_row1),
+  ...
+```
+**`.A(1'h1)`——Verilogのビットリテラル定数（tie-high固定）**。
+
+**根本原因**：`resolve_net()`/`_build_alias_resolver()`のどちらも
+リテラル定数を一切扱っておらず、文字列`"1'h1"`がそのまま実ネット名
+であるかのように出力に混入していた（`_build_alias_resolver`自身は
+"'"を含むassign文をスキップする既存ロジックがあったが、これは
+assign文中のリテラルのみを想定しており、**インスタンスのピン接続
+に直接現れるリテラル**は別問題として見落とされていた）。この1箇所
+の破損が、KLayoutのネットリスト比較が**大域的なグラフマッチング**
+であるために、直接関係の無いように見える`sda_oe`/`busy`/`VDD`/
+`GND`周辺にまで誤マッチングの連鎖を引き起こしていた。
+
+**修正**：`_tie_literal()`を新設し、`N'b`/`N'o`/`N'd`/`N'h`形式の
+Verilogリテラルを検出、1ビット幅の場合は値1→`"VDD"`、値0→
+`"GND"`へ直接変換（`resolve_net()`の最初のステップとして適用）。
+このV10ネットリスト全体でリテラル定数の使用箇所はこの1件のみと
+grep確認済み（複数ビット幅のリテラルタイは本設計で一度も使われて
+いないため、遭遇した場合は黙って誤処理せず例外を送出するよう
+実装）。
+
+**検証**：`u_sda_target`インスタンスの出力が
+`xu_sda_target VDD sda_in_row1 busy VDD sda_target GND MUX2`
+（A・VDD両方とも正しく実ネット"VDD"）に変化したことを確認。
+再生成後のファイルに`'h`/`'b`/`'d`/`'o`という文字列が一切残って
+いないことをgrepで確認（0件）。`klayout.db.NetlistSpiceReader`で
+再パース：トップ26ピン・直下159サブサーキットインスタンス
+（不変）。
+
+出力ファイルは同じ2箇所を再度上書き。次のユーザーLVS再実行結果
+待ち。
+
+### 108.49 SDA_OE関連の残存不一致調査：ネットリスト自体は正しいと
+独立検証で確認、キャッシュの可能性を指摘
+
+ユーザー：「LVS_error.lvsdb を調査ください。」（108.48修正版に
+対する実LVS再実行結果）。最初に受け取った`.lvsdb`は`date -r`確認
+の結果108.48修正の書き込み時刻より前に生成されたものと判明、
+古い結果である旨をユーザーに伝え再実行を依頼。直後に届いた同文の
+再メッセージは新しいタイムスタンプの`.lvsdb`を伴っており、これを
+調査。
+
+**解析**：`.lvsdb`確認：**全20個のスタンダードセルサーキットが
+引き続きMatch**（RSLATCH/MUXDFFRB含む）。トップサーキットのみ
+NoMatch、ネット不一致3件（`$I1227↔SDA_OE`、`VDD↔VDD`、
+`sda_oe↔_156_`）、サブサーキット不一致2件（`_528_ DFFRB`、
+`U_SDA_TARGET MUX2`）——108.48修正前より不一致件数は大幅減少
+（7件→3件）だが、SDA_OE周辺の同種の不一致がまだ残存。
+
+`.lvsdb`経由の追跡は`each_net_pair`/`each_subcircuit_pair`を
+複数回呼ぶとklayoutのPythonバインディングが印字完了後に
+`malloc_consolidate(): unaligned fastbin chunk detected`で
+クラッシュする不安定挙動を確認したため、`.lvsdb`に依存しない
+独立検証に切替：再生成直後の`simulations/i2c_slave_async_nrow_fm.spice`
+を`klayout.db.NetlistSpiceReader`で単独パースし、レイアウト側の
+既知値と直接比較。
+
+**検証結果**：
+- VDDネットのサブサーキットピン接続数：参照側160件＝レイアウト側
+  160件で完全一致。
+- MUX2インスタンスの接続内訳（全6インスタンス、7件）を確認、
+  `U_SDA_TARGET`は期待通りA・VDD両方がVDDに接続（2件）——108.48
+  で修正した`1'h1`→VDD直結が正しく反映されている。
+- SDA_OE（大文字正規化後）のサブサーキットピン接続数：参照側1件
+  （`_528_.QB`）＝レイアウト側1件で完全一致。
+
+これらは`.lvsdb`が指摘する不一致の対象ネット・インスタンスすべてを
+含んでおり、**現在の参照SPICEファイルの内容自体には構造的な誤りが
+見当たらない**という結論に至った。
+
+**結論・推奨事項**：ファイル内容は正しいと考えられるため、ユーザー
+側のLVSツールが古い抽出結果／キャッシュを参照している可能性を
+最有力候補としてユーザーに報告。改善しない場合は、ローカルの
+`05_Compare.lvs`側の設定（VDD/GNDの`connect_global`処理、または
+MUX2のA/Bピンに対する`equivalent_pins`宣言の有無）を確認するよう
+提案する。ファイル自体への追加修正は行っていない（不変）。
+
+### 108.50 108.49のキャッシュ仮説は誤り：実LVS再確認でSDA_OE/VDDの
+根本原因はレイアウト側の実配線バグと判明、2件とも修正
+
+ユーザー：108.49の報告後、KLayout Netlist Database BrowserのCross
+Referenceタブのスクリーンショットを提示。ログタブに明示的な
+`Port mismatch '$I1227' vs 'SDA_OE'`。108.49で「ネットリスト内容は
+正しい、ツール側キャッシュの可能性」と結論したが、**これは誤りだった**
+──実際にはレイアウト側に2つの独立した本物の配線バグがあった。
+
+**バグ1：sda_oe用STEP8トップピン引き出し配線がクロックトランクに
+物理ショート**
+
+`route_top_pins_nrow_fm.py`のrow2用引き出し配線（M2下→via→M1左、
+channel2を横断してBBOX左端へ）は、channel2の全トラックが衝突する
+場合に「衝突数最少のトラックへ強制配線」するフォールバック
+（`route_row1_row2`内、コメント「every track had a real collision...
+Least-bad choice」）を持つ。V10のchannel2はSTEP7 squeezeで
+「real-used/guardトラック以外は全て除去」する方式のため、squeeze後は
+文字通り1本の空きトラックも残らない。この状態でsda_oeの新規引き出し
+配線がこのフォールバックに落ち、既存のクロック分配トランクへ物理的に
+重なって配線された（DRC上は矩形同士の重なりとして検出されないケース、
+かつsda_oeのような1ピンの「stub」ネットは`net_shapes_log`/`pin_map`に
+一切登録されないため、`verify_connectivity_nrow_fm.py`のショート検知
+もこのネットを最初から一切チェックしていなかった――0 shorts表示は
+「検査対象外だったので何も見つからなかった」だけで、安全性の証明には
+なっていなかった）。KLayout LVSはこの物理ショートによりsda_oeの
+実ネットをクロックネット（`_156_`）と誤認し、玉突きで孤立した参照側
+`SDA_OE`ネットを別の無関係な浮きネット`$I1227`（後述バグ2の産物）と
+誤対応させていた──ログの`$I1227`↔`SDA_OE`という不可解な組み合わせは
+この2つの独立バグが1本のログ行に重なって現れたもの。
+
+**修正**：`squeeze_channels_nrow_fm.py`のcompaction_info生成後、
+channel0/2/4（STEP8のBBOX引き出し配線が実際に通る margin/channel の
+み）に対し、真に未使用（`used_x`にも`guard_idx`にも属さない）な
+トラックを一定数、`guard_idx`へ追加登録して意図的に保護する後処理を
+実施（channel0:+10, channel2:+10, channel4:+15トラック）。squeeze自体
+のロジックは無変更、「保護されたインデックスは除去しない」という
+既存の`guard_idx`の意味論をそのまま使うだけの安全な追加。結果、
+core高さは884.9um→1073.9um（squeeze削減率は69.9%→63.5%へ後退するが、
+元の2944.0umから見れば依然大幅な圧縮）。STEP8を再実行した結果、
+sda_oeは`[OK]`（クリーンな経路）に変化。
+
+**バグ2：row0/row3のトップピン垂直引き出しにも同型の自己衝突バグ
+──tx_data[0,1,2,3,4,5]（6/8ビット）が常にCHECKフラグ**
+
+バグ1の修正後も再テストすると、tx_data busの8ビット中6ビット
+（row3経由の6本、row1経由の残り2本は無関係）が毎回`[CHECK]`
+（衝突込みで強制配線）のまま変化しなかった。`find_clear_x_vertical`
+の呼び出し元（row0/row3ループ）を直接読み直した結果、
+`route_row1_row2`が v49/v50（design_notes 69/70）で導入した
+「stub ネットは`net_shapes_log`に一切登録されないため、
+`own_region()`が常に空になり、ピン自身の物理パッド（や今まさに
+描いたleg 1のバー）が自分自身への衝突として誤検出される」という
+既知のバグクラスと全く同じ問題が、row0/row3側の
+`find_clear_x_vertical`呼び出し（427行目・451行目付近）には
+**一度も移植されていなかった**と判明。GDS上で直接確認：
+tx_data[0]の場合、row3_bound（931.4）をまたぐ自セルのパッド
+（611.2-614.6, 929.7-933.1）が存在し、`ok(x_start)`はもちろん
+`+-200um`の全候補・全dogleg検索が毎回この自分自身のパッドに
+衝突判定されて必ず失敗、`found_x=None`となり呼び出し元が
+`fx=cx`（衝突チェック無視で直接配線）へフォールバックしていた
+──これも1ピンstubネットのため`pin_map`検査の対象外で、
+`verify_connectivity_nrow_fm.py`は無関係のまま「0 shorts」を報告
+し続けていた。
+
+**修正**：row1/row2の`self_own`パターンをrow0/row3にも移植
+（`route_top_pins_nrow_fm.py`、コード内108.50コメント参照）。
+ピン自身のパッド＋leg 1の占有域をカバーする`db.Region`を構築し、
+`find_clear_x_vertical`へ`extra_own`として渡すよう2箇所を修正。
+再テストの結果、24ポート全てが`[OK]`（CHECK 0件）に変化。
+
+**再生成**：STEP7（squeeze、reserve込み）→STEP8（top-pins、両修正
+適用済みスクリプト）→STEP9（power pins、`core_h`はSTEP8出力から
+自動検出）を通し再実行。DRC 0/0/0、136ネット全結線・ショート0
+（既存チェックの範囲内）を確認。sda_oe/tx_data[0]のラベル位置を
+直接GDS照会し、それぞれ独立した孤立ワイヤ（他ネットと未接続）で
+あることを個別に確認済み。
+
+**バグ3（VDD off-by-one）：U_SDA_TARGET(MUX2)のAピンがレイアウト上
+で本当にVDD未接続だった**
+
+108.49の独立検証は「参照SPICEのVDD接続数160=レイアウトのVDD接続数
+160で完全一致」と報告したが、これは**参照SPICE同士の内部整合性の
+確認に過ぎず、実レイアウトのGDSを見ていなかった**（比較対象が
+どちらも「参照SPICEから期待される値」だったため、レイアウト側の
+実際の欠落を原理的に検出できなかった）。`placement_nrow_fm_v10.json`
+を直接確認した結果、`u_sda_target`（MUX2）のAピンのnetが文字列
+`"1'h1"`のまま（未解決のVerilogリテラル）で登録されており、
+useも`SIGNAL`のまま（`POWER`として扱われていない）と判明。
+`route_channels_nrow_fm.py`は1ピンのみのネットを配線しないため、
+このAピンは配置生成の時点から一度も配線されていなかった
+（=レイアウト上で本当にVDD未接続・フローティング）。108.48の
+`_tie_literal()`修正は`gen_lvs_spice_v10.py`（LVS参照ネットリスト
+生成）にしか適用しておらず、配置生成側（`netlist_parser.py`／
+placement JSON生成パイプライン）のリテラル未対応は今回のスコープ外
+のまま残っていた（フルP&R再実行はSTDCELL配置全体に影響するため
+不可、今回は対症療法として物理配線を1本追加）。
+
+**修正**：STEP9出力GDS上で、U_SDA_TARGET自身のAピン（M2パッド、
+row1内 x=433.0-436.4, y=468.0-471.4）から、同一インスタンス自身の
+VDDピン（M1、x=432.0-464.4, y=501.2-503.8）まで、M2バー＋via_1で
+直接接続。経路はrow0/row3と同様の「自パッド近傍は薄い帯で衝突誤検出
+されるため、パッド上端から少し離れた位置から本探索を開始」という
+パターンで、既存配線との衝突を実測ゼロと確認した経路（x=434.7、
+Y方向はA上端471.4から直接VDDまで）にのみ配線。配線後、A側パッドを
+起点にvia経由でM1/M2をフラッドフィルする独立検証を実施した結果、
+接続先はチップ全域に広がる連続したVDDメッシュ（0-1620um x
+0-1073.9um、面積72072.6um²）と一致──意図した接続を確認。DRC再検証
+0/0/0、via数が1105→1106に正しく1件増加。
+
+**現状**：sda_oe（バグ1）・tx_data[0-5]（バグ2）・
+U_SDA_TARGET.A（バグ3）の3件とも物理修正済み、STEP7〜STEP9出力
+GDS（`layout/step10/v10_step_7_squeezed.gds` /
+`v10_step_8_squeezed_top_pins_routed.gds` /
+`v10_step_9_power_pins_added.gds`）を上書き。参照SPICE
+（`schematic/i2c_slave_async_nrow_fm_v10.spice`/
+`simulations/i2c_slave_async_nrow_fm.spice`）は変更していない
+（108.48時点のものが引き続き正しいことは108.49で確認済み）。
+`compaction_info_nrow_fm_v10_empirical.json`はreserve分の
+`guard_idx`追加を反映済み（squeeze自体の判定ロジックは無変更）。
+次のユーザーLVS再実行結果待ち。
+
+### 108.51 V10コアセル単体LVSクリーン達成（ユーザー確認）
+
+ユーザー：「LVSクリーンになりました。」——108.50の3件の物理修正
+（sda_oe引き出し配線のchannel2空きトラック枯渇によるクロック
+トランクへの物理ショート、row0/row3引き出しの自己パッド衝突誤検出
+によるtx_data[0-5]の強制配線、U_SDA_TARGET(MUX2).Aピンの欠落VDD
+タイ）を適用した`layout/step10/v10_step_9_power_pins_added.gds`に
+対する実機KLayout LVS再実行で、**コアセル単体（`i2c_slave_async_
+nrow_fm`）のLVSクリーンを確認**。標準セル20種（RSLATCH/MUXDFFRB
+含む）・トップレベル回路とも全てMatch。
+
+これでV10移行（108.23のMUXDFFRB/RSLATCH合成セル統合開始から本節
+まで）のコアセル単体でのDRC/LVS両方のクリーン化が完了。チップレベル
+（GIO/RING_OSC統合、`route_gio_core_v9.py`等v9世代のスクリプト群）
+へのV10反映は別作業として未着手のまま残る——現行の「正式最終成果物」
+（README.md）は引き続きV9ベースの
+`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds`。
+
+ユーザー指示によりdesign_notes.md（本節まで）・README.md（V10行の
+状態表追加、参考節一覧への§108.23-108.51追記、スクリプト本数63→72
+本への更新）・SCRIPTS.md（「12. V10」節新設、本数63→72本への更新）
+を更新の上、git commit実施（コミットメッセージ・ハッシュは通常の
+git運用に従う）。

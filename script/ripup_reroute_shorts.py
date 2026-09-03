@@ -689,10 +689,29 @@ def main():
     # horizontal M1 box regardless of width and over-flagged 34 of this
     # design's ~165 nets, most of which were perfectly simple.
     TRUNK_WIDTH_THRESHOLD = 30.0
+    # 108.40 (design_notes.md): a genuinely low-fanout net (<=SIMPLE_PIN_MAX
+    # pins) can still pick up a long, wide M1 run merely because it
+    # happens to span a channel crossing -- that is NOT the same "many
+    # sinks scattered across the chip, moving one piece risks an
+    # unrelated silent collision" cascade risk the RSTB1 incident (and
+    # this whole complex-net ban) exists to guard against. Confirmed via
+    # V10 (108.39/108.40): '_194_'/'txreg[5]' (2 and 3 pins respectively)
+    # were both flagged complex purely by trunk width/multi-level shape,
+    # blocking their own conflict from ever being auto-fixed even though
+    # try_fix_vertical's move is exactly as safe for them as for any
+    # other simple 2-3 pin net. Nets at or under this pin count skip the
+    # trunk-shape check entirely; the raw pin-count>8 branch above is
+    # untouched, so genuinely high-fanout nets (scl_n, sda_in_buf, _016_,
+    # _017_, _156_, bit_cnt[1], etc.) remain exactly as protected as
+    # before.
+    SIMPLE_PIN_MAX = 3
 
     def classify_complex(net, shapes):
-        if len(pin_map.get(net, [])) > 8:
+        n_pins = len(pin_map.get(net, []))
+        if n_pins > 8:
             return True
+        if n_pins <= SIMPLE_PIN_MAX:
+            return False
         levels = set()
         for lyr, x0, y0, x1, y1 in shapes:
             if lyr != "M1":
@@ -703,8 +722,17 @@ def main():
         return len(levels) > 1
     complex_nets = {n for n, shapes in net_shapes.items() if classify_complex(n, shapes)}
     if complex_nets:
-        print(f"{len(complex_nets)} multi-segment/high-fanout net(s) excluded from ever being "
-              f"moved (moved only if the OTHER side of a conflict is simple): {sorted(complex_nets)}")
+        print(f"{len(complex_nets)} multi-segment/high-fanout net(s): {sorted(complex_nets)} -- "
+              f"VERTICAL (single M2 segment) conflicts on these are still never auto-moved "
+              f"(cascade risk, per the RSTB1 incident); HORIZONTAL (M1 trunk) conflicts ARE "
+              f"attempted via try_fix_horizontal even for these nets (v34, design_notes.md "
+              f"108.34/108.35): that function already relocates the ENTIRE trunk + every stub "
+              f"tapping into it + their vias together, live-checked against the real final "
+              f"geometry at the new track -- it is the mechanism this project specifically built "
+              f"for moving whole multi-tap spine nets safely, so banning it for exactly the nets "
+              f"it targets was over-broad. V10's ripup pass found 26 unresolved shorts under the "
+              f"old blanket ban, most of them complex-vs-complex M1 trunk collisions "
+              f"(rst_scl_domain_held vs the shreg chain and others) that this relaxation targets.")
 
     fixer = Fixer(in_gds, pin_map, net_shapes, ch_y0, ch_heights, row_width, placement=placement)
 
@@ -721,11 +749,24 @@ def main():
         na, ia, nb, ib, lyr = conflicts[0]
         box_a = tuple(fixer.net_shapes[na][ia][1:])
         box_b = tuple(fixer.net_shapes[nb][ib][1:])
-        a_ok, b_ok = na not in complex_nets, nb not in complex_nets
+
+        def box_vertical(box):
+            bx0, by0, bx1, by1 = box
+            return (by1 - by0) >= (bx1 - bx0)
+
+        a_vert, b_vert = box_vertical(box_a), box_vertical(box_b)
+        # v34/108.35: a complex/multi-segment net may still be moved when
+        # THIS box is its horizontal M1 trunk piece -- try_fix_horizontal
+        # relocates the whole trunk + every stub + every via together,
+        # live-checked, so it carries none of the single-segment cascade
+        # risk try_fix_vertical does. Only a VERTICAL box on a complex net
+        # remains off-limits.
+        a_ok = (na not in complex_nets) or not a_vert
+        b_ok = (nb not in complex_nets) or not b_vert
         if not a_ok and not b_ok:
-            print(f"iteration {it}: {na} <-> {nb} on {lyr} -- BOTH sides are multi-segment/"
-                  f"high-fanout nets, refusing to move either (too high a cascade risk) -- "
-                  f"unresolved")
+            print(f"iteration {it}: {na} <-> {nb} on {lyr} -- BOTH sides are a complex net's "
+                  f"vertical (single M2 segment) box, refusing to move either (too high a "
+                  f"cascade risk) -- unresolved")
             permanently_failed.add((na, nb))
             continue
         if a_ok and b_ok:

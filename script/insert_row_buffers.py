@@ -78,10 +78,26 @@ TARGET_NETS = ["scl", "scl_n"]
 
 
 def main(in_path=V3_PATH, out_path=V4_PATH, row_assignment_json=ROW_ASSIGNMENT_JSON,
-         target_nets=None):
+         target_nets=None, partition_fn=None):
+    """partition_fn: optional (instances, widths, n_rows) -> {name: row}
+    override for the reference partition (design_notes.md 108.28/108.30).
+    Defaults to plain fm_partition.fm_multiway_partition (no functional-
+    group awareness -- the original v3->v4/v8 behavior, kept unchanged
+    for those callers). Pass
+    functools.partial(apply_dff_group_constraints.fm_multiway_partition_grouped,
+    balance_tol=apply_dff_group_constraints.GROUPED_BALANCE_TOL) (or an
+    equivalent lambda) to make this reference pass respect the 108.23
+    functional grouping instead -- this is what closes 108.28's "pipeline
+    call-sites were not yet rewired" gap for the V10 run. Not imported at
+    module level to avoid a hard dependency: apply_dff_group_constraints.py
+    imports THIS module's sibling machinery (fm_partition) but not vice
+    versa, so importing it here unconditionally would only be needed by
+    callers who actually want grouping."""
     global TARGET_NETS
     if target_nets is not None:
         TARGET_NETS = target_nets
+    if partition_fn is None:
+        partition_fn = fm_multiway_partition
     macros = parse_lef()
     widths = {name: m["size"][0] for name, m in macros.items()}
 
@@ -90,7 +106,7 @@ def main(in_path=V3_PATH, out_path=V4_PATH, row_assignment_json=ROW_ASSIGNMENT_J
 
     print(f"parsed {len(instances)} instances from {in_path}")
 
-    part = fm_multiway_partition(instances, widths, N_ROWS)
+    part = partition_fn(instances, widths, N_ROWS)
     print(f"reference row assignment computed ({N_ROWS} rows)")
     row_counts = {}
     for name, r in part.items():

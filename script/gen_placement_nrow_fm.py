@@ -470,7 +470,7 @@ def pack_row_distributed(cell_queue, widths, n_gaps, anchor="left",
     return placed, x
 
 
-def main(net_file=None, out_json=OUT_JSON, part_json=None):
+def main(net_file=None, out_json=OUT_JSON, part_json=None, reorder_row_tail=None):
     """net_file: override netlist_parser's default NET_PATH (section 40 --
     used to point this at i2c_slave_async_net_v4.v instead of the
     canonical i2c_slave_async_net.v, without touching netlist_parser.py's
@@ -483,7 +483,27 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
     recursive-bisection FM partition on a netlist that only differs by a
     handful of newly-inserted buffer instances was found to reshuffle the
     row assignment of many unrelated, unchanged instances (section 40),
-    defeating row-aware buffer insertion's whole purpose."""
+    defeating row-aware buffer insertion's whole purpose.
+
+    reorder_row_tail (108.33, V10): optional {row_idx: [instance_name,
+    ...]} -- moves the named instances (which must already be assigned
+    to that row) to the END of that row's cell queue, in the given
+    order, before gap-filling. _gaps_needed/pack_row_distributed fill
+    each row's TAP-bounded gaps strictly SEQUENTIALLY in queue order
+    (gap0 until full, then gap1, ...), so several large same-width cells
+    that land consecutively in the row's natural (netlist-declaration)
+    order all pack into the SAME gap with zero slack between them --
+    confirmed on V10's row2, where 5 consecutive 97.2um MUXDFFRB cells
+    (all from the same DFF_GROUPS cluster, sclN_txreg) filled gap1
+    completely (502.2um budget, 502.2um used, exactly 0 slack), leaving
+    no FILL-only crossing point anywhere in a contiguous 486um span --
+    route_channels_nrow_fm.py's row/channel clearance search then had no
+    valid X at all near that span, a hard routing failure NUDGE_BEFORE
+    can't fix (nudging needs slack in the SAME gap, and there was none).
+    Moving 1-2 of those cells to the row's queue tail pushes them into a
+    LATER gap that still has slack, freeing room in the original gap for
+    a natural FILL break -- a bin-packing-level fix, not a placement
+    nudge."""
     macros = parse_lef()
     net = parse_netlist(path=net_file) if net_file else parse_netlist()
     instances = net["instances"]
@@ -508,6 +528,19 @@ def main(net_file=None, out_json=OUT_JSON, part_json=None):
     rows_cells = [[] for _ in range(N_ROWS)]
     for typ, name, pins in instances:
         rows_cells[part[name]].append((typ, name, pins))
+
+    if reorder_row_tail:
+        for r, tail_names in reorder_row_tail.items():
+            tail_set = set(tail_names)
+            missing = tail_set - {n for _t, n, _p in rows_cells[r]}
+            assert not missing, f"reorder_row_tail: {missing} not assigned to row{r}"
+            by_name = {n: (t, n, p) for t, n, p in rows_cells[r]}
+            head = [item for item in rows_cells[r] if item[1] not in tail_set]
+            tail = [by_name[n] for n in tail_names]
+            rows_cells[r] = head + tail
+            print(f"reorder_row_tail: moved {len(tail_names)} instance(s) to the end of "
+                  f"row{r}'s queue: {tail_names}")
+
     for r, cells in enumerate(rows_cells):
         w = sum(widths[t] for t, _n, _p in cells)
         print(f"row{r}: {len(cells)} cells, natural width {w:.1f} um")

@@ -273,8 +273,7 @@ x_472_ VDD _077_ rst_n _137_ GND NAND2
 **               判定系をまとめ、last_bit_pendingの大きなファンアウトを
 **               bit_cnt/phase・shreg/rx_dataの双方から分離、1->3)
 **   _156__row3: rx_data_0..7          (8ビットを1系統に統合、7->8)
-**   scl_n_row0: txreg_0..3            (3->4、負荷均等化)
-**   scl_n_row2: txreg_4..7            (5->4、負荷均等化)
+**   [108.32で変更、下記txreg_0..7参照]
 **   scl_n_row3: sda_oe_r              (108.22から変更なし)
 ** DFFRB STDCELL自体には一切手を加えていない。
 x_504_ VDD _213_ _067_ addr_match _016_ GND _156__row2 DFFRB
@@ -285,10 +284,27 @@ x_508_ VDD _215_ _069_ rw _016_ GND _156__row2 DFFRB
 x_509_ VDD _210_ _064_ phase_0 _016_ GND _156__row1 DFFRB
 x_510_ VDD _209_ _063_ phase_1 _016_ GND _156__row1 DFFRB
 x_511_ VDD _216_ _070_ phase_2 _016_ GND _156__row1 DFFRB
-x_512_ VDD _208_ _062_ txreg_0 _017_ GND scl_n_row0 DFFRB
-x_513_ VDD _207_ _061_ txreg_1 _017_ GND scl_n_row0 DFFRB
-x_514_ VDD _206_ _060_ txreg_2 _017_ GND scl_n_row0 DFFRB
-x_515_ VDD _205_ _059_ txreg_3 _017_ GND scl_n_row0 DFFRB
+** 2026-09-02 MANUAL SIMULATION-ONLY PATCH (design_notes.md section 108.32):
+** V10配置パイプライン（script/apply_dff_group_constraints.py、108.31）が
+** 実際に選んだscl_n系統の新しい行バッファ分割をSPICEで検証するための
+** 変更（ユーザー要望：「SCLのグループ分けが変わったことをSPICEで
+** 検証したい」）。108.23のtxreg_0..3/txreg_4..7という単純な折半では
+** なく、V10ではDFF_GROUPSをsclN_txreg_split0..3（各2ビットずつ）に
+** 4分割した上でFMの幅バランス（_rebalance_clusters_by_width）に
+** 委ねた結果、以下の非対称な分割が選ばれた：
+**   scl_n_row1: txreg_2, txreg_3     (2負荷、新設バッファ)
+**   scl_n_row2: txreg_0, txreg_1, txreg_4, txreg_5, txreg_6, txreg_7 (6負荷)
+**   scl_n_row3: sda_oe_r             (1負荷、108.22から変更なし)
+**   scl_n_row0: （scl_nドメインの割り当てなし、108.23までのtxreg_0..3
+**               用バッファは未使用のまま残置——108.20のrow0と同じ扱い）
+** row2が6負荷と108.19/108.21の過負荷パターン（14負荷）よりは十分軽い
+** ものの108.23の4負荷より重いため、この非対称配分でDFFRBの捕獲不良が
+** 再発しないことをSPICEで確認する。DFFRB STDCELL自体には一切手を
+** 加えていない。
+x_512_ VDD _208_ _062_ txreg_0 _017_ GND scl_n_row2 DFFRB
+x_513_ VDD _207_ _061_ txreg_1 _017_ GND scl_n_row2 DFFRB
+x_514_ VDD _206_ _060_ txreg_2 _017_ GND scl_n_row1 DFFRB
+x_515_ VDD _205_ _059_ txreg_3 _017_ GND scl_n_row1 DFFRB
 x_516_ VDD _204_ _058_ txreg_4 _017_ GND scl_n_row2 DFFRB
 x_517_ VDD _203_ _057_ txreg_5 _017_ GND scl_n_row2 DFFRB
 x_518_ VDD _202_ _056_ txreg_6 _017_ GND scl_n_row2 DFFRB
@@ -375,8 +391,13 @@ xu_lat_qn VDD qn _167_ busy GND NOR2
 xu_rst_stretch_q VDD rst_scl_domain_held _144_ rst_stretch_qn GND NOR2
 xu_rst_stretch_qn VDD rst_stretch_qn _143_ rst_scl_domain_held GND NOR2
 xu_buf_scl_row2 VDD scl_buf scl_row2 GND BUF_X1
+** scl_n_row0: 108.32でtxreg_0..3がscl_n_row1/row2へ付け替えられたため
+** 負荷ゼロになった（108.20のxu_buf__156__row0と同じ、未使用のまま残置）。
 xu_buf_scl_n_row0 VDD scl_n scl_n_row0 GND BUF_X1
 xu_buf_scl_n_row2 VDD scl_n scl_n_row2 GND BUF_X1
+** 2026-09-02 MANUAL SIMULATION-ONLY PATCH (design_notes.md section 108.32):
+** V10の行バッファ分割検証用に新設（txreg_2/3専用、上記x_514_/x_515_参照）。
+xu_buf_scl_n_row1 VDD scl_n scl_n_row1 GND BUF_X1
 ** 2026-09-02 MANUAL SIMULATION-ONLY PATCH (design_notes.md section 108.22):
 ** sda_oe_r was sharing `scl_n_row0` with txreg_0/1/2 (4 DFFRB loads total
 ** on one BUF_X1). A wrdata trace showed sda_oe_r's D-input (_005_) settled

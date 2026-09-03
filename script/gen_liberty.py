@@ -86,6 +86,70 @@ def comb_cell(name, area, in_pins, func, sense, delay):
     out += "        }\n    }\n"
     return out
 
+def latch_cell(name, area, set_pin, clear_pin):
+    """SR-latch (cross-coupled NOR2 pair, design_notes.md 108.27/108.29/
+    108.41): Liberty has no clean native primitive for a bare NOR-NOR SR
+    latch (its `latch()` group is written for a D-latch with an enable),
+    so this is modeled, same placeholder spirit as ff_cell() below, as a
+    transparent latch whose data_in/enable are chosen so ABC's liberty
+    reader accepts a syntactically valid sequential element with the
+    right pin set/directions -- NOT a rigorous SR-latch timing model.
+    RSLATCH is never actually synthesis-mapped TO by ABC in this flow
+    (merge_muxdffrb_rslatch.py inserts it via a post-synthesis text
+    transform on cross-coupled NOR2 pairs it finds directly), so this
+    entry exists for library completeness/LVS-adjacent consistency with
+    every other STDCELL, not because ABC needs to map onto it."""
+    out = f"    cell({name}) {{\n        area: {area};\n"
+    out += "        latch(IQ, IQN) {\n"
+    out += f"            enable  : \"{set_pin} + {clear_pin}\";\n"
+    out += f"            data_in : \"{set_pin}\";\n"
+    out += f"            clear   : \"{clear_pin}\";\n"
+    out += "        }\n"
+    out += f"        pin({set_pin})   {{ direction: input; capacitance: 1.0; }}\n"
+    out += f"        pin({clear_pin}) {{ direction: input; capacitance: 1.0; }}\n"
+    for outpin, func in (("Q", "IQ"), ("QB", "IQN")):
+        out += f"        pin({outpin}) {{\n            direction: output; function: \"{func}\";\n"
+        out += timing_block(set_pin, "non_unate", "0.15")
+        out += timing_block(clear_pin, "non_unate", "0.15")
+        out += "        }\n"
+    out += "    }\n"
+    return out
+
+
+def muxdffrb_cell(name, area, rst_pin, rst_attr, active_low=True):
+    """DFFRB with a MUX2(A,B,S) folded directly into its D input
+    (design_notes.md 108.27/108.29): same ff() shape as ff_cell() below,
+    but next_state is the MUX2 function of A/B/S instead of a bare D pin
+    -- MUX2's own function string/timing_sense/delay (COMB_CELLS' MUX2
+    entry) is reused here so this stays consistent if that entry ever
+    changes. CK/RSTB timing arcs and clear polarity are exactly
+    ff_cell()'s DFFRB entry (same physical DFFRB half of the compound
+    cell); the mux select-to-output arc uses MUX2's own delay/sense."""
+    mux_func = "(S*B)+(S'*A)"
+    mux_sense = "non_unate"
+    mux_delay = "0.2"
+    rst_expr = f"!{rst_pin}" if active_low else rst_pin
+    out = f"    cell({name}) {{\n        area: {area};\n"
+    out += "        ff(IQ, IQN) {\n"
+    out += "            clocked_on : \"CK\";\n"
+    out += f"            next_state : \"{mux_func}\";\n"
+    out += f"            {rst_attr:8s} : \"{rst_expr}\";\n"
+    out += "        }\n"
+    out += "        pin(CK)  { direction: input; clock: true; capacitance: 1.0; }\n"
+    for p in ("A", "B", "S"):
+        out += f"        pin({p})   {{ direction: input; capacitance: 1.0; }}\n"
+    out += f"        pin({rst_pin}) {{ direction: input; capacitance: 1.0; }}\n"
+    for outpin, func in (("Q", "IQ"), ("QB", "IQN")):
+        out += f"        pin({outpin}) {{\n            direction: output; function: \"{func}\";\n"
+        out += timing_block("CK", "non_unate", "0.25")
+        out += timing_block(rst_pin, "non_unate", "0.2")
+        for mux_pin in ("A", "B", "S"):
+            out += timing_block(mux_pin, mux_sense, mux_delay)
+        out += "        }\n"
+    out += "    }\n"
+    return out
+
+
 def ff_cell(name, area, rst_pin, rst_attr, active_low=False):
     # active_low=True emits the Liberty "!pin" inversion syntax on the
     # clear/preset attribute (see design_notes.md: DFFR.RSTB was
@@ -157,12 +221,34 @@ FF_CELLS = [
     ("DFFS", 8, "SET",  "preset", False),
 ]
 
+# RSLATCH (design_notes.md 108.27/108.29/108.41): cross-coupled NOR2 SR
+# latch, added by the user as a dedicated STDCELL. Area 3 = 2x NOR2's
+# own 1.5 (RSLATCH really is 2 NOR2 gates cross-coupled -- confirmed via
+# LVS-extracted transistor count, 108.41: 8 transistors = 2x NOR2's 4).
+LATCH_CELLS = [
+    ("RSLATCH", 3, "S", "R"),
+]
+
+# MUXDFFRB (design_notes.md 108.27/108.29/108.41): DFFRB with a
+# MUX2(A,B,S) folded into its D input. Area 11 = DFFRB's 8 + MUX2's 3
+# (confirmed via LVS-extracted transistor count, 108.41: 38 transistors
+# vs a standalone DFFRB+MUX2's combined transistor count in the same
+# ballpark). Same RSTB polarity as DFFRB (same physical DFFRB half).
+MUXFF_CELLS = [
+    ("MUXDFFRB", 11, "RSTB", "clear", True),
+]
+
+
 def main():
     out = HEADER
     for name, area, in_pins, func, sense, delay in COMB_CELLS:
         out += comb_cell(name, area, in_pins, func, sense, delay)
     for name, area, rst_pin, rst_attr, active_low in FF_CELLS:
         out += ff_cell(name, area, rst_pin, rst_attr, active_low)
+    for name, area, set_pin, clear_pin in LATCH_CELLS:
+        out += latch_cell(name, area, set_pin, clear_pin)
+    for name, area, rst_pin, rst_attr, active_low in MUXFF_CELLS:
+        out += muxdffrb_cell(name, area, rst_pin, rst_attr, active_low)
     out += "}\n"
     print(out, end="")
 

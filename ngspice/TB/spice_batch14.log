@@ -600,7 +600,7 @@ xdut.x2._208_                                5
 xdut.x2.x_512_.qs                  7.29558e-08
 xdut.x2.x_512_.net5                4.95168e-08
 xdut.x2.x_512_.net6                   0.034793
-xdut.x2.scl_n_row0                 2.05775e-08
+xdut.x2.scl_n_row2                 2.05775e-08
 xdut.x2.x_513_.net1                          5
 xdut.x2.x_513_.net2                          5
 xdut.x2.x_513_.ckp                 2.08524e-08
@@ -623,6 +623,7 @@ xdut.x2._206_                                5
 xdut.x2.x_514_.qs                  7.29558e-08
 xdut.x2.x_514_.net5                4.95168e-08
 xdut.x2.x_514_.net6                   0.034793
+xdut.x2.scl_n_row1                 2.05775e-08
 xdut.x2.x_515_.net1                          5
 xdut.x2.x_515_.net2                          5
 xdut.x2.x_515_.ckp                 2.08524e-08
@@ -645,7 +646,6 @@ xdut.x2._204_                                5
 xdut.x2.x_516_.qs                  7.29558e-08
 xdut.x2.x_516_.net5                4.95168e-08
 xdut.x2.x_516_.net6                   0.034793
-xdut.x2.scl_n_row2                 2.05775e-08
 xdut.x2.x_517_.net1                          5
 xdut.x2.x_517_.net2                          5
 xdut.x2.x_517_.ckp                 2.08524e-08
@@ -894,7 +894,9 @@ xdut.x2.xu_rst_stretch_qn.net1         4.96992
 xdut.x2.xu_buf_scl_row2.net1       2.05775e-08
 xdut.x2.scl_buf                              5
 xdut.x2.xu_buf_scl_n_row0.net1               5
+xdut.x2.scl_n_row0                 2.05775e-08
 xdut.x2.xu_buf_scl_n_row2.net1               5
+xdut.x2.xu_buf_scl_n_row1.net1               5
 xdut.x2.xu_buf_scl_n_row3.net1               5
 xdut.x2.xu_bufth_scl.mid           4.02692e-08
 xdut.x2.xu_bufth_scl.net1              1.27314
@@ -922,27 +924,27 @@ vtx0#branch                        2.26037e-10
 vdis#branch                       -1.90041e-11
 vrstn#branch                       2.26037e-10
 vvss#branch                        1.80383e-09
-vvdd#branch                       -4.95929e-06
+vvdd#branch                       -4.95931e-06
 
- Reference value :  2.67500e-06 Reference value :  7.27227e-06 Reference value :  1.22902e-05 Reference value :  1.69851e-05 Reference value :  2.19192e-05 Reference value :  2.40296e-05 Reference value :  3.19753e-05 Reference value :  3.69006e-05 Reference value :  3.70064e-05 Reference value :  4.20402e-05 Reference value :  4.67850e-05 Reference value :  4.70080e-05 Reference value :  5.62250e-05 Reference value :  6.19730e-05 Reference value :  6.69819e-05 Reference value :  7.31750e-05 Reference value :  7.69927e-05 Reference value :  8.19834e-05 Reference value :  8.73399e-05 Reference value :  9.43638e-05 Reference value :  9.69924e-05 Reference value :  1.02025e-04 Reference value :  1.07070e-04 Reference value :  1.12260e-04 Reference value :  1.16969e-04 Reference value :  1.19961e-04 Reference value :  1.22258e-04 Reference value :  1.27000e-04 Reference value :  1.31994e-04 Reference value :  1.34787e-04 Reference value :  1.41980e-04 Reference value :  1.46986e-04 Reference value :  1.51904e-04 Reference value :  1.52313e-04 Reference value :  1.59518e-04 Reference value :  1.62260e-04 Reference value :  1.66992e-04 Reference value :  1.72266e-04 Reference value :  1.77323e-04 Reference value :  1.82001e-04 Reference value :  1.86982e-04 Reference value :  1.92000e-04 Reference value :  1.92275e-04 Reference value :  1.99486e-04 Reference value :  2.05444e-04 Reference value :  2.16932e-04 Reference value :  2.16992e-04 Reference value :  2.22116e-04 Reference value :  2.26969e-04 Reference value :  2.29929e-04 Reference value :  2.32275e-04 Reference value :  2.39708e-04 Reference value :  2.42256e-04 Reference value :  2.46979e-04 Reference value :  2.50275e-04 Reference value :  2.52273e-04 Reference value :  2.56987e-04 Reference value :  2.61967e-04 Reference value :  2.66969e-04 Reference value :  2.67228e-04 Reference value :  2.72525e-04 Reference value :  2.79509e-04 Reference value :  2.86969e-04 Reference value :  2.87196e-04 Reference value :  2.91997e-04 Reference value :  2.93316e-04 Reference value :  2.96994e-04 Reference value :  3.01034e-04 Reference value :  3.06977e-04 Reference value :  3.07560e-04 Reference value :  3.11995e-04 Reference value :  3.16977e-04 Reference value :  3.20619e-04 Reference value :  3.26275e-04 Reference value :  3.31973e-04 Reference value :  3.33475e-04 Reference value :  3.36991e-04 Reference value :  3.41936e-04 Reference value :  3.45275e-04 Reference value :  3.51901e-04 Reference value :  3.56949e-04 Reference value :  3.57000e-04 Reference value :  3.61975e-04 Reference value :  3.66969e-04 Reference value :  3.67015e-04 Reference value :  3.75025e-04 Reference value :  3.76989e-04 Reference value :  3.81578e-04 Reference value :  3.86969e-04 Reference value :  3.87015e-04 Reference value :  3.92000e-04 Reference value :  3.96902e-04 Reference value :  3.97008e-04 Reference value :  4.01991e-04 Reference value :  4.03419e-04 Reference value :  4.11956e-04 Reference value :  4.17525e-04 Reference value :  4.26962e-04 Reference value :  4.27916e-04 Reference value :  4.35275e-04 Reference value :  4.41844e-04 Reference value :  4.46977e-04 Reference value :  4.51901e-04 Reference value :  4.52298e-04 Reference value :  4.56989e-04 Reference value :  4.61974e-04 Reference value :  4.62276e-04 Reference value :  4.66989e-04 Reference value :  4.71983e-04 Reference value :  4.77002e-04 Reference value :  4.83075e-04 Reference value :  4.86994e-04 Reference value :  4.92245e-04 Reference value :  4.96967e-04 Reference value :  5.02245e-04 Reference value :  5.06900e-04 Reference value :  5.11974e-04 Reference value :  5.12671e-04 Reference value :  5.21361e-04 Reference value :  5.22261e-04 Reference value :  5.26970e-04 Reference value :  5.31151e-04 Reference value :  5.37005e-04
-No. of Data Rows : 17590
+ Reference value :  2.97500e-06 Reference value :  7.62227e-06 Reference value :  1.22902e-05 Reference value :  1.69851e-05 Reference value :  2.13767e-05 Reference value :  2.22758e-05 Reference value :  2.94467e-05 Reference value :  3.34211e-05 Reference value :  4.04515e-05 Reference value :  4.22714e-05 Reference value :  4.91990e-05 Reference value :  5.69820e-05 Reference value :  6.26750e-05 Reference value :  7.08094e-05 Reference value :  7.69820e-05 Reference value :  8.22571e-05 Reference value :  8.69910e-05 Reference value :  9.00144e-05 Reference value :  9.68569e-05 Reference value :  1.01997e-04 Reference value :  1.06938e-04 Reference value :  1.11990e-04 Reference value :  1.15677e-04 Reference value :  1.17001e-04 Reference value :  1.22294e-04 Reference value :  1.27648e-04 Reference value :  1.32269e-04 Reference value :  1.38177e-04 Reference value :  1.41996e-04 Reference value :  1.46998e-04 Reference value :  1.52256e-04 Reference value :  1.56997e-04 Reference value :  1.62252e-04 Reference value :  1.66967e-04 Reference value :  1.72215e-04 Reference value :  1.76999e-04 Reference value :  1.81994e-04 Reference value :  1.86969e-04 Reference value :  1.87013e-04 Reference value :  1.91990e-04 Reference value :  1.92258e-04 Reference value :  1.96993e-04 Reference value :  2.02012e-04 Reference value :  2.14025e-04 Reference value :  2.16985e-04 Reference value :  2.21991e-04 Reference value :  2.26438e-04 Reference value :  2.31988e-04 Reference value :  2.32276e-04 Reference value :  2.39858e-04 Reference value :  2.42521e-04 Reference value :  2.46993e-04 Reference value :  2.51991e-04 Reference value :  2.55735e-04 Reference value :  2.57000e-04 Reference value :  2.64525e-04 Reference value :  2.66991e-04 Reference value :  2.71975e-04 Reference value :  2.76985e-04 Reference value :  2.81936e-04 Reference value :  2.85425e-04 Reference value :  2.91974e-04 Reference value :  2.92311e-04 Reference value :  2.99555e-04 Reference value :  3.02005e-04 Reference value :  3.06982e-04 Reference value :  3.12925e-04 Reference value :  3.16995e-04 Reference value :  3.21991e-04 Reference value :  3.26973e-04 Reference value :  3.28428e-04 Reference value :  3.32029e-04 Reference value :  3.36977e-04 Reference value :  3.40318e-04 Reference value :  3.43275e-04 Reference value :  3.46996e-04 Reference value :  3.51920e-04 Reference value :  3.57000e-04 Reference value :  3.63325e-04 Reference value :  3.66995e-04 Reference value :  3.71640e-04 Reference value :  3.76977e-04 Reference value :  3.80136e-04 Reference value :  3.86982e-04 Reference value :  3.91980e-04 Reference value :  3.94275e-04 Reference value :  3.96999e-04 Reference value :  4.01975e-04 Reference value :  4.04132e-04 Reference value :  4.11956e-04 Reference value :  4.17075e-04 Reference value :  4.26960e-04 Reference value :  4.27016e-04 Reference value :  4.33025e-04 Reference value :  4.36995e-04 Reference value :  4.42475e-04 Reference value :  4.50109e-04 Reference value :  4.53821e-04 Reference value :  4.61975e-04 Reference value :  4.64482e-04 Reference value :  4.66999e-04 Reference value :  4.72002e-04 Reference value :  4.76990e-04 Reference value :  4.81996e-04 Reference value :  4.86973e-04 Reference value :  4.91194e-04 Reference value :  4.92261e-04 Reference value :  4.96989e-04 Reference value :  5.02258e-04 Reference value :  5.06984e-04 Reference value :  5.11988e-04 Reference value :  5.15621e-04 Reference value :  5.17001e-04 Reference value :  5.21985e-04 Reference value :  5.25334e-04 Reference value :  5.31997e-04 Reference value :  5.40575e-04
+No. of Data Rows : 17340
 
   Measurements for Transient Analysis
 
 busy_after_start    =  5.00000e+00
 ack_addr_write      =  4.44619e-02
 addr_match_write    =  5.00000e+00
-rw_write            =  2.05337e-08
+rw_write            =  2.23147e-08
 ack_data            =  4.44619e-02
 rx_data_bit0        =  5.00000e+00
-rx_data_bit1        =  2.08529e-08
+rx_data_bit1        =  2.08521e-08
 rx_data_bit2        =  5.00000e+00
-rx_data_bit3        =  2.08529e-08
-rx_data_bit4        =  2.08529e-08
+rx_data_bit3        =  2.08521e-08
+rx_data_bit4        =  2.08521e-08
 rx_data_bit5        =  5.00000e+00
-rx_data_bit6        =  2.08529e-08
+rx_data_bit6        =  2.08521e-08
 rx_data_bit7        =  5.00000e+00
-busy_after_stop1    =  6.46899e-08
+busy_after_stop1    =  6.46900e-08
 ack_addr_read       =  4.44619e-02
 rw_read             =  5.00000e+00
 read_byte_bit0      =  4.44619e-02
@@ -953,382 +955,382 @@ read_byte_bit4      =  4.95050e+00
 read_byte_bit5      =  4.95050e+00
 read_byte_bit6      =  4.44619e-02
 read_byte_bit7      =  4.44619e-02
-busy_after_stop2    =  6.46904e-08
+busy_after_stop2    =  6.46906e-08
 nack_wrong_addr     =  4.95050e+00
-addr_match_wrong    =  2.17924e-08
-busy_after_stop3    =  6.46897e-08
+addr_match_wrong    =  2.13423e-08
+busy_after_stop3    =  6.46899e-08
 rxe_i7_pre50n_sel_087=  5.00000e+00
-rxe_i7_pre50n_last_bit_pending=  4.94018e-08
-rxe_i7_pre50n_shreg_0=  1.96204e-08
-rxe_i7_pre50n_shreg_1=  2.09917e-08
-rxe_i7_pre50n_shreg_2=  -1.91826e-07
-rxe_i7_pre50n_shreg_3=  1.94865e-08
-rxe_i7_pre50n_shreg_4=  3.18392e-08
-rxe_i7_pre50n_shreg_5=  -4.01134e-07
+rxe_i7_pre50n_last_bit_pending=  7.14930e-08
+rxe_i7_pre50n_shreg_0=  1.89717e-08
+rxe_i7_pre50n_shreg_1=  2.10117e-08
+rxe_i7_pre50n_shreg_2=  -1.91946e-07
+rxe_i7_pre50n_shreg_3=  2.13773e-08
+rxe_i7_pre50n_shreg_4=  1.84737e-08
+rxe_i7_pre50n_shreg_5=  -4.04610e-07
 rxe_i7_pre50n_shreg_6=  5.00000e+00
 rxe_i7_pre50n_sda_in_row2=  5.00000e+00
-rxe_i7_pre50n_scl_row2=  -6.31736e-08
+rxe_i7_pre50n_scl_row2=  -6.30547e-08
 rxe_i7_post50n_sel_087=  5.00000e+00
-rxe_i7_post50n_last_bit_pending=  4.92439e-08
+rxe_i7_post50n_last_bit_pending=  7.12419e-08
 rxe_i7_post50n_shreg_0=  5.00000e+00
-rxe_i7_post50n_shreg_1=  -1.96887e-06
-rxe_i7_post50n_shreg_2=  -4.04533e-05
-rxe_i7_post50n_shreg_3=  -1.96306e-06
-rxe_i7_post50n_shreg_4=  -3.44696e-09
-rxe_i7_post50n_shreg_5=  -8.10624e-05
-rxe_i7_post50n_shreg_6=  5.25630e-08
+rxe_i7_post50n_shreg_1=  -1.96325e-06
+rxe_i7_post50n_shreg_2=  -4.04206e-05
+rxe_i7_post50n_shreg_3=  -1.95794e-06
+rxe_i7_post50n_shreg_4=  -6.32904e-09
+rxe_i7_post50n_shreg_5=  -8.09967e-05
+rxe_i7_post50n_shreg_6=  6.89061e-08
 rxe_i7_post50n_sda_in_row2=  5.00000e+00
 rxe_i7_post50n_scl_row2=  5.00000e+00
 rxe_i7_post500n_sel_087=  5.00000e+00
-rxe_i7_post500n_last_bit_pending=  4.78357e-08
+rxe_i7_post500n_last_bit_pending=  6.94895e-08
 rxe_i7_post500n_shreg_0=  5.00000e+00
-rxe_i7_post500n_shreg_1=  -1.69489e-06
-rxe_i7_post500n_shreg_2=  -4.43779e-06
-rxe_i7_post500n_shreg_3=  -1.69064e-06
-rxe_i7_post500n_shreg_4=  4.64244e-09
-rxe_i7_post500n_shreg_5=  -8.93136e-06
-rxe_i7_post500n_shreg_6=  4.33445e-08
+rxe_i7_post500n_shreg_1=  -1.68904e-06
+rxe_i7_post500n_shreg_2=  -4.43815e-06
+rxe_i7_post500n_shreg_3=  -1.68593e-06
+rxe_i7_post500n_shreg_4=  6.20433e-09
+rxe_i7_post500n_shreg_5=  -8.93194e-06
+rxe_i7_post500n_shreg_6=  4.72170e-08
 rxe_i7_post500n_sda_in_row2=  5.00000e+00
 rxe_i7_post500n_scl_row2=  5.00000e+00
 rxe_i6_pre50n_sel_087=  5.00000e+00
-rxe_i6_pre50n_last_bit_pending=  3.34713e-08
+rxe_i6_pre50n_last_bit_pending=  4.99292e-08
 rxe_i6_pre50n_shreg_0=  5.00000e+00
-rxe_i6_pre50n_shreg_1=  -4.35112e-07
-rxe_i6_pre50n_shreg_2=  -1.88509e-07
-rxe_i6_pre50n_shreg_3=  -4.36635e-07
-rxe_i6_pre50n_shreg_4=  3.01562e-08
-rxe_i6_pre50n_shreg_5=  -3.94008e-07
-rxe_i6_pre50n_shreg_6=  2.08537e-08
-rxe_i6_pre50n_sda_in_row2=  1.43524e-07
-rxe_i6_pre50n_scl_row2=  -1.37036e-09
+rxe_i6_pre50n_shreg_1=  -4.34755e-07
+rxe_i6_pre50n_shreg_2=  -1.88506e-07
+rxe_i6_pre50n_shreg_3=  -4.34399e-07
+rxe_i6_pre50n_shreg_4=  1.84764e-08
+rxe_i6_pre50n_shreg_5=  -3.97267e-07
+rxe_i6_pre50n_shreg_6=  2.08539e-08
+rxe_i6_pre50n_sda_in_row2=  1.43680e-07
+rxe_i6_pre50n_scl_row2=  -1.26526e-08
 rxe_i6_post50n_sel_087=  5.00000e+00
-rxe_i6_post50n_last_bit_pending=  3.37483e-08
-rxe_i6_post50n_shreg_0=  1.87433e-07
+rxe_i6_post50n_last_bit_pending=  4.85965e-08
+rxe_i6_post50n_shreg_0=  1.85387e-07
 rxe_i6_post50n_shreg_1=  4.99997e+00
-rxe_i6_post50n_shreg_2=  -1.86436e-07
-rxe_i6_post50n_shreg_3=  -6.77485e-08
-rxe_i6_post50n_shreg_4=  1.93345e-08
-rxe_i6_post50n_shreg_5=  -3.92319e-07
-rxe_i6_post50n_shreg_6=  2.13573e-08
-rxe_i6_post50n_sda_in_row2=  5.62279e-06
+rxe_i6_post50n_shreg_2=  -1.87049e-07
+rxe_i6_post50n_shreg_3=  -6.38721e-08
+rxe_i6_post50n_shreg_4=  1.81469e-08
+rxe_i6_post50n_shreg_5=  -3.93292e-07
+rxe_i6_post50n_shreg_6=  2.05593e-08
+rxe_i6_post50n_sda_in_row2=  5.48718e-06
 rxe_i6_post50n_scl_row2=  5.00003e+00
 rxe_i6_post500n_sel_087=  5.00000e+00
-rxe_i6_post500n_last_bit_pending=  3.27774e-08
-rxe_i6_post500n_shreg_0=  1.63152e-07
+rxe_i6_post500n_last_bit_pending=  5.02630e-08
+rxe_i6_post500n_shreg_0=  1.63028e-07
 rxe_i6_post500n_shreg_1=  5.00000e+00
-rxe_i6_post500n_shreg_2=  -1.77852e-07
-rxe_i6_post500n_shreg_3=  1.57292e-08
-rxe_i6_post500n_shreg_4=  1.86670e-08
-rxe_i6_post500n_shreg_5=  -3.74830e-07
-rxe_i6_post500n_shreg_6=  2.05593e-08
-rxe_i6_post500n_sda_in_row2=  6.57202e-07
+rxe_i6_post500n_shreg_2=  -1.77422e-07
+rxe_i6_post500n_shreg_3=  1.71957e-08
+rxe_i6_post500n_shreg_4=  1.89004e-08
+rxe_i6_post500n_shreg_5=  -3.74392e-07
+rxe_i6_post500n_shreg_6=  2.14894e-08
+rxe_i6_post500n_sda_in_row2=  6.56320e-07
 rxe_i6_post500n_scl_row2=  5.00000e+00
 rxe_i5_pre50n_sel_087=  5.00000e+00
-rxe_i5_pre50n_last_bit_pending=  2.82138e-08
-rxe_i5_pre50n_shreg_0=  8.37940e-08
+rxe_i5_pre50n_last_bit_pending=  4.13261e-08
+rxe_i5_pre50n_shreg_0=  1.92239e-08
 rxe_i5_pre50n_shreg_1=  5.00000e+00
-rxe_i5_pre50n_shreg_2=  -8.19797e-08
-rxe_i5_pre50n_shreg_3=  1.95630e-08
-rxe_i5_pre50n_shreg_4=  2.89271e-08
-rxe_i5_pre50n_shreg_5=  -1.80603e-07
+rxe_i5_pre50n_shreg_2=  -8.19782e-08
+rxe_i5_pre50n_shreg_3=  2.14683e-08
+rxe_i5_pre50n_shreg_4=  1.84803e-08
+rxe_i5_pre50n_shreg_5=  -1.83892e-07
 rxe_i5_pre50n_shreg_6=  2.08547e-08
 rxe_i5_pre50n_sda_in_row2=  5.00000e+00
-rxe_i5_pre50n_scl_row2=  2.35503e-08
+rxe_i5_pre50n_scl_row2=  2.37192e-08
 rxe_i5_post50n_sel_087=  5.00000e+00
-rxe_i5_post50n_last_bit_pending=  2.85621e-08
+rxe_i5_post50n_last_bit_pending=  3.81755e-08
 rxe_i5_post50n_shreg_0=  5.00000e+00
-rxe_i5_post50n_shreg_1=  3.09584e-08
+rxe_i5_post50n_shreg_1=  3.04628e-08
 rxe_i5_post50n_shreg_2=  5.00000e+00
-rxe_i5_post50n_shreg_3=  2.70809e-08
-rxe_i5_post50n_shreg_4=  2.09001e-08
-rxe_i5_post50n_shreg_5=  2.98626e-08
-rxe_i5_post50n_shreg_6=  2.09007e-08
+rxe_i5_post50n_shreg_3=  -9.71295e-08
+rxe_i5_post50n_shreg_4=  -4.34561e-08
+rxe_i5_post50n_shreg_5=  -1.94471e-08
+rxe_i5_post50n_shreg_6=  1.76978e-08
 rxe_i5_post50n_sda_in_row2=  5.00000e+00
 rxe_i5_post50n_scl_row2=  5.00000e+00
 rxe_i5_post500n_sel_087=  5.00000e+00
-rxe_i5_post500n_last_bit_pending=  2.71739e-08
+rxe_i5_post500n_last_bit_pending=  4.36656e-08
 rxe_i5_post500n_shreg_0=  5.00000e+00
-rxe_i5_post500n_shreg_1=  -4.53229e-09
+rxe_i5_post500n_shreg_1=  1.47224e-08
 rxe_i5_post500n_shreg_2=  5.00000e+00
-rxe_i5_post500n_shreg_3=  8.72913e-10
-rxe_i5_post500n_shreg_4=  1.31835e-08
-rxe_i5_post500n_shreg_5=  2.47758e-08
-rxe_i5_post500n_shreg_6=  2.09239e-08
+rxe_i5_post500n_shreg_3=  1.27116e-07
+rxe_i5_post500n_shreg_4=  7.69139e-08
+rxe_i5_post500n_shreg_5=  7.19543e-08
+rxe_i5_post500n_shreg_6=  2.40369e-08
 rxe_i5_post500n_sda_in_row2=  5.00000e+00
 rxe_i5_post500n_scl_row2=  5.00000e+00
 rxe_i4_pre50n_sel_087=  5.00000e+00
-rxe_i4_pre50n_last_bit_pending=  2.55982e-08
+rxe_i4_pre50n_last_bit_pending=  3.64988e-08
 rxe_i4_pre50n_shreg_0=  5.00000e+00
-rxe_i4_pre50n_shreg_1=  8.52851e-08
+rxe_i4_pre50n_shreg_1=  2.55214e-08
 rxe_i4_pre50n_shreg_2=  5.00000e+00
-rxe_i4_pre50n_shreg_3=  2.11486e-08
-rxe_i4_pre50n_shreg_4=  2.79913e-08
-rxe_i4_pre50n_shreg_5=  3.17159e-08
+rxe_i4_pre50n_shreg_3=  2.30571e-08
+rxe_i4_pre50n_shreg_4=  1.84823e-08
+rxe_i4_pre50n_shreg_5=  2.83998e-08
 rxe_i4_pre50n_shreg_6=  2.08535e-08
-rxe_i4_pre50n_sda_in_row2=  1.43346e-07
-rxe_i4_pre50n_scl_row2=  -4.20075e-09
+rxe_i4_pre50n_sda_in_row2=  1.43358e-07
+rxe_i4_pre50n_scl_row2=  -3.46172e-10
 rxe_i4_post50n_sel_087=  5.00000e+00
-rxe_i4_post50n_last_bit_pending=  2.51962e-08
-rxe_i4_post50n_shreg_0=  8.68558e-08
+rxe_i4_post50n_last_bit_pending=  3.43441e-08
+rxe_i4_post50n_shreg_0=  5.15464e-09
 rxe_i4_post50n_shreg_1=  4.99998e+00
-rxe_i4_post50n_shreg_2=  2.81499e-05
+rxe_i4_post50n_shreg_2=  2.87544e-05
 rxe_i4_post50n_shreg_3=  5.00000e+00
-rxe_i4_post50n_shreg_4=  6.49862e-08
-rxe_i4_post50n_shreg_5=  -5.25809e-06
-rxe_i4_post50n_shreg_6=  2.90416e-08
-rxe_i4_post50n_sda_in_row2=  5.74421e-06
+rxe_i4_post50n_shreg_4=  3.67264e-08
+rxe_i4_post50n_shreg_5=  -5.41322e-06
+rxe_i4_post50n_shreg_6=  2.43710e-08
+rxe_i4_post50n_sda_in_row2=  5.94140e-06
 rxe_i4_post50n_scl_row2=  5.00003e+00
 rxe_i4_post500n_sel_087=  5.00000e+00
-rxe_i4_post500n_last_bit_pending=  2.59746e-08
-rxe_i4_post500n_shreg_0=  -5.53477e-08
+rxe_i4_post500n_last_bit_pending=  3.65142e-08
+rxe_i4_post500n_shreg_0=  2.18812e-08
 rxe_i4_post500n_shreg_1=  5.00000e+00
-rxe_i4_post500n_shreg_2=  3.53960e-06
+rxe_i4_post500n_shreg_2=  3.60156e-06
 rxe_i4_post500n_shreg_3=  5.00000e+00
-rxe_i4_post500n_shreg_4=  -3.18593e-08
-rxe_i4_post500n_shreg_5=  -5.99266e-07
-rxe_i4_post500n_shreg_6=  1.61651e-08
-rxe_i4_post500n_sda_in_row2=  6.34927e-07
+rxe_i4_post500n_shreg_4=  1.62137e-08
+rxe_i4_post500n_shreg_5=  -5.91118e-07
+rxe_i4_post500n_shreg_6=  2.09649e-08
+rxe_i4_post500n_sda_in_row2=  6.63285e-07
 rxe_i4_post500n_scl_row2=  5.00000e+00
 rxe_i3_pre50n_sel_087=  5.00000e+00
-rxe_i3_pre50n_last_bit_pending=  2.40403e-08
-rxe_i3_pre50n_shreg_0=  1.88648e-08
+rxe_i3_pre50n_last_bit_pending=  3.33708e-08
+rxe_i3_pre50n_shreg_0=  8.38112e-08
 rxe_i3_pre50n_shreg_1=  5.00000e+00
-rxe_i3_pre50n_shreg_2=  9.00041e-09
+rxe_i3_pre50n_shreg_2=  7.39651e-08
 rxe_i3_pre50n_shreg_3=  5.00000e+00
-rxe_i3_pre50n_shreg_4=  2.72900e-08
-rxe_i3_pre50n_shreg_5=  -1.28650e-07
-rxe_i3_pre50n_shreg_6=  2.08658e-08
-rxe_i3_pre50n_sda_in_row2=  5.06278e-08
-rxe_i3_pre50n_scl_row2=  -6.44585e-08
+rxe_i3_pre50n_shreg_4=  1.84854e-08
+rxe_i3_pre50n_shreg_5=  -1.31999e-07
+rxe_i3_pre50n_shreg_6=  2.08538e-08
+rxe_i3_pre50n_sda_in_row2=  5.07622e-08
+rxe_i3_pre50n_scl_row2=  -2.38374e-08
 rxe_i3_post50n_sel_087=  5.00000e+00
-rxe_i3_post50n_last_bit_pending=  5.01473e-08
-rxe_i3_post50n_shreg_0=  2.12896e-08
-rxe_i3_post50n_shreg_1=  2.23240e-07
+rxe_i3_post50n_last_bit_pending=  3.37935e-08
+rxe_i3_post50n_shreg_0=  4.05232e-09
+rxe_i3_post50n_shreg_1=  4.34863e-08
 rxe_i3_post50n_shreg_2=  5.00000e+00
-rxe_i3_post50n_shreg_3=  2.20194e-07
+rxe_i3_post50n_shreg_3=  4.15589e-08
 rxe_i3_post50n_shreg_4=  5.00000e+00
-rxe_i3_post50n_shreg_5=  -6.77516e-08
-rxe_i3_post50n_shreg_6=  2.31514e-08
-rxe_i3_post50n_sda_in_row2=  1.75452e-07
+rxe_i3_post50n_shreg_5=  2.67115e-08
+rxe_i3_post50n_shreg_6=  9.93504e-09
+rxe_i3_post50n_sda_in_row2=  1.65486e-07
 rxe_i3_post50n_scl_row2=  5.00000e+00
 rxe_i3_post500n_sel_087=  5.00000e+00
-rxe_i3_post500n_last_bit_pending=  2.48912e-08
-rxe_i3_post500n_shreg_0=  1.86355e-08
-rxe_i3_post500n_shreg_1=  1.65673e-07
+rxe_i3_post500n_last_bit_pending=  3.34968e-08
+rxe_i3_post500n_shreg_0=  9.72647e-09
+rxe_i3_post500n_shreg_1=  3.39506e-08
 rxe_i3_post500n_shreg_2=  5.00000e+00
-rxe_i3_post500n_shreg_3=  1.62992e-07
+rxe_i3_post500n_shreg_3=  3.26547e-08
 rxe_i3_post500n_shreg_4=  5.00000e+00
-rxe_i3_post500n_shreg_5=  2.41011e-08
-rxe_i3_post500n_shreg_6=  2.08770e-08
-rxe_i3_post500n_sda_in_row2=  1.46157e-07
+rxe_i3_post500n_shreg_5=  2.88784e-08
+rxe_i3_post500n_shreg_6=  1.44706e-08
+rxe_i3_post500n_sda_in_row2=  1.39726e-07
 rxe_i3_post500n_scl_row2=  5.00000e+00
 rxe_i2_pre50n_sel_087=  5.00000e+00
-rxe_i2_pre50n_last_bit_pending=  2.29955e-08
-rxe_i2_pre50n_shreg_0=  1.88272e-08
-rxe_i2_pre50n_shreg_1=  3.12213e-08
+rxe_i2_pre50n_last_bit_pending=  3.11563e-08
+rxe_i2_pre50n_shreg_0=  5.19197e-08
+rxe_i2_pre50n_shreg_1=  2.07612e-08
 rxe_i2_pre50n_shreg_2=  5.00000e+00
-rxe_i2_pre50n_shreg_3=  3.12873e-08
+rxe_i2_pre50n_shreg_3=  2.07828e-08
 rxe_i2_pre50n_shreg_4=  5.00000e+00
-rxe_i2_pre50n_shreg_5=  3.43272e-08
+rxe_i2_pre50n_shreg_5=  3.09641e-08
 rxe_i2_pre50n_shreg_6=  2.08461e-08
 rxe_i2_pre50n_sda_in_row2=  5.00000e+00
-rxe_i2_pre50n_scl_row2=  -6.50937e-08
+rxe_i2_pre50n_scl_row2=  -6.48936e-08
 rxe_i2_post50n_sel_087=  5.00000e+00
-rxe_i2_post50n_last_bit_pending=  2.32811e-08
+rxe_i2_post50n_last_bit_pending=  3.14637e-08
 rxe_i2_post50n_shreg_0=  5.00001e+00
-rxe_i2_post50n_shreg_1=  -6.35221e-05
-rxe_i2_post50n_shreg_2=  -2.72198e-05
+rxe_i2_post50n_shreg_1=  -6.35308e-05
+rxe_i2_post50n_shreg_2=  -2.72203e-05
 rxe_i2_post50n_shreg_3=  4.99998e+00
-rxe_i2_post50n_shreg_4=  2.52054e-08
+rxe_i2_post50n_shreg_4=  2.53000e-08
 rxe_i2_post50n_shreg_5=  4.99999e+00
-rxe_i2_post50n_shreg_6=  2.20667e-08
+rxe_i2_post50n_shreg_6=  2.21063e-08
 rxe_i2_post50n_sda_in_row2=  5.00000e+00
 rxe_i2_post50n_scl_row2=  5.00000e+00
 rxe_i2_post500n_sel_087=  5.00000e+00
-rxe_i2_post500n_last_bit_pending=  2.33609e-08
+rxe_i2_post500n_last_bit_pending=  3.14935e-08
 rxe_i2_post500n_shreg_0=  5.00000e+00
-rxe_i2_post500n_shreg_1=  -9.06100e-06
-rxe_i2_post500n_shreg_2=  -4.06552e-06
+rxe_i2_post500n_shreg_1=  -9.06148e-06
+rxe_i2_post500n_shreg_2=  -4.06576e-06
 rxe_i2_post500n_shreg_3=  5.00000e+00
-rxe_i2_post500n_shreg_4=  2.65180e-08
+rxe_i2_post500n_shreg_4=  2.65345e-08
 rxe_i2_post500n_shreg_5=  5.00000e+00
-rxe_i2_post500n_shreg_6=  2.21030e-08
+rxe_i2_post500n_shreg_6=  2.21281e-08
 rxe_i2_post500n_sda_in_row2=  5.00000e+00
 rxe_i2_post500n_scl_row2=  5.00000e+00
 rxe_i1_pre50n_sel_087=  5.00000e+00
-rxe_i1_pre50n_last_bit_pending=  2.22736e-08
+rxe_i1_pre50n_last_bit_pending=  2.95278e-08
 rxe_i1_pre50n_shreg_0=  5.00000e+00
-rxe_i1_pre50n_shreg_1=  -5.39963e-07
-rxe_i1_pre50n_shreg_2=  -1.83257e-07
+rxe_i1_pre50n_shreg_1=  -5.48815e-07
+rxe_i1_pre50n_shreg_2=  -1.83277e-07
 rxe_i1_pre50n_shreg_3=  5.00000e+00
-rxe_i1_pre50n_shreg_4=  2.01763e-08
+rxe_i1_pre50n_shreg_4=  2.01588e-08
 rxe_i1_pre50n_shreg_5=  5.00000e+00
 rxe_i1_pre50n_shreg_6=  2.08539e-08
 rxe_i1_pre50n_sda_in_row2=  1.43476e-07
-rxe_i1_pre50n_scl_row2=  -4.82151e-09
-rxe_i1_post50n_sel_087=  -2.21357e-05
+rxe_i1_pre50n_scl_row2=  -5.09371e-09
+rxe_i1_post50n_sel_087=  -2.24641e-05
 rxe_i1_post50n_last_bit_pending=  5.00000e+00
-rxe_i1_post50n_shreg_0=  7.26485e-09
+rxe_i1_post50n_shreg_0=  7.67240e-09
 rxe_i1_post50n_shreg_1=  5.00000e+00
-rxe_i1_post50n_shreg_2=  5.37616e-09
-rxe_i1_post50n_shreg_3=  6.90040e-09
+rxe_i1_post50n_shreg_2=  5.66789e-09
+rxe_i1_post50n_shreg_3=  7.64086e-09
 rxe_i1_post50n_shreg_4=  5.00000e+00
-rxe_i1_post50n_shreg_5=  7.23743e-09
+rxe_i1_post50n_shreg_5=  7.44481e-09
 rxe_i1_post50n_shreg_6=  5.00000e+00
-rxe_i1_post50n_sda_in_row2=  6.06868e-06
+rxe_i1_post50n_sda_in_row2=  6.06745e-06
 rxe_i1_post50n_scl_row2=  5.00003e+00
-rxe_i1_post500n_sel_087=  1.57440e-06
+rxe_i1_post500n_sel_087=  1.60294e-06
 rxe_i1_post500n_last_bit_pending=  5.00000e+00
-rxe_i1_post500n_shreg_0=  5.25425e-08
+rxe_i1_post500n_shreg_0=  5.26545e-08
 rxe_i1_post500n_shreg_1=  5.00000e+00
-rxe_i1_post500n_shreg_2=  4.48020e-08
-rxe_i1_post500n_shreg_3=  7.36166e-08
+rxe_i1_post500n_shreg_2=  4.46160e-08
+rxe_i1_post500n_shreg_3=  7.39985e-08
 rxe_i1_post500n_shreg_4=  5.00000e+00
-rxe_i1_post500n_shreg_5=  3.94981e-08
+rxe_i1_post500n_shreg_5=  3.99105e-08
 rxe_i1_post500n_shreg_6=  5.00000e+00
-rxe_i1_post500n_sda_in_row2=  6.62727e-07
+rxe_i1_post500n_sda_in_row2=  6.62757e-07
 rxe_i1_post500n_scl_row2=  5.00000e+00
-rxe_i0_pre50n_sel_087=  2.05312e-07
+rxe_i0_pre50n_sel_087=  2.05315e-07
 rxe_i0_pre50n_last_bit_pending=  5.00000e+00
-rxe_i0_pre50n_shreg_0=  1.86387e-08
+rxe_i0_pre50n_shreg_0=  1.86382e-08
 rxe_i0_pre50n_shreg_1=  5.00000e+00
-rxe_i0_pre50n_shreg_2=  2.04436e-08
-rxe_i0_pre50n_shreg_3=  1.86380e-08
+rxe_i0_pre50n_shreg_2=  2.04230e-08
+rxe_i0_pre50n_shreg_3=  1.86375e-08
 rxe_i0_pre50n_shreg_4=  5.00000e+00
-rxe_i0_pre50n_shreg_5=  1.86389e-08
+rxe_i0_pre50n_shreg_5=  1.86383e-08
 rxe_i0_pre50n_shreg_6=  5.00000e+00
 rxe_i0_pre50n_sda_in_row2=  5.00000e+00
-rxe_i0_pre50n_scl_row2=  4.73251e-08
+rxe_i0_pre50n_scl_row2=  4.73041e-08
 rxe_i0_post50n_sel_087=  5.00000e+00
-rxe_i0_post50n_last_bit_pending=  2.97027e-08
+rxe_i0_post50n_last_bit_pending=  2.94282e-08
 rxe_i0_post50n_shreg_0=  5.00000e+00
-rxe_i0_post50n_shreg_1=  -1.27457e-08
+rxe_i0_post50n_shreg_1=  -1.28338e-08
 rxe_i0_post50n_shreg_2=  5.00000e+00
-rxe_i0_post50n_shreg_3=  7.36841e-10
-rxe_i0_post50n_shreg_4=  2.24324e-08
+rxe_i0_post50n_shreg_3=  6.87239e-10
+rxe_i0_post50n_shreg_4=  2.23884e-08
 rxe_i0_post50n_shreg_5=  5.00000e+00
-rxe_i0_post50n_shreg_6=  7.35794e-08
+rxe_i0_post50n_shreg_6=  7.35696e-08
 rxe_i0_post50n_sda_in_row2=  5.00000e+00
 rxe_i0_post50n_scl_row2=  5.00000e+00
 rxe_i0_post500n_sel_087=  5.00000e+00
-rxe_i0_post500n_last_bit_pending=  2.09344e-08
+rxe_i0_post500n_last_bit_pending=  2.08778e-08
 rxe_i0_post500n_shreg_0=  5.00000e+00
-rxe_i0_post500n_shreg_1=  1.75498e-08
+rxe_i0_post500n_shreg_1=  1.75640e-08
 rxe_i0_post500n_shreg_2=  5.00000e+00
-rxe_i0_post500n_shreg_3=  1.85667e-08
-rxe_i0_post500n_shreg_4=  2.05437e-08
+rxe_i0_post500n_shreg_3=  1.85745e-08
+rxe_i0_post500n_shreg_4=  2.05360e-08
 rxe_i0_post500n_shreg_5=  5.00000e+00
-rxe_i0_post500n_shreg_6=  2.82495e-08
+rxe_i0_post500n_shreg_6=  2.82097e-08
 rxe_i0_post500n_sda_in_row2=  5.00000e+00
 rxe_i0_post500n_scl_row2=  5.00000e+00
-rxdiag_shreg_0      =  2.10456e-08
+rxdiag_shreg_0      =  1.79933e-07
 rxdiag_shreg_1      =  5.00000e+00
-rxdiag_shreg_2      =  -2.83290e-07
+rxdiag_shreg_2      =  -1.25101e-07
 rxdiag_shreg_3      =  5.00000e+00
-rxdiag_shreg_4      =  6.01377e-08
-rxdiag_shreg_5      =  -5.88947e-07
+rxdiag_shreg_4      =  6.01398e-08
+rxdiag_shreg_5      =  -4.31987e-07
 rxdiag_shreg_6      =  5.00000e+00
-rxdiag_sda_in_row2  =  2.80908e-07
+rxdiag_sda_in_row2  =  2.83720e-07
 rxdiag_nc_out3      =  5.00000e+00
-rxdiag_nc_out4      =  2.08529e-08
+rxdiag_nc_out4      =  2.08521e-08
 rxdiag_nc_out5      =  5.00000e+00
-rxdiag_nc_out6      =  2.08529e-08
+rxdiag_nc_out6      =  2.08521e-08
 rxdiag_nc_out11     =  5.00000e+00
-rxdiag_nc_out12     =  2.08529e-08
+rxdiag_nc_out12     =  2.08521e-08
 rxdiag_nc_out13     =  5.00000e+00
-rxdiag_nc_out14     =  2.08529e-08
+rxdiag_nc_out14     =  2.08521e-08
 stop1_busy_m500n    =  5.00000e+00
-stop1_busy_clr_m500n=  8.33271e-08
-stop1_qn_m500n      =  -4.04475e-09
+stop1_busy_clr_m500n=  8.27722e-08
+stop1_qn_m500n      =  -6.14341e-09
 stop1_scl_row2_m500n=  5.00000e+00
-stop1_sda_in_row2_m500n=  8.11081e-08
-stop1_sda_d_m500n   =  1.51608e-08
+stop1_sda_in_row2_m500n=  8.15828e-08
+stop1_sda_d_m500n   =  1.25584e-08
 stop1_busy_m100n    =  5.00000e+00
-stop1_busy_clr_m100n=  8.06586e-08
-stop1_qn_m100n      =  7.29207e-08
+stop1_busy_clr_m100n=  8.17045e-08
+stop1_qn_m100n      =  8.15578e-08
 stop1_scl_row2_m100n=  5.00000e+00
-stop1_sda_in_row2_m100n=  9.83859e-08
-stop1_sda_d_m100n   =  3.61771e-08
+stop1_sda_in_row2_m100n=  9.87083e-08
+stop1_sda_d_m100n   =  4.25984e-08
 stop1_busy_m50n     =  5.00000e+00
-stop1_busy_clr_m50n =  8.23072e-08
-stop1_qn_m50n       =  2.06702e-08
+stop1_busy_clr_m50n =  8.23093e-08
+stop1_qn_m50n       =  2.06895e-08
 stop1_scl_row2_m50n =  5.00000e+00
-stop1_sda_in_row2_m50n=  8.26914e-08
-stop1_sda_d_m50n    =  2.06058e-08
+stop1_sda_in_row2_m50n=  8.27153e-08
+stop1_sda_d_m50n    =  2.06283e-08
 stop1_busy_m20n     =  5.00000e+00
-stop1_busy_clr_m20n =  7.63066e-08
-stop1_qn_m20n       =  1.95095e-08
+stop1_busy_clr_m20n =  7.63054e-08
+stop1_qn_m20n       =  1.94966e-08
 stop1_scl_row2_m20n =  5.00000e+00
-stop1_sda_in_row2_m20n=  -1.08347e-06
-stop1_sda_d_m20n    =  2.01964e-08
+stop1_sda_in_row2_m20n=  -1.08345e-06
+stop1_sda_d_m20n    =  2.01910e-08
 stop1_busy_m10n     =  4.96364e+00
-stop1_busy_clr_m10n =  4.47985e-01
-stop1_qn_m10n       =  -1.28989e-03
+stop1_busy_clr_m10n =  4.47980e-01
+stop1_qn_m10n       =  -1.28994e-03
 stop1_scl_row2_m10n =  4.97780e+00
 stop1_sda_in_row2_m10n=  3.14997e+00
-stop1_sda_d_m10n    =  -3.60819e-04
+stop1_sda_d_m10n    =  -3.60817e-04
 stop1_busy_m5n      =  2.98638e+00
 stop1_busy_clr_m5n  =  4.26876e+00
-stop1_qn_m5n        =  4.22621e-02
+stop1_qn_m5n        =  4.22607e-02
 stop1_scl_row2_m5n  =  4.99596e+00
 stop1_sda_in_row2_m5n=  5.30291e+00
-stop1_sda_d_m5n     =  3.94363e-04
-stop1_busy_evt      =  2.45443e-02
+stop1_sda_d_m5n     =  3.94336e-04
+stop1_busy_evt      =  2.45416e-02
 stop1_busy_clr_evt  =  4.99831e+00
 stop1_qn_evt        =  4.93040e+00
 stop1_scl_row2_evt  =  5.01094e+00
 stop1_sda_in_row2_evt=  4.99914e+00
-stop1_sda_d_evt     =  -3.56625e-02
-stop1_busy_p5n      =  8.69673e-04
-stop1_busy_clr_p5n  =  5.06304e+00
+stop1_sda_d_evt     =  -3.56933e-02
+stop1_busy_p5n      =  8.70187e-04
+stop1_busy_clr_p5n  =  5.06306e+00
 stop1_qn_p5n        =  5.00005e+00
-stop1_scl_row2_p5n  =  4.99368e+00
-stop1_sda_in_row2_p5n=  5.00336e+00
-stop1_sda_d_p5n     =  4.07391e+00
-stop1_busy_p10n     =  -8.98944e-03
-stop1_busy_clr_p10n =  1.53404e-01
+stop1_scl_row2_p5n  =  4.99369e+00
+stop1_sda_in_row2_p5n=  5.00337e+00
+stop1_sda_d_p5n     =  4.07401e+00
+stop1_busy_p10n     =  -8.98813e-03
+stop1_busy_clr_p10n =  1.53365e-01
 stop1_qn_p10n       =  5.00685e+00
 stop1_scl_row2_p10n =  5.00060e+00
 stop1_sda_in_row2_p10n=  4.99931e+00
 stop1_sda_d_p10n    =  4.98427e+00
-stop1_busy_p20n     =  1.30336e-05
-stop1_busy_clr_p20n =  -1.11207e-05
+stop1_busy_p20n     =  1.30353e-05
+stop1_busy_clr_p20n =  -1.11366e-05
 stop1_qn_p20n       =  4.99999e+00
 stop1_scl_row2_p20n =  5.00005e+00
 stop1_sda_in_row2_p20n=  4.99991e+00
 stop1_sda_d_p20n    =  5.00001e+00
-stop1_busy_p50n     =  4.37496e-06
-stop1_busy_clr_p50n =  -9.94604e-06
+stop1_busy_p50n     =  4.37374e-06
+stop1_busy_clr_p50n =  -9.96510e-06
 stop1_qn_p50n       =  5.00000e+00
 stop1_scl_row2_p50n =  5.00002e+00
 stop1_sda_in_row2_p50n=  4.99998e+00
 stop1_sda_d_p50n    =  5.00000e+00
-stop1_busy_p100n    =  1.60200e-06
-stop1_busy_clr_p100n=  -9.97771e-06
+stop1_busy_p100n    =  1.60106e-06
+stop1_busy_clr_p100n=  -9.99521e-06
 stop1_qn_p100n      =  5.00000e+00
 stop1_scl_row2_p100n=  5.00001e+00
 stop1_sda_in_row2_p100n=  4.99999e+00
 stop1_sda_d_p100n   =  5.00000e+00
-stop1_busy_p500n    =  1.37376e-06
-stop1_busy_clr_p500n=  8.12903e-06
+stop1_busy_p500n    =  1.37425e-06
+stop1_busy_clr_p500n=  8.14056e-06
 stop1_qn_p500n      =  5.00000e+00
 stop1_scl_row2_p500n=  5.00000e+00
 stop1_sda_in_row2_p500n=  5.00000e+00
 stop1_sda_d_p500n   =  5.00000e+00
-stop1_busy_p1u      =  7.52477e-07
-stop1_busy_clr_p1u  =  7.50336e-06
+stop1_busy_p1u      =  7.52802e-07
+stop1_busy_clr_p1u  =  7.51266e-06
 stop1_qn_p1u        =  5.00000e+00
 stop1_scl_row2_p1u  =  5.00000e+00
 stop1_sda_in_row2_p1u=  5.00000e+00
 stop1_sda_d_p1u     =  5.00000e+00
-stop1_busy_p2u      =  3.78153e-07
-stop1_busy_clr_p2u  =  6.71216e-06
+stop1_busy_p2u      =  3.78348e-07
+stop1_busy_clr_p2u  =  6.71929e-06
 stop1_qn_p2u        =  5.00000e+00
 stop1_scl_row2_p2u  =  5.00000e+00
 stop1_sda_in_row2_p2u=  5.00000e+00
 stop1_sda_d_p2u     =  5.00000e+00
-stop1_busy_p5u      =  -5.99390e-08
-stop1_busy_clr_p5u  =  -6.82694e-06
+stop1_busy_p5u      =  -6.00523e-08
+stop1_busy_clr_p5u  =  -6.83176e-06
 stop1_qn_p5u        =  5.00000e+00
 stop1_scl_row2_p5u  =  5.00000e+00
 stop1_sda_in_row2_p5u=  5.00000e+00
@@ -1951,7 +1953,7 @@ xdut.x2._208_                                5
 xdut.x2.x_512_.qs                  7.29558e-08
 xdut.x2.x_512_.net5                4.95168e-08
 xdut.x2.x_512_.net6                   0.034793
-xdut.x2.scl_n_row0                 2.05775e-08
+xdut.x2.scl_n_row2                 2.05775e-08
 xdut.x2.x_513_.net1                          5
 xdut.x2.x_513_.net2                          5
 xdut.x2.x_513_.ckp                 2.08524e-08
@@ -1974,6 +1976,7 @@ xdut.x2._206_                                5
 xdut.x2.x_514_.qs                  7.29558e-08
 xdut.x2.x_514_.net5                4.95168e-08
 xdut.x2.x_514_.net6                   0.034793
+xdut.x2.scl_n_row1                 2.05775e-08
 xdut.x2.x_515_.net1                          5
 xdut.x2.x_515_.net2                          5
 xdut.x2.x_515_.ckp                 2.08524e-08
@@ -1996,7 +1999,6 @@ xdut.x2._204_                                5
 xdut.x2.x_516_.qs                  7.29558e-08
 xdut.x2.x_516_.net5                4.95168e-08
 xdut.x2.x_516_.net6                   0.034793
-xdut.x2.scl_n_row2                 2.05775e-08
 xdut.x2.x_517_.net1                          5
 xdut.x2.x_517_.net2                          5
 xdut.x2.x_517_.ckp                 2.08524e-08
@@ -2245,7 +2247,9 @@ xdut.x2.xu_rst_stretch_qn.net1         4.96992
 xdut.x2.xu_buf_scl_row2.net1       2.05775e-08
 xdut.x2.scl_buf                              5
 xdut.x2.xu_buf_scl_n_row0.net1               5
+xdut.x2.scl_n_row0                 2.05775e-08
 xdut.x2.xu_buf_scl_n_row2.net1               5
+xdut.x2.xu_buf_scl_n_row1.net1               5
 xdut.x2.xu_buf_scl_n_row3.net1               5
 xdut.x2.xu_bufth_scl.mid           4.02692e-08
 xdut.x2.xu_bufth_scl.net1              1.27314
@@ -2273,27 +2277,27 @@ vtx0#branch                        2.26037e-10
 vdis#branch                       -1.90041e-11
 vrstn#branch                       2.26037e-10
 vvss#branch                        1.80383e-09
-vvdd#branch                       -4.95929e-06
+vvdd#branch                       -4.95931e-06
 
- Reference value :  0.00000e+00 Reference value :  6.95966e-06 Reference value :  1.19708e-05 Reference value :  1.53336e-05 Reference value :  1.70031e-05 Reference value :  2.22598e-05 Reference value :  2.69986e-05 Reference value :  3.22636e-05 Reference value :  3.69790e-05 Reference value :  3.96726e-05 Reference value :  4.22639e-05 Reference value :  4.69772e-05 Reference value :  5.14397e-05 Reference value :  5.69957e-05 Reference value :  6.21165e-05 Reference value :  6.93094e-05 Reference value :  7.69005e-05 Reference value :  7.70002e-05 Reference value :  8.23750e-05 Reference value :  8.95399e-05 Reference value :  9.63638e-05 Reference value :  9.73862e-05 Reference value :  1.02030e-04 Reference value :  1.08320e-04 Reference value :  1.12262e-04 Reference value :  1.16969e-04 Reference value :  1.19711e-04 Reference value :  1.22247e-04 Reference value :  1.26996e-04 Reference value :  1.31993e-04 Reference value :  1.34137e-04 Reference value :  1.41964e-04 Reference value :  1.46969e-04 Reference value :  1.49173e-04 Reference value :  1.52290e-04 Reference value :  1.57218e-04 Reference value :  1.62021e-04 Reference value :  1.66583e-04 Reference value :  1.71987e-04 Reference value :  1.76942e-04 Reference value :  1.81983e-04 Reference value :  1.86982e-04 Reference value :  1.92000e-04 Reference value :  1.92283e-04 Reference value :  2.00086e-04 Reference value :  2.05744e-04 Reference value :  2.16956e-04 Reference value :  2.18073e-04 Reference value :  2.22284e-04 Reference value :  2.26977e-04 Reference value :  2.31579e-04 Reference value :  2.33033e-04 Reference value :  2.41558e-04 Reference value :  2.42290e-04 Reference value :  2.46979e-04 Reference value :  2.49925e-04 Reference value :  2.52270e-04 Reference value :  2.56984e-04 Reference value :  2.61592e-04 Reference value :  2.66969e-04 Reference value :  2.67045e-04 Reference value :  2.72076e-04 Reference value :  2.78659e-04 Reference value :  2.86907e-04 Reference value :  2.87002e-04 Reference value :  2.91988e-04 Reference value :  2.92300e-04 Reference value :  2.96987e-04 Reference value :  2.98734e-04 Reference value :  3.06938e-04 Reference value :  3.07009e-04 Reference value :  3.11973e-04 Reference value :  3.16907e-04 Reference value :  3.17007e-04 Reference value :  3.22009e-04 Reference value :  3.28029e-04 Reference value :  3.32030e-04 Reference value :  3.36977e-04 Reference value :  3.38743e-04 Reference value :  3.42002e-04 Reference value :  3.47465e-04 Reference value :  3.52975e-04 Reference value :  3.56986e-04 Reference value :  3.61224e-04 Reference value :  3.62184e-04 Reference value :  3.66991e-04 Reference value :  3.70288e-04 Reference value :  3.76969e-04 Reference value :  3.77008e-04 Reference value :  3.82675e-04 Reference value :  3.86993e-04 Reference value :  3.91427e-04 Reference value :  3.92028e-04 Reference value :  3.96984e-04 Reference value :  3.99267e-04 Reference value :  4.02252e-04 Reference value :  4.06908e-04 Reference value :  4.12002e-04 Reference value :  4.20675e-04 Reference value :  4.26973e-04 Reference value :  4.30566e-04 Reference value :  4.36928e-04 Reference value :  4.41992e-04 Reference value :  4.46985e-04 Reference value :  4.51962e-04 Reference value :  4.54072e-04 Reference value :  4.56999e-04 Reference value :  4.61993e-04 Reference value :  4.64980e-04 Reference value :  4.66999e-04 Reference value :  4.72575e-04 Reference value :  4.78974e-04 Reference value :  4.85275e-04 Reference value :  4.86999e-04 Reference value :  4.92284e-04 Reference value :  4.96982e-04 Reference value :  5.02258e-04 Reference value :  5.06984e-04 Reference value :  5.11981e-04 Reference value :  5.13821e-04 Reference value :  5.21917e-04 Reference value :  5.22263e-04 Reference value :  5.26970e-04 Reference value :  5.30901e-04 Reference value :  5.36293e-04
-No. of Data Rows : 17590
+ Reference value :  3.14000e-07 Reference value :  6.96223e-06 Reference value :  1.19854e-05 Reference value :  1.59336e-05 Reference value :  1.70036e-05 Reference value :  2.22577e-05 Reference value :  2.69841e-05 Reference value :  3.22903e-05 Reference value :  3.70082e-05 Reference value :  4.22622e-05 Reference value :  4.70003e-05 Reference value :  5.49750e-05 Reference value :  6.19006e-05 Reference value :  6.69910e-05 Reference value :  7.36250e-05 Reference value :  8.02657e-05 Reference value :  8.69016e-05 Reference value :  8.70013e-05 Reference value :  9.19746e-05 Reference value :  9.69968e-05 Reference value :  1.02024e-04 Reference value :  1.06998e-04 Reference value :  1.12258e-04 Reference value :  1.16969e-04 Reference value :  1.20348e-04 Reference value :  1.23771e-04 Reference value :  1.31498e-04 Reference value :  1.32885e-04 Reference value :  1.41777e-04 Reference value :  1.42027e-04 Reference value :  1.48970e-04 Reference value :  1.52297e-04 Reference value :  1.58618e-04 Reference value :  1.62263e-04 Reference value :  1.67000e-04 Reference value :  1.72294e-04 Reference value :  1.78673e-04 Reference value :  1.82006e-04 Reference value :  1.86973e-04 Reference value :  1.88577e-04 Reference value :  1.91996e-04 Reference value :  1.92265e-04 Reference value :  1.97336e-04 Reference value :  2.03144e-04 Reference value :  2.15725e-04 Reference value :  2.16990e-04 Reference value :  2.22109e-04 Reference value :  2.26937e-04 Reference value :  2.31992e-04 Reference value :  2.32304e-04 Reference value :  2.40658e-04 Reference value :  2.43371e-04 Reference value :  2.46995e-04 Reference value :  2.51991e-04 Reference value :  2.55585e-04 Reference value :  2.57000e-04 Reference value :  2.64225e-04 Reference value :  2.66989e-04 Reference value :  2.71901e-04 Reference value :  2.76969e-04 Reference value :  2.79895e-04 Reference value :  2.82305e-04 Reference value :  2.89415e-04 Reference value :  2.92289e-04 Reference value :  2.96996e-04 Reference value :  3.01992e-04 Reference value :  3.05325e-04 Reference value :  3.11356e-04 Reference value :  3.16969e-04 Reference value :  3.19219e-04 Reference value :  3.24575e-04 Reference value :  3.26992e-04 Reference value :  3.31428e-04 Reference value :  3.32044e-04 Reference value :  3.36990e-04 Reference value :  3.41958e-04 Reference value :  3.45125e-04 Reference value :  3.47000e-04 Reference value :  3.51984e-04 Reference value :  3.57313e-04 Reference value :  3.64325e-04 Reference value :  3.66997e-04 Reference value :  3.71912e-04 Reference value :  3.76977e-04 Reference value :  3.79986e-04 Reference value :  3.86982e-04 Reference value :  3.91980e-04 Reference value :  3.94075e-04 Reference value :  3.96998e-04 Reference value :  4.01975e-04 Reference value :  4.03732e-04 Reference value :  4.11954e-04 Reference value :  4.17005e-04 Reference value :  4.26960e-04 Reference value :  4.27118e-04 Reference value :  4.33325e-04 Reference value :  4.36996e-04 Reference value :  4.42335e-04 Reference value :  4.49609e-04 Reference value :  4.53121e-04 Reference value :  4.61661e-04 Reference value :  4.62268e-04 Reference value :  4.66984e-04 Reference value :  4.71624e-04 Reference value :  4.76969e-04 Reference value :  4.79236e-04 Reference value :  4.86969e-04 Reference value :  4.87894e-04 Reference value :  4.91999e-04 Reference value :  4.95065e-04 Reference value :  5.01970e-04 Reference value :  5.03930e-04 Reference value :  5.11411e-04 Reference value :  5.12290e-04 Reference value :  5.16983e-04 Reference value :  5.19093e-04 Reference value :  5.22265e-04 Reference value :  5.27060e-04 Reference value :  5.32744e-04
+No. of Data Rows : 17340
 
   Measurements for Transient Analysis
 
 busy_after_start    =  5.00000e+00
 ack_addr_write      =  4.44619e-02
 addr_match_write    =  5.00000e+00
-rw_write            =  2.05337e-08
+rw_write            =  2.23147e-08
 ack_data            =  4.44619e-02
 rx_data_bit0        =  5.00000e+00
-rx_data_bit1        =  2.08529e-08
+rx_data_bit1        =  2.08521e-08
 rx_data_bit2        =  5.00000e+00
-rx_data_bit3        =  2.08529e-08
-rx_data_bit4        =  2.08529e-08
+rx_data_bit3        =  2.08521e-08
+rx_data_bit4        =  2.08521e-08
 rx_data_bit5        =  5.00000e+00
-rx_data_bit6        =  2.08529e-08
+rx_data_bit6        =  2.08521e-08
 rx_data_bit7        =  5.00000e+00
-busy_after_stop1    =  6.46899e-08
+busy_after_stop1    =  6.46900e-08
 ack_addr_read       =  4.44619e-02
 rw_read             =  5.00000e+00
 read_byte_bit0      =  4.44619e-02
@@ -2304,394 +2308,394 @@ read_byte_bit4      =  4.95050e+00
 read_byte_bit5      =  4.95050e+00
 read_byte_bit6      =  4.44619e-02
 read_byte_bit7      =  4.44619e-02
-busy_after_stop2    =  6.46904e-08
+busy_after_stop2    =  6.46906e-08
 nack_wrong_addr     =  4.95050e+00
-addr_match_wrong    =  2.17924e-08
-busy_after_stop3    =  6.46897e-08
+addr_match_wrong    =  2.13423e-08
+busy_after_stop3    =  6.46899e-08
 rxe_i7_pre50n_sel_087=  5.00000e+00
-rxe_i7_pre50n_last_bit_pending=  4.94018e-08
-rxe_i7_pre50n_shreg_0=  1.96204e-08
-rxe_i7_pre50n_shreg_1=  2.09917e-08
-rxe_i7_pre50n_shreg_2=  -1.91826e-07
-rxe_i7_pre50n_shreg_3=  1.94865e-08
-rxe_i7_pre50n_shreg_4=  3.18392e-08
-rxe_i7_pre50n_shreg_5=  -4.01134e-07
+rxe_i7_pre50n_last_bit_pending=  7.14930e-08
+rxe_i7_pre50n_shreg_0=  1.89717e-08
+rxe_i7_pre50n_shreg_1=  2.10117e-08
+rxe_i7_pre50n_shreg_2=  -1.91946e-07
+rxe_i7_pre50n_shreg_3=  2.13773e-08
+rxe_i7_pre50n_shreg_4=  1.84737e-08
+rxe_i7_pre50n_shreg_5=  -4.04610e-07
 rxe_i7_pre50n_shreg_6=  5.00000e+00
 rxe_i7_pre50n_sda_in_row2=  5.00000e+00
-rxe_i7_pre50n_scl_row2=  -6.31736e-08
+rxe_i7_pre50n_scl_row2=  -6.30547e-08
 rxe_i7_post50n_sel_087=  5.00000e+00
-rxe_i7_post50n_last_bit_pending=  4.92439e-08
+rxe_i7_post50n_last_bit_pending=  7.12419e-08
 rxe_i7_post50n_shreg_0=  5.00000e+00
-rxe_i7_post50n_shreg_1=  -1.96887e-06
-rxe_i7_post50n_shreg_2=  -4.04533e-05
-rxe_i7_post50n_shreg_3=  -1.96306e-06
-rxe_i7_post50n_shreg_4=  -3.44696e-09
-rxe_i7_post50n_shreg_5=  -8.10624e-05
-rxe_i7_post50n_shreg_6=  5.25630e-08
+rxe_i7_post50n_shreg_1=  -1.96325e-06
+rxe_i7_post50n_shreg_2=  -4.04206e-05
+rxe_i7_post50n_shreg_3=  -1.95794e-06
+rxe_i7_post50n_shreg_4=  -6.32904e-09
+rxe_i7_post50n_shreg_5=  -8.09967e-05
+rxe_i7_post50n_shreg_6=  6.89061e-08
 rxe_i7_post50n_sda_in_row2=  5.00000e+00
 rxe_i7_post50n_scl_row2=  5.00000e+00
 rxe_i7_post500n_sel_087=  5.00000e+00
-rxe_i7_post500n_last_bit_pending=  4.78357e-08
+rxe_i7_post500n_last_bit_pending=  6.94895e-08
 rxe_i7_post500n_shreg_0=  5.00000e+00
-rxe_i7_post500n_shreg_1=  -1.69489e-06
-rxe_i7_post500n_shreg_2=  -4.43779e-06
-rxe_i7_post500n_shreg_3=  -1.69064e-06
-rxe_i7_post500n_shreg_4=  4.64244e-09
-rxe_i7_post500n_shreg_5=  -8.93136e-06
-rxe_i7_post500n_shreg_6=  4.33445e-08
+rxe_i7_post500n_shreg_1=  -1.68904e-06
+rxe_i7_post500n_shreg_2=  -4.43815e-06
+rxe_i7_post500n_shreg_3=  -1.68593e-06
+rxe_i7_post500n_shreg_4=  6.20433e-09
+rxe_i7_post500n_shreg_5=  -8.93194e-06
+rxe_i7_post500n_shreg_6=  4.72170e-08
 rxe_i7_post500n_sda_in_row2=  5.00000e+00
 rxe_i7_post500n_scl_row2=  5.00000e+00
 rxe_i6_pre50n_sel_087=  5.00000e+00
-rxe_i6_pre50n_last_bit_pending=  3.34713e-08
+rxe_i6_pre50n_last_bit_pending=  4.99292e-08
 rxe_i6_pre50n_shreg_0=  5.00000e+00
-rxe_i6_pre50n_shreg_1=  -4.35112e-07
-rxe_i6_pre50n_shreg_2=  -1.88509e-07
-rxe_i6_pre50n_shreg_3=  -4.36635e-07
-rxe_i6_pre50n_shreg_4=  3.01562e-08
-rxe_i6_pre50n_shreg_5=  -3.94008e-07
-rxe_i6_pre50n_shreg_6=  2.08537e-08
-rxe_i6_pre50n_sda_in_row2=  1.43524e-07
-rxe_i6_pre50n_scl_row2=  -1.37036e-09
+rxe_i6_pre50n_shreg_1=  -4.34755e-07
+rxe_i6_pre50n_shreg_2=  -1.88506e-07
+rxe_i6_pre50n_shreg_3=  -4.34399e-07
+rxe_i6_pre50n_shreg_4=  1.84764e-08
+rxe_i6_pre50n_shreg_5=  -3.97267e-07
+rxe_i6_pre50n_shreg_6=  2.08539e-08
+rxe_i6_pre50n_sda_in_row2=  1.43680e-07
+rxe_i6_pre50n_scl_row2=  -1.26526e-08
 rxe_i6_post50n_sel_087=  5.00000e+00
-rxe_i6_post50n_last_bit_pending=  3.37483e-08
-rxe_i6_post50n_shreg_0=  1.87433e-07
+rxe_i6_post50n_last_bit_pending=  4.85965e-08
+rxe_i6_post50n_shreg_0=  1.85387e-07
 rxe_i6_post50n_shreg_1=  4.99997e+00
-rxe_i6_post50n_shreg_2=  -1.86436e-07
-rxe_i6_post50n_shreg_3=  -6.77485e-08
-rxe_i6_post50n_shreg_4=  1.93345e-08
-rxe_i6_post50n_shreg_5=  -3.92319e-07
-rxe_i6_post50n_shreg_6=  2.13573e-08
-rxe_i6_post50n_sda_in_row2=  5.62279e-06
+rxe_i6_post50n_shreg_2=  -1.87049e-07
+rxe_i6_post50n_shreg_3=  -6.38721e-08
+rxe_i6_post50n_shreg_4=  1.81469e-08
+rxe_i6_post50n_shreg_5=  -3.93292e-07
+rxe_i6_post50n_shreg_6=  2.05593e-08
+rxe_i6_post50n_sda_in_row2=  5.48718e-06
 rxe_i6_post50n_scl_row2=  5.00003e+00
 rxe_i6_post500n_sel_087=  5.00000e+00
-rxe_i6_post500n_last_bit_pending=  3.27774e-08
-rxe_i6_post500n_shreg_0=  1.63152e-07
+rxe_i6_post500n_last_bit_pending=  5.02630e-08
+rxe_i6_post500n_shreg_0=  1.63028e-07
 rxe_i6_post500n_shreg_1=  5.00000e+00
-rxe_i6_post500n_shreg_2=  -1.77852e-07
-rxe_i6_post500n_shreg_3=  1.57292e-08
-rxe_i6_post500n_shreg_4=  1.86670e-08
-rxe_i6_post500n_shreg_5=  -3.74830e-07
-rxe_i6_post500n_shreg_6=  2.05593e-08
-rxe_i6_post500n_sda_in_row2=  6.57202e-07
+rxe_i6_post500n_shreg_2=  -1.77422e-07
+rxe_i6_post500n_shreg_3=  1.71957e-08
+rxe_i6_post500n_shreg_4=  1.89004e-08
+rxe_i6_post500n_shreg_5=  -3.74392e-07
+rxe_i6_post500n_shreg_6=  2.14894e-08
+rxe_i6_post500n_sda_in_row2=  6.56320e-07
 rxe_i6_post500n_scl_row2=  5.00000e+00
 rxe_i5_pre50n_sel_087=  5.00000e+00
-rxe_i5_pre50n_last_bit_pending=  2.82138e-08
-rxe_i5_pre50n_shreg_0=  8.37940e-08
+rxe_i5_pre50n_last_bit_pending=  4.13261e-08
+rxe_i5_pre50n_shreg_0=  1.92239e-08
 rxe_i5_pre50n_shreg_1=  5.00000e+00
-rxe_i5_pre50n_shreg_2=  -8.19797e-08
-rxe_i5_pre50n_shreg_3=  1.95630e-08
-rxe_i5_pre50n_shreg_4=  2.89271e-08
-rxe_i5_pre50n_shreg_5=  -1.80603e-07
+rxe_i5_pre50n_shreg_2=  -8.19782e-08
+rxe_i5_pre50n_shreg_3=  2.14683e-08
+rxe_i5_pre50n_shreg_4=  1.84803e-08
+rxe_i5_pre50n_shreg_5=  -1.83892e-07
 rxe_i5_pre50n_shreg_6=  2.08547e-08
 rxe_i5_pre50n_sda_in_row2=  5.00000e+00
-rxe_i5_pre50n_scl_row2=  2.35503e-08
+rxe_i5_pre50n_scl_row2=  2.37192e-08
 rxe_i5_post50n_sel_087=  5.00000e+00
-rxe_i5_post50n_last_bit_pending=  2.85621e-08
+rxe_i5_post50n_last_bit_pending=  3.81755e-08
 rxe_i5_post50n_shreg_0=  5.00000e+00
-rxe_i5_post50n_shreg_1=  3.09584e-08
+rxe_i5_post50n_shreg_1=  3.04628e-08
 rxe_i5_post50n_shreg_2=  5.00000e+00
-rxe_i5_post50n_shreg_3=  2.70809e-08
-rxe_i5_post50n_shreg_4=  2.09001e-08
-rxe_i5_post50n_shreg_5=  2.98626e-08
-rxe_i5_post50n_shreg_6=  2.09007e-08
+rxe_i5_post50n_shreg_3=  -9.71295e-08
+rxe_i5_post50n_shreg_4=  -4.34561e-08
+rxe_i5_post50n_shreg_5=  -1.94471e-08
+rxe_i5_post50n_shreg_6=  1.76978e-08
 rxe_i5_post50n_sda_in_row2=  5.00000e+00
 rxe_i5_post50n_scl_row2=  5.00000e+00
 rxe_i5_post500n_sel_087=  5.00000e+00
-rxe_i5_post500n_last_bit_pending=  2.71739e-08
+rxe_i5_post500n_last_bit_pending=  4.36656e-08
 rxe_i5_post500n_shreg_0=  5.00000e+00
-rxe_i5_post500n_shreg_1=  -4.53229e-09
+rxe_i5_post500n_shreg_1=  1.47224e-08
 rxe_i5_post500n_shreg_2=  5.00000e+00
-rxe_i5_post500n_shreg_3=  8.72913e-10
-rxe_i5_post500n_shreg_4=  1.31835e-08
-rxe_i5_post500n_shreg_5=  2.47758e-08
-rxe_i5_post500n_shreg_6=  2.09239e-08
+rxe_i5_post500n_shreg_3=  1.27116e-07
+rxe_i5_post500n_shreg_4=  7.69139e-08
+rxe_i5_post500n_shreg_5=  7.19543e-08
+rxe_i5_post500n_shreg_6=  2.40369e-08
 rxe_i5_post500n_sda_in_row2=  5.00000e+00
 rxe_i5_post500n_scl_row2=  5.00000e+00
 rxe_i4_pre50n_sel_087=  5.00000e+00
-rxe_i4_pre50n_last_bit_pending=  2.55982e-08
+rxe_i4_pre50n_last_bit_pending=  3.64988e-08
 rxe_i4_pre50n_shreg_0=  5.00000e+00
-rxe_i4_pre50n_shreg_1=  8.52851e-08
+rxe_i4_pre50n_shreg_1=  2.55214e-08
 rxe_i4_pre50n_shreg_2=  5.00000e+00
-rxe_i4_pre50n_shreg_3=  2.11486e-08
-rxe_i4_pre50n_shreg_4=  2.79913e-08
-rxe_i4_pre50n_shreg_5=  3.17159e-08
+rxe_i4_pre50n_shreg_3=  2.30571e-08
+rxe_i4_pre50n_shreg_4=  1.84823e-08
+rxe_i4_pre50n_shreg_5=  2.83998e-08
 rxe_i4_pre50n_shreg_6=  2.08535e-08
-rxe_i4_pre50n_sda_in_row2=  1.43346e-07
-rxe_i4_pre50n_scl_row2=  -4.20075e-09
+rxe_i4_pre50n_sda_in_row2=  1.43358e-07
+rxe_i4_pre50n_scl_row2=  -3.46172e-10
 rxe_i4_post50n_sel_087=  5.00000e+00
-rxe_i4_post50n_last_bit_pending=  2.51962e-08
-rxe_i4_post50n_shreg_0=  8.68558e-08
+rxe_i4_post50n_last_bit_pending=  3.43441e-08
+rxe_i4_post50n_shreg_0=  5.15464e-09
 rxe_i4_post50n_shreg_1=  4.99998e+00
-rxe_i4_post50n_shreg_2=  2.81499e-05
+rxe_i4_post50n_shreg_2=  2.87544e-05
 rxe_i4_post50n_shreg_3=  5.00000e+00
-rxe_i4_post50n_shreg_4=  6.49862e-08
-rxe_i4_post50n_shreg_5=  -5.25809e-06
-rxe_i4_post50n_shreg_6=  2.90416e-08
-rxe_i4_post50n_sda_in_row2=  5.74421e-06
+rxe_i4_post50n_shreg_4=  3.67264e-08
+rxe_i4_post50n_shreg_5=  -5.41322e-06
+rxe_i4_post50n_shreg_6=  2.43710e-08
+rxe_i4_post50n_sda_in_row2=  5.94140e-06
 rxe_i4_post50n_scl_row2=  5.00003e+00
 rxe_i4_post500n_sel_087=  5.00000e+00
-rxe_i4_post500n_last_bit_pending=  2.59746e-08
-rxe_i4_post500n_shreg_0=  -5.53477e-08
+rxe_i4_post500n_last_bit_pending=  3.65142e-08
+rxe_i4_post500n_shreg_0=  2.18812e-08
 rxe_i4_post500n_shreg_1=  5.00000e+00
-rxe_i4_post500n_shreg_2=  3.53960e-06
+rxe_i4_post500n_shreg_2=  3.60156e-06
 rxe_i4_post500n_shreg_3=  5.00000e+00
-rxe_i4_post500n_shreg_4=  -3.18593e-08
-rxe_i4_post500n_shreg_5=  -5.99266e-07
-rxe_i4_post500n_shreg_6=  1.61651e-08
-rxe_i4_post500n_sda_in_row2=  6.34927e-07
+rxe_i4_post500n_shreg_4=  1.62137e-08
+rxe_i4_post500n_shreg_5=  -5.91118e-07
+rxe_i4_post500n_shreg_6=  2.09649e-08
+rxe_i4_post500n_sda_in_row2=  6.63285e-07
 rxe_i4_post500n_scl_row2=  5.00000e+00
 rxe_i3_pre50n_sel_087=  5.00000e+00
-rxe_i3_pre50n_last_bit_pending=  2.40403e-08
-rxe_i3_pre50n_shreg_0=  1.88648e-08
+rxe_i3_pre50n_last_bit_pending=  3.33708e-08
+rxe_i3_pre50n_shreg_0=  8.38112e-08
 rxe_i3_pre50n_shreg_1=  5.00000e+00
-rxe_i3_pre50n_shreg_2=  9.00041e-09
+rxe_i3_pre50n_shreg_2=  7.39651e-08
 rxe_i3_pre50n_shreg_3=  5.00000e+00
-rxe_i3_pre50n_shreg_4=  2.72900e-08
-rxe_i3_pre50n_shreg_5=  -1.28650e-07
-rxe_i3_pre50n_shreg_6=  2.08658e-08
-rxe_i3_pre50n_sda_in_row2=  5.06278e-08
-rxe_i3_pre50n_scl_row2=  -6.44585e-08
+rxe_i3_pre50n_shreg_4=  1.84854e-08
+rxe_i3_pre50n_shreg_5=  -1.31999e-07
+rxe_i3_pre50n_shreg_6=  2.08538e-08
+rxe_i3_pre50n_sda_in_row2=  5.07622e-08
+rxe_i3_pre50n_scl_row2=  -2.38374e-08
 rxe_i3_post50n_sel_087=  5.00000e+00
-rxe_i3_post50n_last_bit_pending=  5.01473e-08
-rxe_i3_post50n_shreg_0=  2.12896e-08
-rxe_i3_post50n_shreg_1=  2.23240e-07
+rxe_i3_post50n_last_bit_pending=  3.37935e-08
+rxe_i3_post50n_shreg_0=  4.05232e-09
+rxe_i3_post50n_shreg_1=  4.34863e-08
 rxe_i3_post50n_shreg_2=  5.00000e+00
-rxe_i3_post50n_shreg_3=  2.20194e-07
+rxe_i3_post50n_shreg_3=  4.15589e-08
 rxe_i3_post50n_shreg_4=  5.00000e+00
-rxe_i3_post50n_shreg_5=  -6.77516e-08
-rxe_i3_post50n_shreg_6=  2.31514e-08
-rxe_i3_post50n_sda_in_row2=  1.75452e-07
+rxe_i3_post50n_shreg_5=  2.67115e-08
+rxe_i3_post50n_shreg_6=  9.93504e-09
+rxe_i3_post50n_sda_in_row2=  1.65486e-07
 rxe_i3_post50n_scl_row2=  5.00000e+00
 rxe_i3_post500n_sel_087=  5.00000e+00
-rxe_i3_post500n_last_bit_pending=  2.48912e-08
-rxe_i3_post500n_shreg_0=  1.86355e-08
-rxe_i3_post500n_shreg_1=  1.65673e-07
+rxe_i3_post500n_last_bit_pending=  3.34968e-08
+rxe_i3_post500n_shreg_0=  9.72647e-09
+rxe_i3_post500n_shreg_1=  3.39506e-08
 rxe_i3_post500n_shreg_2=  5.00000e+00
-rxe_i3_post500n_shreg_3=  1.62992e-07
+rxe_i3_post500n_shreg_3=  3.26547e-08
 rxe_i3_post500n_shreg_4=  5.00000e+00
-rxe_i3_post500n_shreg_5=  2.41011e-08
-rxe_i3_post500n_shreg_6=  2.08770e-08
-rxe_i3_post500n_sda_in_row2=  1.46157e-07
+rxe_i3_post500n_shreg_5=  2.88784e-08
+rxe_i3_post500n_shreg_6=  1.44706e-08
+rxe_i3_post500n_sda_in_row2=  1.39726e-07
 rxe_i3_post500n_scl_row2=  5.00000e+00
 rxe_i2_pre50n_sel_087=  5.00000e+00
-rxe_i2_pre50n_last_bit_pending=  2.29955e-08
-rxe_i2_pre50n_shreg_0=  1.88272e-08
-rxe_i2_pre50n_shreg_1=  3.12213e-08
+rxe_i2_pre50n_last_bit_pending=  3.11563e-08
+rxe_i2_pre50n_shreg_0=  5.19197e-08
+rxe_i2_pre50n_shreg_1=  2.07612e-08
 rxe_i2_pre50n_shreg_2=  5.00000e+00
-rxe_i2_pre50n_shreg_3=  3.12873e-08
+rxe_i2_pre50n_shreg_3=  2.07828e-08
 rxe_i2_pre50n_shreg_4=  5.00000e+00
-rxe_i2_pre50n_shreg_5=  3.43272e-08
+rxe_i2_pre50n_shreg_5=  3.09641e-08
 rxe_i2_pre50n_shreg_6=  2.08461e-08
 rxe_i2_pre50n_sda_in_row2=  5.00000e+00
-rxe_i2_pre50n_scl_row2=  -6.50937e-08
+rxe_i2_pre50n_scl_row2=  -6.48936e-08
 rxe_i2_post50n_sel_087=  5.00000e+00
-rxe_i2_post50n_last_bit_pending=  2.32811e-08
+rxe_i2_post50n_last_bit_pending=  3.14637e-08
 rxe_i2_post50n_shreg_0=  5.00001e+00
-rxe_i2_post50n_shreg_1=  -6.35221e-05
-rxe_i2_post50n_shreg_2=  -2.72198e-05
+rxe_i2_post50n_shreg_1=  -6.35308e-05
+rxe_i2_post50n_shreg_2=  -2.72203e-05
 rxe_i2_post50n_shreg_3=  4.99998e+00
-rxe_i2_post50n_shreg_4=  2.52054e-08
+rxe_i2_post50n_shreg_4=  2.53000e-08
 rxe_i2_post50n_shreg_5=  4.99999e+00
-rxe_i2_post50n_shreg_6=  2.20667e-08
+rxe_i2_post50n_shreg_6=  2.21063e-08
 rxe_i2_post50n_sda_in_row2=  5.00000e+00
 rxe_i2_post50n_scl_row2=  5.00000e+00
 rxe_i2_post500n_sel_087=  5.00000e+00
-rxe_i2_post500n_last_bit_pending=  2.33609e-08
+rxe_i2_post500n_last_bit_pending=  3.14935e-08
 rxe_i2_post500n_shreg_0=  5.00000e+00
-rxe_i2_post500n_shreg_1=  -9.06100e-06
-rxe_i2_post500n_shreg_2=  -4.06552e-06
+rxe_i2_post500n_shreg_1=  -9.06148e-06
+rxe_i2_post500n_shreg_2=  -4.06576e-06
 rxe_i2_post500n_shreg_3=  5.00000e+00
-rxe_i2_post500n_shreg_4=  2.65180e-08
+rxe_i2_post500n_shreg_4=  2.65345e-08
 rxe_i2_post500n_shreg_5=  5.00000e+00
-rxe_i2_post500n_shreg_6=  2.21030e-08
+rxe_i2_post500n_shreg_6=  2.21281e-08
 rxe_i2_post500n_sda_in_row2=  5.00000e+00
 rxe_i2_post500n_scl_row2=  5.00000e+00
 rxe_i1_pre50n_sel_087=  5.00000e+00
-rxe_i1_pre50n_last_bit_pending=  2.22736e-08
+rxe_i1_pre50n_last_bit_pending=  2.95278e-08
 rxe_i1_pre50n_shreg_0=  5.00000e+00
-rxe_i1_pre50n_shreg_1=  -5.39963e-07
-rxe_i1_pre50n_shreg_2=  -1.83257e-07
+rxe_i1_pre50n_shreg_1=  -5.48815e-07
+rxe_i1_pre50n_shreg_2=  -1.83277e-07
 rxe_i1_pre50n_shreg_3=  5.00000e+00
-rxe_i1_pre50n_shreg_4=  2.01763e-08
+rxe_i1_pre50n_shreg_4=  2.01588e-08
 rxe_i1_pre50n_shreg_5=  5.00000e+00
 rxe_i1_pre50n_shreg_6=  2.08539e-08
 rxe_i1_pre50n_sda_in_row2=  1.43476e-07
-rxe_i1_pre50n_scl_row2=  -4.82151e-09
-rxe_i1_post50n_sel_087=  -2.21357e-05
+rxe_i1_pre50n_scl_row2=  -5.09371e-09
+rxe_i1_post50n_sel_087=  -2.24641e-05
 rxe_i1_post50n_last_bit_pending=  5.00000e+00
-rxe_i1_post50n_shreg_0=  7.26485e-09
+rxe_i1_post50n_shreg_0=  7.67240e-09
 rxe_i1_post50n_shreg_1=  5.00000e+00
-rxe_i1_post50n_shreg_2=  5.37616e-09
-rxe_i1_post50n_shreg_3=  6.90040e-09
+rxe_i1_post50n_shreg_2=  5.66789e-09
+rxe_i1_post50n_shreg_3=  7.64086e-09
 rxe_i1_post50n_shreg_4=  5.00000e+00
-rxe_i1_post50n_shreg_5=  7.23743e-09
+rxe_i1_post50n_shreg_5=  7.44481e-09
 rxe_i1_post50n_shreg_6=  5.00000e+00
-rxe_i1_post50n_sda_in_row2=  6.06868e-06
+rxe_i1_post50n_sda_in_row2=  6.06745e-06
 rxe_i1_post50n_scl_row2=  5.00003e+00
-rxe_i1_post500n_sel_087=  1.57440e-06
+rxe_i1_post500n_sel_087=  1.60294e-06
 rxe_i1_post500n_last_bit_pending=  5.00000e+00
-rxe_i1_post500n_shreg_0=  5.25425e-08
+rxe_i1_post500n_shreg_0=  5.26545e-08
 rxe_i1_post500n_shreg_1=  5.00000e+00
-rxe_i1_post500n_shreg_2=  4.48020e-08
-rxe_i1_post500n_shreg_3=  7.36166e-08
+rxe_i1_post500n_shreg_2=  4.46160e-08
+rxe_i1_post500n_shreg_3=  7.39985e-08
 rxe_i1_post500n_shreg_4=  5.00000e+00
-rxe_i1_post500n_shreg_5=  3.94981e-08
+rxe_i1_post500n_shreg_5=  3.99105e-08
 rxe_i1_post500n_shreg_6=  5.00000e+00
-rxe_i1_post500n_sda_in_row2=  6.62727e-07
+rxe_i1_post500n_sda_in_row2=  6.62757e-07
 rxe_i1_post500n_scl_row2=  5.00000e+00
-rxe_i0_pre50n_sel_087=  2.05312e-07
+rxe_i0_pre50n_sel_087=  2.05315e-07
 rxe_i0_pre50n_last_bit_pending=  5.00000e+00
-rxe_i0_pre50n_shreg_0=  1.86387e-08
+rxe_i0_pre50n_shreg_0=  1.86382e-08
 rxe_i0_pre50n_shreg_1=  5.00000e+00
-rxe_i0_pre50n_shreg_2=  2.04436e-08
-rxe_i0_pre50n_shreg_3=  1.86380e-08
+rxe_i0_pre50n_shreg_2=  2.04230e-08
+rxe_i0_pre50n_shreg_3=  1.86375e-08
 rxe_i0_pre50n_shreg_4=  5.00000e+00
-rxe_i0_pre50n_shreg_5=  1.86389e-08
+rxe_i0_pre50n_shreg_5=  1.86383e-08
 rxe_i0_pre50n_shreg_6=  5.00000e+00
 rxe_i0_pre50n_sda_in_row2=  5.00000e+00
-rxe_i0_pre50n_scl_row2=  4.73251e-08
+rxe_i0_pre50n_scl_row2=  4.73041e-08
 rxe_i0_post50n_sel_087=  5.00000e+00
-rxe_i0_post50n_last_bit_pending=  2.97027e-08
+rxe_i0_post50n_last_bit_pending=  2.94282e-08
 rxe_i0_post50n_shreg_0=  5.00000e+00
-rxe_i0_post50n_shreg_1=  -1.27457e-08
+rxe_i0_post50n_shreg_1=  -1.28338e-08
 rxe_i0_post50n_shreg_2=  5.00000e+00
-rxe_i0_post50n_shreg_3=  7.36841e-10
-rxe_i0_post50n_shreg_4=  2.24324e-08
+rxe_i0_post50n_shreg_3=  6.87239e-10
+rxe_i0_post50n_shreg_4=  2.23884e-08
 rxe_i0_post50n_shreg_5=  5.00000e+00
-rxe_i0_post50n_shreg_6=  7.35794e-08
+rxe_i0_post50n_shreg_6=  7.35696e-08
 rxe_i0_post50n_sda_in_row2=  5.00000e+00
 rxe_i0_post50n_scl_row2=  5.00000e+00
 rxe_i0_post500n_sel_087=  5.00000e+00
-rxe_i0_post500n_last_bit_pending=  2.09344e-08
+rxe_i0_post500n_last_bit_pending=  2.08778e-08
 rxe_i0_post500n_shreg_0=  5.00000e+00
-rxe_i0_post500n_shreg_1=  1.75498e-08
+rxe_i0_post500n_shreg_1=  1.75640e-08
 rxe_i0_post500n_shreg_2=  5.00000e+00
-rxe_i0_post500n_shreg_3=  1.85667e-08
-rxe_i0_post500n_shreg_4=  2.05437e-08
+rxe_i0_post500n_shreg_3=  1.85745e-08
+rxe_i0_post500n_shreg_4=  2.05360e-08
 rxe_i0_post500n_shreg_5=  5.00000e+00
-rxe_i0_post500n_shreg_6=  2.82495e-08
+rxe_i0_post500n_shreg_6=  2.82097e-08
 rxe_i0_post500n_sda_in_row2=  5.00000e+00
 rxe_i0_post500n_scl_row2=  5.00000e+00
-rxdiag_shreg_0      =  2.10456e-08
+rxdiag_shreg_0      =  1.79933e-07
 rxdiag_shreg_1      =  5.00000e+00
-rxdiag_shreg_2      =  -2.83290e-07
+rxdiag_shreg_2      =  -1.25101e-07
 rxdiag_shreg_3      =  5.00000e+00
-rxdiag_shreg_4      =  6.01377e-08
-rxdiag_shreg_5      =  -5.88947e-07
+rxdiag_shreg_4      =  6.01398e-08
+rxdiag_shreg_5      =  -4.31987e-07
 rxdiag_shreg_6      =  5.00000e+00
-rxdiag_sda_in_row2  =  2.80908e-07
+rxdiag_sda_in_row2  =  2.83720e-07
 rxdiag_nc_out3      =  5.00000e+00
-rxdiag_nc_out4      =  2.08529e-08
+rxdiag_nc_out4      =  2.08521e-08
 rxdiag_nc_out5      =  5.00000e+00
-rxdiag_nc_out6      =  2.08529e-08
+rxdiag_nc_out6      =  2.08521e-08
 rxdiag_nc_out11     =  5.00000e+00
-rxdiag_nc_out12     =  2.08529e-08
+rxdiag_nc_out12     =  2.08521e-08
 rxdiag_nc_out13     =  5.00000e+00
-rxdiag_nc_out14     =  2.08529e-08
+rxdiag_nc_out14     =  2.08521e-08
 stop1_busy_m500n    =  5.00000e+00
-stop1_busy_clr_m500n=  8.33271e-08
-stop1_qn_m500n      =  -4.04475e-09
+stop1_busy_clr_m500n=  8.27722e-08
+stop1_qn_m500n      =  -6.14341e-09
 stop1_scl_row2_m500n=  5.00000e+00
-stop1_sda_in_row2_m500n=  8.11081e-08
-stop1_sda_d_m500n   =  1.51608e-08
+stop1_sda_in_row2_m500n=  8.15828e-08
+stop1_sda_d_m500n   =  1.25584e-08
 stop1_busy_m100n    =  5.00000e+00
-stop1_busy_clr_m100n=  8.06586e-08
-stop1_qn_m100n      =  7.29207e-08
+stop1_busy_clr_m100n=  8.17045e-08
+stop1_qn_m100n      =  8.15578e-08
 stop1_scl_row2_m100n=  5.00000e+00
-stop1_sda_in_row2_m100n=  9.83859e-08
-stop1_sda_d_m100n   =  3.61771e-08
+stop1_sda_in_row2_m100n=  9.87083e-08
+stop1_sda_d_m100n   =  4.25984e-08
 stop1_busy_m50n     =  5.00000e+00
-stop1_busy_clr_m50n =  8.23072e-08
-stop1_qn_m50n       =  2.06702e-08
+stop1_busy_clr_m50n =  8.23093e-08
+stop1_qn_m50n       =  2.06895e-08
 stop1_scl_row2_m50n =  5.00000e+00
-stop1_sda_in_row2_m50n=  8.26914e-08
-stop1_sda_d_m50n    =  2.06058e-08
+stop1_sda_in_row2_m50n=  8.27153e-08
+stop1_sda_d_m50n    =  2.06283e-08
 stop1_busy_m20n     =  5.00000e+00
-stop1_busy_clr_m20n =  7.63066e-08
-stop1_qn_m20n       =  1.95095e-08
+stop1_busy_clr_m20n =  7.63054e-08
+stop1_qn_m20n       =  1.94966e-08
 stop1_scl_row2_m20n =  5.00000e+00
-stop1_sda_in_row2_m20n=  -1.08347e-06
-stop1_sda_d_m20n    =  2.01964e-08
+stop1_sda_in_row2_m20n=  -1.08345e-06
+stop1_sda_d_m20n    =  2.01910e-08
 stop1_busy_m10n     =  4.96364e+00
-stop1_busy_clr_m10n =  4.47985e-01
-stop1_qn_m10n       =  -1.28989e-03
+stop1_busy_clr_m10n =  4.47980e-01
+stop1_qn_m10n       =  -1.28994e-03
 stop1_scl_row2_m10n =  4.97780e+00
 stop1_sda_in_row2_m10n=  3.14997e+00
-stop1_sda_d_m10n    =  -3.60819e-04
+stop1_sda_d_m10n    =  -3.60817e-04
 stop1_busy_m5n      =  2.98638e+00
 stop1_busy_clr_m5n  =  4.26876e+00
-stop1_qn_m5n        =  4.22621e-02
+stop1_qn_m5n        =  4.22607e-02
 stop1_scl_row2_m5n  =  4.99596e+00
 stop1_sda_in_row2_m5n=  5.30291e+00
-stop1_sda_d_m5n     =  3.94363e-04
-stop1_busy_evt      =  2.45443e-02
+stop1_sda_d_m5n     =  3.94336e-04
+stop1_busy_evt      =  2.45416e-02
 stop1_busy_clr_evt  =  4.99831e+00
 stop1_qn_evt        =  4.93040e+00
 stop1_scl_row2_evt  =  5.01094e+00
 stop1_sda_in_row2_evt=  4.99914e+00
-stop1_sda_d_evt     =  -3.56625e-02
-stop1_busy_p5n      =  8.69673e-04
-stop1_busy_clr_p5n  =  5.06304e+00
+stop1_sda_d_evt     =  -3.56933e-02
+stop1_busy_p5n      =  8.70187e-04
+stop1_busy_clr_p5n  =  5.06306e+00
 stop1_qn_p5n        =  5.00005e+00
-stop1_scl_row2_p5n  =  4.99368e+00
-stop1_sda_in_row2_p5n=  5.00336e+00
-stop1_sda_d_p5n     =  4.07391e+00
-stop1_busy_p10n     =  -8.98944e-03
-stop1_busy_clr_p10n =  1.53404e-01
+stop1_scl_row2_p5n  =  4.99369e+00
+stop1_sda_in_row2_p5n=  5.00337e+00
+stop1_sda_d_p5n     =  4.07401e+00
+stop1_busy_p10n     =  -8.98813e-03
+stop1_busy_clr_p10n =  1.53365e-01
 stop1_qn_p10n       =  5.00685e+00
 stop1_scl_row2_p10n =  5.00060e+00
 stop1_sda_in_row2_p10n=  4.99931e+00
 stop1_sda_d_p10n    =  4.98427e+00
-stop1_busy_p20n     =  1.30336e-05
-stop1_busy_clr_p20n =  -1.11207e-05
+stop1_busy_p20n     =  1.30353e-05
+stop1_busy_clr_p20n =  -1.11366e-05
 stop1_qn_p20n       =  4.99999e+00
 stop1_scl_row2_p20n =  5.00005e+00
 stop1_sda_in_row2_p20n=  4.99991e+00
 stop1_sda_d_p20n    =  5.00001e+00
-stop1_busy_p50n     =  4.37496e-06
-stop1_busy_clr_p50n =  -9.94604e-06
+stop1_busy_p50n     =  4.37374e-06
+stop1_busy_clr_p50n =  -9.96510e-06
 stop1_qn_p50n       =  5.00000e+00
 stop1_scl_row2_p50n =  5.00002e+00
 stop1_sda_in_row2_p50n=  4.99998e+00
 stop1_sda_d_p50n    =  5.00000e+00
-stop1_busy_p100n    =  1.60200e-06
-stop1_busy_clr_p100n=  -9.97771e-06
+stop1_busy_p100n    =  1.60106e-06
+stop1_busy_clr_p100n=  -9.99521e-06
 stop1_qn_p100n      =  5.00000e+00
 stop1_scl_row2_p100n=  5.00001e+00
 stop1_sda_in_row2_p100n=  4.99999e+00
 stop1_sda_d_p100n   =  5.00000e+00
-stop1_busy_p500n    =  1.37376e-06
-stop1_busy_clr_p500n=  8.12903e-06
+stop1_busy_p500n    =  1.37425e-06
+stop1_busy_clr_p500n=  8.14056e-06
 stop1_qn_p500n      =  5.00000e+00
 stop1_scl_row2_p500n=  5.00000e+00
 stop1_sda_in_row2_p500n=  5.00000e+00
 stop1_sda_d_p500n   =  5.00000e+00
-stop1_busy_p1u      =  7.52477e-07
-stop1_busy_clr_p1u  =  7.50336e-06
+stop1_busy_p1u      =  7.52802e-07
+stop1_busy_clr_p1u  =  7.51266e-06
 stop1_qn_p1u        =  5.00000e+00
 stop1_scl_row2_p1u  =  5.00000e+00
 stop1_sda_in_row2_p1u=  5.00000e+00
 stop1_sda_d_p1u     =  5.00000e+00
-stop1_busy_p2u      =  3.78153e-07
-stop1_busy_clr_p2u  =  6.71216e-06
+stop1_busy_p2u      =  3.78348e-07
+stop1_busy_clr_p2u  =  6.71929e-06
 stop1_qn_p2u        =  5.00000e+00
 stop1_scl_row2_p2u  =  5.00000e+00
 stop1_sda_in_row2_p2u=  5.00000e+00
 stop1_sda_d_p2u     =  5.00000e+00
-stop1_busy_p5u      =  -5.99390e-08
-stop1_busy_clr_p5u  =  -6.82694e-06
+stop1_busy_p5u      =  -6.00523e-08
+stop1_busy_clr_p5u  =  -6.83176e-06
 stop1_qn_p5u        =  5.00000e+00
 stop1_scl_row2_p5u  =  5.00000e+00
 stop1_sda_in_row2_p5u=  5.00000e+00
 stop1_sda_d_p5u     =  5.00000e+00
 
 
-Total analysis time (seconds) = 63.1998
+Total analysis time (seconds) = 60.4076
 
-Total elapsed time (seconds) = 63.451 
+Total elapsed time (seconds) = 60.656 
 
 Total DRAM available = 65536.000 MB.
-DRAM currently available =  732.938 MB.
-Maximum ngspice program size =  281.844 MB.
-Current ngspice program size =  281.844 MB.
+DRAM currently available = 1538.781 MB.
+Maximum ngspice program size =  282.328 MB.
+Current ngspice program size =  282.328 MB.
 

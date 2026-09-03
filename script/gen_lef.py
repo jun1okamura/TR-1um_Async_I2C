@@ -144,6 +144,47 @@ PIN_META = {
         "QB":  ("OUTPUT", "SIGNAL"),
         **_PWR,
     },
+    # RSLATCH (design_notes.md section 108.27/108.29): cross-coupled NOR2
+    # SR latch, added by the user this session as a dedicated STDCELL
+    # replacing the ad-hoc 2xNOR2 pattern used 3x in the current netlist
+    # (sda_d/busy/rst_stretch latches). S/R inputs, Q/QB outputs -- no
+    # clock, no reset pin (this is a level-sensitive latch, not an
+    # edge-triggered flop). PR boundary 32.4um (6 tracks) x 64.8um,
+    # on-grid, same row height as every other cell. NOTE: the GDS's M2PIN
+    # text labels initially had two ports both marked "Q" (a mislabel --
+    # the true 4th port, immediately left of R, is "S"); confirmed fixed
+    # (S/R/Q/QB, 4 distinct labels) before generating this LEF entry.
+    "RSLATCH": {
+        "S":  ("INPUT",  "SIGNAL"),
+        "R":  ("INPUT",  "SIGNAL"),
+        "Q":  ("OUTPUT", "SIGNAL"),
+        "QB": ("OUTPUT", "SIGNAL"),
+        **_PWR,
+    },
+    # MUXDFFRB (design_notes.md section 108.27/108.29): MUX2 folded
+    # directly into DFFRB's D input -- a load-enable flip-flop, added by
+    # the user this session as a dedicated STDCELL replacing the 19
+    # MUX2->DFFRB.D single-fanout sites found in the current netlist
+    # (rx_data_0-7, txreg_0-7, phase_1, addr_match, rw). Pin set is
+    # DFFRB's own (CK/RSTB/Q/QB, same direction/use as DFFRB) with the D
+    # pin removed and replaced by the internal MUX2's A/B/S inputs (A/B
+    # plain SIGNAL like any MUX2 input; S is the select, also SIGNAL --
+    # matches MUX2's own PIN_META convention above). PR boundary 94.6um
+    # (~17.5 tracks) x 64.8um, same row height as DFFRB. Internal CKP/CKB/
+    # QM/QS TXM1 labels are DFFRB's usual internal master/slave-latch
+    # node labels (no M1PIN/M2PIN marker backs them, so name_for_polygon
+    # correctly never matches them to a port) -- same non-port precedent
+    # already established for DFF/DFFS above.
+    "MUXDFFRB": {
+        "A":    ("INPUT",  "SIGNAL"),
+        "B":    ("INPUT",  "SIGNAL"),
+        "S":    ("INPUT",  "SIGNAL"),
+        "CK":   ("INPUT",  "CLOCK"),
+        "RSTB": ("INPUT",  "SIGNAL"),
+        "Q":    ("OUTPUT", "SIGNAL"),
+        "QB":   ("OUTPUT", "SIGNAL"),
+        **_PWR,
+    },
     "BUF_X1":   _gate_meta("A"),
     # BUFTH: hysteresis (Schmitt-trigger) buffer added this session by the
     # user directly in TR-1um_STDCELL.gds. Same single-input/single-output

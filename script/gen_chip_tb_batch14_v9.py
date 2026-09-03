@@ -431,7 +431,13 @@ xdut {XDUT_NETS} tr_1um_i2c_slave_async
 * logical fan-in we can find by inspection. Adding these nets to the trace
 * to check empirically whether it is a genuine tx-path bug (independent of
 * 108.20) or a timing-margin issue in that separate clock domain.
-  wrdata rx_capture_trace.txt v(xdut.x2.shreg_0) v(xdut.x2.shreg_1) v(xdut.x2.shreg_2) v(xdut.x2.shreg_3) v(xdut.x2.shreg_4) v(xdut.x2.shreg_5) v(xdut.x2.shreg_6) v(xdut.x2.sda_in_row2) v(xdut.x2._087_) v(xdut.x2.last_bit_pending) v(xdut.x2._156__row0) v(xdut.x2._156__row1) v(xdut.x2._156__row2) v(xdut.x2._156__row3) v(xdut.x2._016_) v(xdut.x2.bit_cnt_0) v(xdut.x2.bit_cnt_1) v(xdut.x2.bit_cnt_2) v(xdut.NC_CORE_busy) v(xdut.NC_OUT11) v(xdut.NC_OUT12) v(xdut.NC_OUT13) v(xdut.NC_OUT14) v(xdut.NC_OUT6) v(xdut.NC_OUT5) v(xdut.NC_OUT4) v(xdut.NC_OUT3) v(xdut.x2.txreg_0) v(xdut.x2.txreg_1) v(xdut.x2.txreg_2) v(xdut.x2.txreg_3) v(xdut.x2.txreg_4) v(xdut.x2.txreg_5) v(xdut.x2.txreg_6) v(xdut.x2.txreg_7) v(xdut.x2._092_) v(xdut.x2._079_) v(xdut.x2._005_) v(xdut.x2.sda_oe_r) v(xdut.x2.scl_n_row0) v(xdut.x2.scl_n_row2) v(xdut.x2.scl_n_row3) v(xdut.x2.scl_n)
+* 2026-09-02 addition (design_notes.md section 108.32): added
+* `scl_n_row1`, the newly-added buffer created by the 108.32 SPICE patch
+* that verifies V10's placement-pipeline-chosen scl_n split (txreg_2/3 on
+* their own row1 buffer, txreg_0/1/4/5/6/7 sharing row2, 6 loads) --
+* to directly confirm row1/row2 are both toggling and neither DFFRB group
+* misses a capture edge under this new, more asymmetric split.
+  wrdata rx_capture_trace.txt v(xdut.x2.shreg_0) v(xdut.x2.shreg_1) v(xdut.x2.shreg_2) v(xdut.x2.shreg_3) v(xdut.x2.shreg_4) v(xdut.x2.shreg_5) v(xdut.x2.shreg_6) v(xdut.x2.sda_in_row2) v(xdut.x2._087_) v(xdut.x2.last_bit_pending) v(xdut.x2._156__row0) v(xdut.x2._156__row1) v(xdut.x2._156__row2) v(xdut.x2._156__row3) v(xdut.x2._016_) v(xdut.x2.bit_cnt_0) v(xdut.x2.bit_cnt_1) v(xdut.x2.bit_cnt_2) v(xdut.NC_CORE_busy) v(xdut.NC_OUT11) v(xdut.NC_OUT12) v(xdut.NC_OUT13) v(xdut.NC_OUT14) v(xdut.NC_OUT6) v(xdut.NC_OUT5) v(xdut.NC_OUT4) v(xdut.NC_OUT3) v(xdut.x2.txreg_0) v(xdut.x2.txreg_1) v(xdut.x2.txreg_2) v(xdut.x2.txreg_3) v(xdut.x2.txreg_4) v(xdut.x2.txreg_5) v(xdut.x2.txreg_6) v(xdut.x2.txreg_7) v(xdut.x2._092_) v(xdut.x2._079_) v(xdut.x2._005_) v(xdut.x2.sda_oe_r) v(xdut.x2.scl_n_row0) v(xdut.x2.scl_n_row1) v(xdut.x2.scl_n_row2) v(xdut.x2.scl_n_row3) v(xdut.x2.scl_n)
 .endc
 
 .end

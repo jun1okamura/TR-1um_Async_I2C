@@ -93,16 +93,22 @@ for _i in range(8):
     PORT_DIR[f"rx_data[{_i}]"] = "OUTPUT"
 
 
-def port_to_net_name(port):
+def port_to_net_name(port, resolver=None):
     """v40: the actual routable net name behind a top-level port string
     (e.g. "tx_data[7]" -> "tx_data[7]" itself is fine since BUS_PORT_NET_ALIAS
     has no tx_data entry, but "rw" -> "rw_bit", "rx_data[3]" -> "rx_data_r[3]")
     -- needed to look up net_shapes_log/pin_map, which are keyed by net,
-    not by port."""
+    not by port.
+
+    108.42 (V10): `resolver`, when given, is threaded through to
+    port_net_name/bus_bit_net_name so this also picks up assign-chain
+    aliases (e.g. V10's sda_oe -> _187_) beyond the static
+    PORT_NET_ALIAS/BUS_PORT_NET_ALIAS dicts -- see
+    highlight_top_pins_nrow_fm.py's 108.42 note."""
     if "[" in port:
         bus, idx = port[:-1].split("[")
-        return bus_bit_net_name(bus, int(idx))
-    return port_net_name(port)
+        return bus_bit_net_name(bus, int(idx), resolver)
+    return port_net_name(port, resolver)
 
 
 def dedup_min_x(items):
@@ -115,14 +121,14 @@ def dedup_min_x(items):
     return sorted([(port,) + v for port, v in best.items()], key=lambda t: t[4])
 
 
-def gather_pins(placement, ch_heights, row_h):
+def gather_pins(placement, ch_heights, row_h, resolver=None):
     net_pins, core_h = build_net_pins(placement, ch_heights, row_h)
     net_to_port = {}
     for port in SCALAR_PORTS:
-        net_to_port[port_net_name(port)] = port
+        net_to_port[port_net_name(port, resolver)] = port
     for bus, w in BUS_PORTS.items():
         for i in range(w):
-            net_to_port[bus_bit_net_name(bus, i)] = f"{bus}[{i}]"
+            net_to_port[bus_bit_net_name(bus, i, resolver)] = f"{bus}[{i}]"
 
     n_rows = len(placement["rows"])
     row_y0 = []
@@ -172,12 +178,17 @@ def gather_pins(placement, ch_heights, row_h):
 
 
 def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS, ch_heights=CH_HEIGHTS,
-         net_shapes_json=NET_SHAPES_JSON):
+         net_shapes_json=NET_SHAPES_JSON, net_file=None):
+    resolver = None
+    if net_file:
+        from netlist_parser import _build_alias_resolver
+        resolver = _build_alias_resolver(open(net_file).read())
+
     placement = json.load(open(placement_json))
     row_h = placement["row_height"]
     row_width = placement["row_width"]
     row0_list, row1_list, row2_list, row3_list, row_y0, core_h = gather_pins(
-        placement, ch_heights, row_h)
+        placement, ch_heights, row_h, resolver)
 
     # v40 (design_notes, this session, user request "STEP6" -- third fix):
     # rw_bit/rx_valid/addr_ok/busy/rst_n/tx_data[7]/rx_data_r[*] are all
@@ -414,14 +425,37 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS, ch_heigh
 
     # ---- row0: M2 straight down, 10um past Y=0 ----
     for port, direc, inst, pname, cx, cy in row0_list:
-        net = port_to_net_name(port)
+        net = port_to_net_name(port, resolver)
         half = PAD_HALF
         y_end = -EXTEND_UM
         if cy - half > row0_bound:
             m2_box(cx - half, row0_bound, cx + half, cy + half)  # leg 1 (unchecked)
+        # 108.50 (V10, this session): same self-collision bug the v49/v50
+        # fix solved for route_row1_row2 (design_notes 69/70) -- for a
+        # true 1-pin "stub" net (e.g. tx_data[i]), own_region() is always
+        # empty (net_shapes_log only tracks nets route_channels_nrow_fm.py
+        # itself routed), so exclude_net alone can't stop the pin's OWN
+        # physical pad -- and, when it's close enough to row0_bound to
+        # straddle it, leg 1's own just-drawn bar -- from reading as a
+        # "collision" against every single candidate X, including x_start
+        # itself, in BOTH the vertical-column check and (since one dogleg
+        # endpoint is always cx) EVERY dogleg. Root-caused via a direct
+        # GDS query on the V10 squeezed layout (LVS: sda_oe's row2
+        # equivalent of this class of bug shorted it onto the clock trunk
+        # via the "least-bad" track fallback; row0/row3 has no such
+        # fallback -- find_clear_x_vertical simply returns None forever
+        # and the caller draws straight through at cx regardless,
+        # silently leaving whatever real short/DRC risk was actually
+        # there, if any, undetected by pin_map-based verify_connectivity
+        # since stub nets are excluded from pin_map too). Fix: build the
+        # same kind of self_own region row1/row2 already uses (own pad +
+        # leg 1's own extent, since leg 1 itself is also untracked new
+        # geometry) and thread it through as extra_own.
+        self_own = db.Region(db.Box(um(cx - half - 0.2), um(min(cy, row0_bound) - half - 0.2),
+                                     um(cx + half + 0.2), um(max(cy, row0_bound) + half + 0.2)))
         found_x = find_clear_x_vertical(cx, y_end, row0_bound, half,
                                          dogleg_y=(row0_bound - half, row0_bound + half),
-                                         exclude_net=net)
+                                         exclude_net=net, extra_own=self_own)
         ok = found_x is not None
         fx = found_x if ok else cx
         if fx != cx:
@@ -432,14 +466,17 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS, ch_heigh
 
     # ---- row3: M2 straight up, 10um past Y=core_h ----
     for port, direc, inst, pname, cx, cy in row3_list:
-        net = port_to_net_name(port)
+        net = port_to_net_name(port, resolver)
         half = PAD_HALF
         y_end = core_h + EXTEND_UM
         if cy + half < row3_bound:
             m2_box(cx - half, cy - half, cx + half, row3_bound)  # leg 1 (unchecked)
+        # 108.50: same fix as row0 above -- see that loop's comment.
+        self_own = db.Region(db.Box(um(cx - half - 0.2), um(min(cy, row3_bound) - half - 0.2),
+                                     um(cx + half + 0.2), um(max(cy, row3_bound) + half + 0.2)))
         found_x = find_clear_x_vertical(cx, row3_bound, y_end, half,
                                          dogleg_y=(row3_bound - half, row3_bound + half),
-                                         exclude_net=net)
+                                         exclude_net=net, extra_own=self_own)
         ok = found_x is not None
         fx = found_x if ok else cx
         if fx != cx:
@@ -484,7 +521,7 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS, ch_heigh
     # nothing about the ~150 nets that already route cleanly.
     def route_row1_row2(pin_list, from_bottom, x_end, direction_label):
         for port, direc, inst, pname, cx, cy in pin_list:
-            net = port_to_net_name(port)
+            net = port_to_net_name(port, resolver)
             # v50 (design_notes 70): the pin's own physical source-pin
             # footprint, ALWAYS excluded regardless of whether `net` has
             # a net_shapes_log entry (own_region()'s only source, empty

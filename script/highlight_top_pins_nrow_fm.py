@@ -95,16 +95,32 @@ BUS_PORT_NET_ALIAS = {
 SCALAR_PORTS = ["rst_n", "scl", "sda_in", "sda_oe", "rx_valid", "addr_match", "rw", "busy"]
 BUS_PORTS = {"tx_data": 8, "rx_data": 8}
 
+# 108.42 (V10, this session): this v6/v9-era static PORT_NET_ALIAS table
+# has needed a manual update every single time the RTL's synthesis
+# happened to route a port through a different `assign port = net;`
+# alias chain (v6: sda_oe -> sda_oe_r; v9: no alias at all, direct QB
+# pin; v10: sda_oe -> _187_, rx_valid -> _154_, both anonymous
+# Yosys-numbered nets from a DIFFERENT DFFRB/gate than either prior
+# case) -- each drift silently broke gather_pins() until someone
+# noticed a "missing pin(s)" warning or a mis-routed exit. Rather than
+# add yet another one-off dict entry, `resolver` (optional, an
+# alias-resolving callable such as netlist_parser's own
+# _build_alias_resolver(text) union-find `find`) lets these two
+# functions resolve straight from the CURRENT netlist's actual `assign`
+# chains -- the exact same resolution netlist_parser.parse_netlist()
+# already applies when building the pin-net names baked into the
+# placement JSON these scripts read. Passing no resolver preserves the
+# old static-dict-only behavior exactly (v9's call sites are
+# unaffected).
+def port_net_name(port, resolver=None):
+    net = PORT_NET_ALIAS.get(port, port)
+    return resolver(net) if resolver else net
 
-def port_net_name(port):
-    if port in PORT_NET_ALIAS:
-        return PORT_NET_ALIAS[port]
-    return port
 
-
-def bus_bit_net_name(bus, i):
+def bus_bit_net_name(bus, i, resolver=None):
     base = BUS_PORT_NET_ALIAS.get(bus, bus)
-    return f"{base}[{i}]"
+    net = f"{base}[{i}]"
+    return resolver(net) if resolver else net
 
 
 def build_net_pins(placement, ch_heights, row_h):
@@ -146,7 +162,12 @@ def find_tap_x_positions(placement):
     return sorted(xs)
 
 
-def main(placement_json, in_gds, out_gds, ch_heights, row_h=None):
+def main(placement_json, in_gds, out_gds, ch_heights, row_h=None, net_file=None):
+    resolver = None
+    if net_file:
+        from netlist_parser import _build_alias_resolver
+        resolver = _build_alias_resolver(open(net_file).read())
+
     placement = json.load(open(placement_json))
     if row_h is None:
         row_h = placement["row_height"]
@@ -176,7 +197,7 @@ def main(placement_json, in_gds, out_gds, ch_heights, row_h=None):
     missing = []
 
     for port in SCALAR_PORTS:
-        net = port_net_name(port)
+        net = port_net_name(port, resolver)
         pads = net_pins.get(net)
         if not pads:
             missing.append(port)
@@ -189,7 +210,7 @@ def main(placement_json, in_gds, out_gds, ch_heights, row_h=None):
     for bus, width in BUS_PORTS.items():
         for i in range(width):
             port = f"{bus}[{i}]"
-            net = bus_bit_net_name(bus, i)
+            net = bus_bit_net_name(bus, i, resolver)
             pads = net_pins.get(net)
             if not pads:
                 missing.append(port)

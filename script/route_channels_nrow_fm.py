@@ -1202,18 +1202,38 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         clear option, so same-row sharing still happens) while
         guaranteeing the search never travels farther than the nearest
         valid candidate actually requires."""
-        def ok(x):
-            return in_bounds(x) and not x_forbidden(x) and row_clear(row_k, x) and (extra_ok is None or extra_ok(x))
+        def ok(x, require_clear=True):
+            return (in_bounds(x) and not x_forbidden(x)
+                    and (not require_clear or row_clear(row_k, x))
+                    and (extra_ok is None or extra_ok(x)))
         if ok(start_x):
             return start_x
         candidates = set(priority_corridor_x)
         for s in range(1, ROW_X_TRIES + 1):
             candidates.add(start_x + s * X_GRID)
             candidates.add(start_x - s * X_GRID)
-        for x in sorted(candidates, key=lambda cx: abs(cx - start_x)):
+        sorted_candidates = sorted(candidates, key=lambda cx: abs(cx - start_x))
+        for x in sorted_candidates:
             if ok(x):
                 return x
-        raise SystemExit(f"no clear X found for row {row_k} near x={start_x} (net={cur_net[0]!r})")
+        # v33 (design_notes.md 108.33/108.34, V10): same soft-fallback
+        # rationale as find_channel_clear_x's SystemExit below -- with
+        # MUXDFFRB's bulk, some rows have no fully row_clear() column left
+        # anywhere near start_x. Rather than hard-crashing the whole
+        # routing run, fall back to extra_ok-only, then to bounds-only,
+        # always nearest start_x first, always logged loudly so
+        # ripup_reroute_shorts.py / DRC / connectivity passes can find and
+        # repair the spot afterward.
+        for x in sorted_candidates:
+            if ok(x, require_clear=False):
+                print(f"  WARNING: no clear X found for row {row_k} near x={start_x} "
+                      f"(net={cur_net[0]!r}) -- falling back to nearest extra_ok-only "
+                      f"track at x={x} (may leave a short to investigate)")
+                return x
+        print(f"  WARNING: no clear X found for row {row_k} near x={start_x} "
+              f"(net={cur_net[0]!r}) -- falling back to start_x itself, ignoring all "
+              f"clearance checks (may leave a short to investigate)")
+        return start_x
 
     # v4 (design_notes 38.8, point 7): live check for the forced-overlap
     # zone only -- queries the M2 ALREADY DRAWN in the exact box the stub
@@ -1316,8 +1336,9 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         list here (same merge pattern as find_row_clear_x's v21 fix)
         gives every collision-resolution path in the router the same
         chance to converge onto shared capacity."""
-        def ok(x):
-            return (in_bounds(x) and not x_forbidden(x) and channel_clear(x, y_lo, y_hi)
+        def ok(x, require_clear=True):
+            return (in_bounds(x) and not x_forbidden(x)
+                    and (not require_clear or channel_clear(x, y_lo, y_hi))
                     and (extra_ok is None or extra_ok(x)))
         if ok(start_x):
             return start_x
@@ -1325,10 +1346,43 @@ def main(placement_json=PLACEMENT_JSON, in_gds=IN_GDS, out_gds=OUT_GDS,
         for s in range(1, ROW_X_TRIES + 1):
             candidates.add(start_x + s * X_GRID)
             candidates.add(start_x - s * X_GRID)
-        for x in sorted(candidates, key=lambda cx: abs(cx - start_x)):
+        sorted_candidates = sorted(candidates, key=lambda cx: abs(cx - start_x))
+        for x in sorted_candidates:
             if ok(x):
                 return x
-        raise SystemExit(f"no clear X found in overlap zone near x={start_x} (y {y_lo}-{y_hi})")
+        # v33 (design_notes.md 108.33, V10): with MUXDFFRB's much wider
+        # cells (97.2um vs a plain DFFRB/small gate's 10-65um), a row's
+        # real-cell content routinely spans 80%+ of the row width even
+        # with left/right anchoring (point 7's "forced overlap zone"
+        # mitigation assumes each anchor side stays comfortably under
+        # 50%), so this exhaustive, full-Y-span channel_clear search can
+        # legitimately find NO fully-clear column anywhere in the row for
+        # some nets -- not a bug, a genuine density consequence of the
+        # STDCELL consolidation. Every other collision-driven search in
+        # this file (draw_jog's own fallback, find_row_clear_x's caller)
+        # already treats this as a soft, logged, best-effort situation
+        # ("falling back to nearest free track (may leave a short to
+        # investigate)") rather than aborting the whole routing run --
+        # this was the one remaining hard SystemExit or a channel_clear
+        # failure, blocking the whole raw route over a small number of
+        # individual nets that ripup_reroute_shorts.py /
+        # verify_connectivity_nrow_fm.py / fix_v9_remaining_shorts.py-
+        # style manual fixes are specifically designed to catch and
+        # repair afterward. Falls back to extra_ok-only (drops the
+        # channel_clear requirement, keeping any leg/landing constraint)
+        # before falling back further to bounds-only, always preferring
+        # the candidate nearest start_x, and always logs loudly so the
+        # net is easy to find in a later short/DRC pass.
+        for x in sorted_candidates:
+            if ok(x, require_clear=False):
+                print(f"  WARNING: no clear X found in overlap zone near x={start_x} "
+                      f"(y {y_lo}-{y_hi}, net={cur_net[0]!r}) -- falling back to nearest "
+                      f"extra_ok-only track at x={x} (may leave a short to investigate)")
+                return x
+        print(f"  WARNING: no clear X found in overlap zone near x={start_x} "
+              f"(y {y_lo}-{y_hi}, net={cur_net[0]!r}) -- falling back to start_x itself, "
+              f"ignoring all clearance checks (may leave a short to investigate)")
+        return start_x
 
     def via_x_clear(channel, track_y, x, net):
         """Is `x` far enough (MIN_VIA_X_SEP) from every via X already

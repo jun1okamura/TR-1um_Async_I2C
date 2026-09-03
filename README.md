@@ -30,6 +30,7 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 | **RING_OSC統合**（コア横に追加したリング発振器、チップ全体のDRC/LVSクリーンに統合済み） | コア（`i2c_slave_async_nrow_fm`）の隣に配置・VDD/VSS/信号配線・LVS用SPICE生成までを実施し、**実機KLayoutでのチップレベルDRC/LVSクリーンを確認**（design_notes §103.1〜103.13）。コア〜RING_OSC間の空きスペースにOpenSUSIロゴをM2デジタイズアートとして配置（DRC違反0で追加、§103.14）。標準セル配置レイアウト起因のPTECTキープアウト重複問題もユーザー側で解消（§103.15）。RING_OSC単体の自己検証用ngspiceテストベンチ（`ring_osc/TB/`）を作成し、実ローカルngspiceで発振を確認：`OUT`周期153.661ns/6.508MHz、`OUTB`周期641.844ns/1.558MHz（INV3Dのアンテナダイオード拡散が出力ノードに乗る影響で**約4.2倍遅い**、extracted netlistのAS/AD割り当て誤りを発見・シミュレーション用コピーのみ修正、§103.16〜103.22）。 |
 | **GIOパッド再割り当て**（SCL/SDAを隣接パッドP1/P2へ集約、tx_data/rx_data各ビットのパッド再配分） | `script/reroute_gio_pads_2026.py`で物理配線を実装。`tx_data[4]`の新レーン探索で見つかったM2平行配線の5.4umクリアランス要件を根拠に8ネットのレーン半径をカスケードシフト、`HIZ1_VDD_tie`はTIE_R反復（917.0→916.1）、`ENB_rst_n_via`を新設しRING_OSC.ENB⇔rst_n/P15の断線（GIOパッド再配線でrst_nの旧M1スタブごと消えたことが原因）を修正——**実機KLayoutでDRC 0違反を確認**（design_notes §104.1〜104.2）。`gio_connections.json`のP7/OUT2ネット欠落を修正しLVS参照SPICEを再生成、**LVSクリーンを確認**（§104.3）。IRSIM`.sim`のSDAプルアップ対象パッド（P13→P2への移設漏れ）、および`gen_irsim_cmd_v9.py`のSCL/SDA/SDA_OE/TX/RXノード名（パッド再割り当て前の旧マッピングのまま残存）という2件のステール参照バグを発見・修正した上で`irsim_tb.cmd`一式を再生成し、**実機IRSIMで`All 14 checks PASSED`を確認**（§104.4〜104.5）。 |
 | **OpenSUSIロゴのM2ドット化再デザイン** | 103.14の塗りつぶしブロック方式から、M2 3.0×3.0umの孤立正方形ドット（5.0umピッチグリッド中央配置、Wmin/Sminをちょうど満たす構造的DRC安全設計）へ再デザイン。サイズ・配置位置は現状維持、`OPENSUSI_LOGO`セルの中身のみ差し替え。ロゴ単体・チップ全体ともDRC自己検証0違反、**実機KLayoutでDRCクリーンを確認**（design_notes §105）。 |
+| **V10**（MUXDFFRB/RSLATCH合成セル統合、コアセル再配置配線） | コアセル（`i2c_slave_async_nrow_fm`）のネットリストを、ユーザーが物理レイアウトした2つの合成STDCELL（MUXDFFRB=MUX2+DFFRB、RSLATCH=NOR2×2クロスカップルドラッチ）を使う版へ移行し、配置配線をゼロからやり直し（`script/run_v10_pipeline.py`、design_notes §108.23〜108.43）。チャネル圧縮＋トップピン引き出し＋VDD/GNDトップピン追加までを経て、実機KLayoutでの**コアセル単体DRC 0違反**を確認（`layout/step10/v10_step_9_power_pins_added.gds`）。LVS参照SPICE（`script/gen_lvs_spice_v10.py`、xschem非経由の直接生成）を作成し、実機KLayoutでのLVS反復（`LVS_error.lvsdb`）から6件の実バグを発見・修正——RSLATCH/MUXDFFRB自体の階層参照ミスマッチ、rx_data/rx_data_rバスエイリアス二重解決、Verilogビットリテラル定数（`1'h1`）の未処理、STEP8トップピン引き出しがsqueeze後の空きトラック枯渇で既存クロックトランクへ物理ショート、row0/row3引き出しの自己パッド衝突誤検出によるtx_data系6ビットの強制配線、MUX2インスタンスのAピンが配置生成時点でリテラル未解決のため一度も配線されずVDD未接続だった欠落タイ——を全て修正し、**実機KLayoutでコアセル単体LVSクリーンを確認**（design_notes §108.44〜108.51）。**チップレベル（GIO/RING_OSC統合）へのV10反映はまだ未実施**——下記「現行の正式最終成果物」は引き続きV9ベースのチップGDS。 |
 
 **最終レイアウト成果物（V9、トップレベル・チップ全体）**:
 [`src/tr_1um_i2c_slave_async.gds`](./src/tr_1um_i2c_slave_async.gds)
@@ -130,8 +131,9 @@ script/
                               物理配線パッチスクリプト（design_notes §104）
   place_opensusi_logo_dots.py OpenSUSIロゴをM2 3um角の孤立ドットとして再デザイン
                               （design_notes §105）
-  他、配置配線・DRC/接続性検証・LVS準備・IRSIM検証・RING_OSC統合スクリプト
-  一式（全63本、詳細は[`SCRIPTS.md`](./SCRIPTS.md)）。開発過程の旧世代・重複・
+  他、配置配線・DRC/接続性検証・LVS準備・IRSIM検証・RING_OSC統合・V10
+  移行スクリプト一式（全72本、詳細は[`SCRIPTS.md`](./SCRIPTS.md)）。
+  開発過程の旧世代・重複・
   解消済みバグの一回限りデバッグスクリプトは削除済み（v7版のGDS/GIOルータ等、
   一部は現行v9パイプラインの前例・依存として残置）。
 irsim/                        IRSIMチップレベル動作検証一式（`.sim`/`.cmd`、自己検証型
@@ -384,5 +386,22 @@ cd irsim
   - §105: OpenSUSIロゴを塗りつぶしブロック方式からM2 3um角の孤立
     ドット方式へ再デザイン（サイズ・配置位置は現状維持）、実機DRC
     クリーン確認
+  - §108.23〜108.38: **V10**コアセルネットリスト移行（MUXDFFRB/
+    RSLATCH合成セル統合、`merge_muxdffrb_rslatch.py`）、dedup漏れの
+    重複並列ゲートバグ再発見・修正、`run_v10_pipeline.py`への
+    パイプライン統合
+  - §108.39〜108.43: V10配置配線（DRC 0違反・短絡0件達成）、
+    チャネル圧縮＋トップピン引き出し＋VDD/GNDトップピン追加による
+    コアセル単体レイアウト完成
+  - §108.44〜108.48: V10 LVS参照SPICE生成（`gen_lvs_spice_v10.py`）
+    と実LVS反復修正——RSLATCH/MUXDFFRB階層参照ミスマッチ、
+    rx_data/rx_data_rバスエイリアス二重解決、Verilogビット
+    リテラル定数（`1'h1`）の未処理
+  - §108.49〜108.51: トップレベルLVS残存不一致の根本原因究明——
+    STEP8トップピン引き出しの空きトラック枯渇による物理ショート
+    （sda_oe⇔クロックトランク）、row0/row3引き出しの自己パッド
+    衝突誤検出（tx_data系6ビット）、MUX2インスタンスAピンの
+    配置生成時点での欠落VDDタイ、の3件を発見・修正し
+    **コアセル単体LVSクリーンを達成**
 - 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)（v9
   現行ネットリスト基準に更新済み）

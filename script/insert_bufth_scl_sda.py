@@ -123,7 +123,37 @@ def redirect(src, instname, pinname, new_net):
 
 
 def main(in_path=V6_PATH, out_path=V7_PATH, row_assignment_json=ROW_ASSIGNMENT_JSON,
-         tmp_stage1_path=TMP_STAGE1_PATH):
+         tmp_stage1_path=TMP_STAGE1_PATH, partition_fn=None, existing_part=None):
+    """partition_fn (design_notes.md 108.31/108.33): optional
+    (instances, widths, n_rows) -> {name: row} override for stage 2's
+    reference partition, same rationale as insert_row_buffers.py's own
+    partition_fn parameter -- defaults to plain fm_partition.
+    fm_multiway_partition (original v6->v7/v8 behavior) so existing
+    callers are unaffected.
+
+    existing_part (108.33 -- supersedes partition_fn when given): a
+    precomputed {instance_name: row} covering every instance already
+    present in `in_path` (e.g. insert_row_buffers.py's own
+    row_assignment_json output). When given, stage 2 does NOT recompute
+    a fresh partition at all -- it reuses this assignment verbatim for
+    every pre-existing instance, and places the 2 new BUFTH cells
+    (u_bufth_scl/u_bufth_sda_in, which this function itself adds and so
+    can never appear in `existing_part`) in whichever row currently has
+    the fewest instances. This closes the exact instability gap
+    insert_row_buffers.py's own docstring warns about (section 40): a
+    FRESH fm_multiway_partition run on a netlist that only differs by a
+    couple of newly-inserted small cells can reshuffle the recursive-
+    bisection's top-level cut and relocate many unrelated instances to
+    different rows -- confirmed happening here in practice on V10 (a
+    fresh grouped-partition re-run after just adding 2 BUFTH cells moved
+    clk156_rx_data from row3 to row0, shifted every sclN_txreg split,
+    and even reopened a max_row_width violation that had already been
+    resolved on the pre-BUFTH netlist). Passing existing_part instead of
+    partition_fn is the correct way to call this for any netlist that
+    already has a placement-committed row assignment from an earlier
+    pipeline stage."""
+    if partition_fn is None:
+        partition_fn = fm_multiway_partition
     src = open(in_path).read()
 
     # ---- Stage 1: rename raw scl/sda_in fanout to scl_buf/sda_in_buf,
@@ -173,7 +203,22 @@ def main(in_path=V6_PATH, out_path=V7_PATH, row_assignment_json=ROW_ASSIGNMENT_J
     instances = net["instances"]
     print(f"\nstage2: parsed {len(instances)} instances (post-BUFTH-insertion)")
 
-    part = fm_multiway_partition(instances, widths, N_ROWS)
+    if existing_part is not None:
+        new_names = [name for _t, name, _p in instances if name not in existing_part]
+        part = dict(existing_part)
+        if new_names:
+            row_counts0 = {}
+            for r in part.values():
+                row_counts0[r] = row_counts0.get(r, 0) + 1
+            for name in new_names:
+                lightest = min(range(N_ROWS), key=lambda r: row_counts0.get(r, 0))
+                part[name] = lightest
+                row_counts0[lightest] = row_counts0.get(lightest, 0) + 1
+        print(f"reusing precomputed row assignment for {len(existing_part)} instances "
+              f"({len(new_names)} new instance(s) placed by lightest-row heuristic: "
+              + ", ".join(f"{n}=row{part[n]}" for n in new_names) + ")")
+    else:
+        part = partition_fn(instances, widths, N_ROWS)
     row_counts = {}
     for name, r in part.items():
         row_counts[r] = row_counts.get(r, 0) + 1

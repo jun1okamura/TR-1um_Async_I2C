@@ -1,6 +1,6 @@
 # script/ ガイド
 
-`script/`配下の現行スクリプト（全63本）の説明資料。RTL設計からIRSIMチップ
+`script/`配下の現行スクリプト（全72本）の説明資料。RTL設計からIRSIMチップ
 レベル動作検証までの再現可能なパイプラインを構成するスクリプトを中心に、
 v7→v8→v9の版遺産として今も参照される一部の旧版スクリプトも残している
 （該当箇所に明記）。開発過程で使われた真に一回限りのデバッグ・実験用
@@ -13,6 +13,14 @@ v7→v8→v9の版遺産として今も参照される一部の旧版スクリ�
 クリーン確認済み、design_notes.md §86）。v7/v8はその前段の版で、
 一部スクリプト（配置・配線の共通基盤、`gen_schematic_v7.py`等）はv9でも
 そのまま再利用されている。
+
+**コアセル単体は現在V10へ移行中**（MUXDFFRB/RSLATCH合成セル統合＋
+配置配線のやり直し）。V10コア（`i2c_slave_async_nrow_fm`、
+`layout/step10/v10_step_9_power_pins_added.gds`）はDRC 0違反・
+コアセル単体LVSクリーンを実機KLayoutで確認済み（design_notes.md
+§108.23〜108.51）。チップレベル（GIO/RING_OSC統合）へのV10反映は
+未実施——現時点の「現行の正式最終成果物」（README.md参照）は
+引き続きV9ベースのチップGDS。詳細は下記「12. V10」参照。
 
 ## 1. RTL・機能検証
 
@@ -180,6 +188,48 @@ python3 gen_ring_osc_tb.py     # → ring_osc/TB/tb_ring_osc.spice 一式
 cd ../ring_osc/TB
 ngspice -b tb_ring_osc.spice   # 実行はローカル環境で（本サンドボックスにngspice無し）
 ```
+
+## 12. V10（MUXDFFRB/RSLATCH統合・コア再配置配線・LVS）
+
+コアセル（`i2c_slave_async_nrow_fm`）を、ユーザーが物理レイアウトした
+2つの合成STDCELL（MUXDFFRB=MUX2+DFFRB、RSLATCH=NOR2×2のクロス
+カップルドラッチ）を使うネットリストへ移行し、配置配線をやり直した
+パイプライン（design_notes.md §108.23〜108.51）。実機KLayoutでの
+コアセル単体DRC 0違反・LVSクリーンを確認済み。チップレベル
+（GIO/RING_OSC統合）への反映はまだ未実施。
+
+| スクリプト | 役割 |
+|---|---|
+| `run_v10_pipeline.py` | V10ネットリスト→配置→配線→短絡除去の標準エントリポイント（dedup_gates.py以降の全段を順に実行、段の詳細はスクリプト冒頭コメント参照、design_notes §108.38）。 |
+| `merge_muxdffrb_rslatch.py` | 合成後Verilogネットリストのテキスト変換パス：`MUX2→DFFRB.D`（単一ファンアウト）を1個のMUXDFFRBインスタンスへ、クロスカップルドNOR2ペアを1個のRSLATCHインスタンスへそれぞれ置換（design_notes §108.27/108.29）。 |
+| `run_v10_step7_squeeze_step8_toppins.py` | V10向けSTEP7（チャネル圧縮）+STEP8（トップピン引き出し、squeeze後のBBOXに対して実施——v8/v9と同じ実証済み順序）統合ドライバ。`route_top_pins_nrow_fm.py`を`net_file=`付きで呼び、sda_oe/rx_valid等のassignエイリアス先（匿名Yosysネット）を`netlist_parser`のunion-find解決器で動的に解決する（108.42）。 |
+| `gen_lvs_spice_v10.py` | V10版のLVS参照SPICE直接生成（xschem非経由）。MUXDFFRB/RSLATCHは`LEF/simulation/`配下の実xschem書き出しSPICE（`MUXDFFRB.spice`/`RSLATCH.spice`＋その中のDFFRB/MUX2/NOR2本体）をそのまま埋め込みフラット化（108.44〜108.46）。Verilogビットリテラル定数（`1'h1`等）をVDD/GND直結として解決する`_tie_literal()`、バスエイリアス（`rx_data`↔`rx_data_r`）の二重解決バグ修正（108.47/108.48）も含む。 |
+| `highlight_shorts_nrow_fm.py` | `ripup_reroute_shorts.find_conflicts()`が検出した残存短絡箇所を、実際に描画された`net_shapes_*.json`の記録そのものに基づいてGDS上に可視化（レイヤ261/0-2、design_notes §108.36）。独自にジオメトリを再導出しないため`verify_connectivity_nrow_fm.py`の判定と食い違うことがない。 |
+
+コアセル単体のV10 LVS実行そのもの（実機KLayout環境、`LVS_error.lvsdb`の
+反復調査）の経緯はdesign_notes.md §108.44〜108.51を参照。標準セル側
+（RSLATCH/MUXDFFRB自体）のLVS不一致修正（階層参照→フラット化、
+デバイス名prefix "M"バグ）に続き、トップレベルで4件の実バグ
+（rx_data/rx_data_rバスエイリアス二重解決、Verilogリテラル定数の
+未処理、STEP8トップピン引き出しがsqueeze後の空きトラック枯渇で
+既存クロックトランクへ物理ショート、row0/row3トップピン引き出しの
+自己パッド衝突誤検出によるtx_data系6ビットの強制配線、
+U_SDA_TARGET(MUX2)のAピンが配置生成時点でVerilogリテラル未解決の
+まま一度も配線されていなかった欠落VDDタイ）を発見・修正し、
+実機KLayoutでのLVSクリーンを確認（§108.50〜108.51）。
+
+再現手順:
+```sh
+cd script
+python3 run_v10_pipeline.py                        # netlist→配置→配線→短絡除去→DRC/接続性
+python3 run_v10_step7_squeeze_step8_toppins.py      # チャネル圧縮→トップピン引き出し→再検証
+python3 gen_lvs_spice_v10.py                        # → schematic/i2c_slave_async_nrow_fm_v10.spice
+```
+（`add_power_pins_nrow_fm.py`によるVDD/GNDトップピン追加、およびその後
+2件の物理修正——sda_oe引き出し配線の再ルーティングとU_SDA_TARGET.Aの
+VDDタイ追加——はdesign_notes §108.50参照。現状ではまだ専用の一括
+エントリポイントスクリプトに統合されておらず、§108.50記載の手順に
+沿ってアドホックに適用したもの。）
 
 ## 削除したスクリプトについて
 
