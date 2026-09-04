@@ -67,6 +67,25 @@ now with a `terminal` field per net recording which GIO terminal name
 each net landed on, and `_meta` documenting the terminal-type-
 constrained method) and reports the resulting lane count via the exact
 same greedy interval-packing algorithm route_gio_core_v10.py uses.
+
+**REVISION (design_notes.md 108.68, user request)**: group C's 8x8
+`linear_sum_assignment` above is proven-optimal for raw lane count
+(108.57's exhaustive 80,640-pairing search), but its actual bit<->pad
+mapping is visually arbitrary (P4=bit0, P12=bit1, P14=bit2, P5=bit3,
+P6=bit4, P3=bit5, P11=bit6, P13=bit7). The user rejected reusing V9's
+own literal mapping (bit0=P11..bit3=P14, bit4=P6..bit7=P3) for V10 --
+independently reconfirmed here to need 14 lanes (max lane R=919.8 >
+NEAR_R budget 915.0, i.e. genuinely not routable, matching 108.54's
+finding) -- and instead asked for a clean, monotonically-increasing
+pin order: as physical pad number climbs P3->P4->P5->P6->P11->P12->
+P13->P14, bit number climbs 0->7 in step. This was verified BEFORE
+implementing (same core_u/pad_u interval-packing cost function as
+this script's own lane count, run standalone against both the user's
+candidate orders) to need exactly 12 lanes -- the SAME proven-minimum
+lane count as the free-optimization result above, just a more
+readable bit<->pad correspondence. So group C below is now a fixed
+table instead of an optimization -- there is no remaining freedom to
+optimize once a specific, verified-optimal-cost bit order is chosen.
 """
 import json
 import sys
@@ -178,17 +197,22 @@ def main():
     for i, j in zip(row, col):
         assignment[SOLO_INPUT_NETS[i]] = solo_terms[j]
 
-    # ---- C: 8 (tx_data[i], rx_data[i]) bit pairs <-> 8 bit-pad numbers,
-    # cost = combined interval width of BOTH signals on that pad ----
-    cost_c = np.zeros((8, 8))
+    # ---- C: 8 (tx_data[i], rx_data[i]) bit pairs <-> 8 bit-pad numbers.
+    # FORCED (108.68, user request) to a fixed, monotonically-increasing
+    # bit<->pad table instead of optimized: as physical pad number climbs
+    # P3->P4->P5->P6->P11->P12->P13->P14, bit number climbs 0->7 in step.
+    # Independently verified beforehand (standalone script, same core_u/
+    # pad_u interval-packing cost as below) to need exactly 12 lanes --
+    # tied with the free 8x8 optimization's proven-minimum lane count --
+    # so this is not a routability compromise, only a readability choice
+    # among equally-optimal mappings. (The 8x8 linear_sum_assignment
+    # import above is kept for groups A/B and left importable for anyone
+    # re-deriving this table from scratch; it is simply not invoked here.)
+    FORCED_BIT_PAD = {0: 3, 1: 4, 2: 5, 3: 6, 4: 11, 5: 12, 6: 13, 7: 14}
+    assert sorted(FORCED_BIT_PAD.values()) == bit_pad_numbers, \
+        (sorted(FORCED_BIT_PAD.values()), bit_pad_numbers)
     for i, (tx, rx) in enumerate(BIT_PAIRS):
-        for j, n in enumerate(bit_pad_numbers):
-            p_term, out_term = f"P{n}", f"OUT{n}"
-            cost_c[i, j] = abs(core_u[tx] - pad_u[p_term]) + abs(core_u[rx] - pad_u[out_term])
-    row, col = linear_sum_assignment(cost_c)
-    for i, j in zip(row, col):
-        tx, rx = BIT_PAIRS[i]
-        n = bit_pad_numbers[j]
+        n = FORCED_BIT_PAD[i]
         assignment[tx] = f"P{n}"
         assignment[rx] = f"OUT{n}"
 

@@ -21,14 +21,14 @@
 .SUBCKT tr_1um_i2c_slave_async P1 P10 P11 P12 P13 P14 P15 P2 P3 P4 P5 P6 P7 P9
 + VDD VSS
 * cell instance $1 r0 *1 0,0
-X$1 VDD P7 P7 \$84 P7 P7 P15 P3 \$58 \$56 \$97 P7 \$11 \$9 P11 VSS \$63 VDD P12
-+ \$60 \$32 P6 P7 P2 VSS VSS P9 \$94 P1 P7 VDD \$37 P5 P10 VDD P7 P13 P14 P4 P7
-+ VSS OSS_FRAME_GIO
+X$1 VDD P7 P7 \$95 P7 P7 P15 P3 \$58 \$56 \$96 P7 \$11 \$9 P11 VSS \$63 VDD P12
++ \$60 \$34 P6 P7 P2 VSS VSS P9 \$101 P1 P7 VDD \$37 P5 P10 VDD P7 P13 P14 P4
++ P7 VSS OSS_FRAME_GIO
 * cell instance $21 r0 *1 -810,-650
 X$21 P15 VDD \$9 \$11 VSS RING_OSC
 * cell instance $28 r0 *1 -810,-140
-X$28 VDD P13 P15 P11 \$37 \$97 \$32 \$56 \$94 \$63 P2 P1 \$84 \$60 \$58 P4 P3
-+ P6 P5 P14 P12 VSS i2c_slave_async_nrow_fm
+X$28 VDD P14 P15 P13 \$60 \$63 \$37 \$34 \$56 \$58 P2 P1 \$95 \$101 \$96 P3 P12
++ P11 P6 P5 P4 VSS i2c_slave_async_nrow_fm
 .ENDS tr_1um_i2c_slave_async
 
 * cell RING_OSC

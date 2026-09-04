@@ -31,7 +31,8 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 | **GIOパッド再割り当て**（SCL/SDAを隣接パッドP1/P2へ集約、tx_data/rx_data各ビットのパッド再配分） | `script/reroute_gio_pads_2026.py`で物理配線を実装。`tx_data[4]`の新レーン探索で見つかったM2平行配線の5.4umクリアランス要件を根拠に8ネットのレーン半径をカスケードシフト、`HIZ1_VDD_tie`はTIE_R反復（917.0→916.1）、`ENB_rst_n_via`を新設しRING_OSC.ENB⇔rst_n/P15の断線（GIOパッド再配線でrst_nの旧M1スタブごと消えたことが原因）を修正——**実機KLayoutでDRC 0違反を確認**（design_notes §104.1〜104.2）。`gio_connections.json`のP7/OUT2ネット欠落を修正しLVS参照SPICEを再生成、**LVSクリーンを確認**（§104.3）。IRSIM`.sim`のSDAプルアップ対象パッド（P13→P2への移設漏れ）、および`gen_irsim_cmd_v9.py`のSCL/SDA/SDA_OE/TX/RXノード名（パッド再割り当て前の旧マッピングのまま残存）という2件のステール参照バグを発見・修正した上で`irsim_tb.cmd`一式を再生成し、**実機IRSIMで`All 14 checks PASSED`を確認**（§104.4〜104.5）。 |
 | **OpenSUSIロゴのM2ドット化再デザイン** | 103.14の塗りつぶしブロック方式から、M2 3.0×3.0umの孤立正方形ドット（5.0umピッチグリッド中央配置、Wmin/Sminをちょうど満たす構造的DRC安全設計）へ再デザイン。サイズ・配置位置は現状維持、`OPENSUSI_LOGO`セルの中身のみ差し替え。ロゴ単体・チップ全体ともDRC自己検証0違反、**実機KLayoutでDRCクリーンを確認**（design_notes §105）。 |
 | **V10**（MUXDFFRB/RSLATCH合成セル統合、コアセル再配置配線） | コアセル（`i2c_slave_async_nrow_fm`）のネットリストを、ユーザーが物理レイアウトした2つの合成STDCELL（MUXDFFRB=MUX2+DFFRB、RSLATCH=NOR2×2クロスカップルドラッチ）を使う版へ移行し、配置配線をゼロからやり直し（`script/run_v10_pipeline.py`、design_notes §108.23〜108.43）。チャネル圧縮＋トップピン引き出し＋VDD/GNDトップピン追加までを経て、実機KLayoutでの**コアセル単体DRC 0違反**を確認（`layout/step10/v10_step_9_power_pins_added.gds`）。LVS参照SPICE（`script/gen_lvs_spice_v10.py`、xschem非経由の直接生成）を作成し、実機KLayoutでのLVS反復（`LVS_error.lvsdb`）から6件の実バグを発見・修正——RSLATCH/MUXDFFRB自体の階層参照ミスマッチ、rx_data/rx_data_rバスエイリアス二重解決、Verilogビットリテラル定数（`1'h1`）の未処理、STEP8トップピン引き出しがsqueeze後の空きトラック枯渇で既存クロックトランクへ物理ショート、row0/row3引き出しの自己パッド衝突誤検出によるtx_data系6ビットの強制配線、MUX2インスタンスのAピンが配置生成時点でリテラル未解決のため一度も配線されずVDD未接続だった欠落タイ——を全て修正し、**実機KLayoutでコアセル単体LVSクリーンを確認**（design_notes §108.44〜108.51）。 |
-| **V10チップレベル統合**（GIO⇔コア結線・RING_OSC統合・DRC/LVS/SPICE検証） | V10コアをGIOフレーム上へV9と同一座標で配置（`assemble_top_v10.py`）、最適パッド再割当（`assign_v10_gio_pads.py`、必要レーン数6）＋V10再較正済み電源バスバーで信号/電源配線（`route_gio_core_v10.py`）、PTECT削除＋RING_OSC＋OpenSUSIロゴ埋め込み（`finalize_chip_v10.py`）でチップを完成（design_notes §108.52〜108.57）。LVS参照SPICE生成（`gen_lvs_spice_top/ringosc_v10.py`、§108.58）を経た実機LVS反復で、チップTOPセル直下のM2PIN/TXM2ピンマーカー16組の移植漏れ（P9/P10 LVS NoMatchの真因、§108.62）、HIZ1のDISチェーン誤登録、HIZ7/OUT2のVDD/VSSバス取り違え（ダイ内部を貫くカーテシアン配線が最終的にRING_OSC/ロゴと衝突したため、DISチェーンと同じリング配線方式へ切替、§108.63）を発見・修正し、ユーザー指示による電源タイ5本化（§108.64）も反映した上で**実機KLayoutでチップレベルDRC/LVSクリーンを達成**（`layout/step10/v10_chip_final.gds`）。続けてRING_OSC除外のSPICEトランジスタレベル検証一式（`gen_chip_sim_ready_v10.py`／`gen_chip_tb_v10.py`／`gen_chip_tb_batch14_v10.py`＋`ngspice/TB/check_batch14_v10.py`、§108.65〜108.67）を整備し、IRSIM・Verilog RTL・Verilogネットリスト・V9 SPICEと同一の14項目バッチテストで**実機ngspice 14/14 PASSを確認**——チップレベルの電気的検証が完了。 |
+| **V10チップレベル統合**（GIO⇔コア結線・RING_OSC統合・DRC/LVS/SPICE検証） | V10コアをGIOフレーム上へV9と同一座標で配置（`assemble_top_v10.py`）、最適パッド再割当（`assign_v10_gio_pads.py`、必要レーン数6）＋V10再較正済み電源バスバーで信号/電源配線（`route_gio_core_v10.py`）、PTECT削除＋RING_OSC＋OpenSUSIロゴ埋め込み（`finalize_chip_v10.py`）でチップを完成（design_notes §108.52〜108.57）。LVS参照SPICE生成（`gen_lvs_spice_top/ringosc_v10.py`、§108.58）を経た実機LVS反復で、チップTOPセル直下のM2PIN/TXM2ピンマーカー16組の移植漏れ（P9/P10 LVS NoMatchの真因、§108.62）、HIZ1のDISチェーン誤登録、HIZ7/OUT2のVDD/VSSバス取り違え（ダイ内部を貫くカーテシアン配線が最終的にRING_OSC/ロゴと衝突したため、DISチェーンと同じリング配線方式へ切替、§108.63）を発見・修正し、ユーザー指示による電源タイ5本化（§108.64）も反映した上で実機KLayoutでチップレベルDRC/LVSクリーンを達成し、続けてRING_OSC除外のSPICEトランジスタレベル検証一式（`gen_chip_sim_ready_v10.py`／`gen_chip_tb_v10.py`／`gen_chip_tb_batch14_v10.py`＋`ngspice/TB/check_batch14_v10.py`、§108.65〜108.67）を整備し実機ngspice 14/14 PASSを確認——という108.52〜108.67の初回結果は、ユーザー要求（「V9のピン順は変えてはいけない」）によりパッド割当を**Option2**（物理パッド番号昇順とbit番号が単調対応、`P3..P6`=bit0-3・`P11..P14`=bit4-7、必要レーン数12）へ再修正（§108.69）した上で、そこから生じた`finalize_chip_v10.py`のENB配線ハードコード座標バグ（rst_nのレーン番号シフト・tx_data[4]配線との重なり）を2件発見・修正して**実機KLayoutでのチップレベルDRC/LVSクリーンを最終確定**（§108.70）。**現行の正式パッド割当・最終GDSはOption2版**（`layout/step10/v10_chip_final.gds`）。 |
+| **V10 SPICE 14/14回帰の2件FAIL調査**（アドレス比較ラッチのレースコンディション実測、真因はチップではなくシミュレータ設定と確定） | Option2反映後の実機ngspice 14/14回帰が`ack_addr_read`/`read_byte`の2件のみFAIL（12/14）。トランジスタレベルでのHIZロジック完全導出（PADドライバ衝突が構造的に不可能なこと、WRITE中は`tx_data_i=rx_data_i`という意図されたループバックになることを確認）、DATA_WR/RD値の全4×4グリッド実測、shreg→OR4/NOR4アドレス比較チェーンの実配線復元、5ns刻みの`.measure`精密プロービングにより、`_156_`（ラッチクロック）が比較結果`_118_`の確定より**5〜10ns早く到着する実測レースコンディション**を特定。ただし本当の原因はこのレース自体ではなく、**`.tran`のTmax（ソルバー間引き幅）が50nsと粗すぎたため**この際どいレースの`.measure`補間結果が狂っていたことと判明——**Tmaxを1nsに変更しただけ**で、DIS/TXGATE等を一切変更していない元の本番構成のまま14/14 PASSへ復帰（design_notes §108.71）。**結論：V10チップ設計・Option2パッド再割当そのものに電気的・論理的欠陥は無い**。副産物として得られたDIS(P7)動的化（WRITE中LOW=ドライバ有効化／READ中HIGH=Hi-Z）＋tx電源のTXGATEスイッチ＋100kΩ直列抵抗化（WRITE中の実ドライバ有効化を初めて実テストする、より設計意図に忠実な構成）を本番の`gen_chip_tb_v10.py`／`gen_chip_tb_batch14_v10.py`へ反映し、この最終形（Tmax=1ns＋DIS/TXGATE動的化）で実機ngspice再実行、**`All 14 checks PASSED`を確認**——チップ設計・パッド割当・本番テストベンチのいずれにも既知の不具合が無い状態を最終確定（design_notes §108.72）。 |
 
 **最終レイアウト成果物（V9、トップレベル・チップ全体）**:
 [`src/tr_1um_i2c_slave_async.gds`](./src/tr_1um_i2c_slave_async.gds)
@@ -51,12 +52,17 @@ LVS用スキーマティック: [`schematic/i2c_slave_async_nrow_fm.sch`](./sche
 残置。V9以降の正式な最終成果物は上記`src/tr_1um_i2c_slave_async.gds`。）
 
 **現行の正式最終成果物（V10、MUXDFFRB/RSLATCH合成セル統合＋
-チップレベルGIO/RING_OSC統合）**:
+チップレベルGIO/RING_OSC統合、パッド割当はOption2＝物理パッド番号
+昇順とbit番号が単調対応、design_notes §108.69）**:
 [`layout/step10/v10_chip_final.gds`](./layout/step10/v10_chip_final.gds)
 （コア＋GIO＋RING_OSC＋OpenSUSIロゴまで統合したV10チップGDS、実機
-KLayoutでの**DRC/LVSクリーン**、および実機ngspiceでのSPICE
-トランジスタレベル14項目バッチテスト（RING_OSC除外）で
-**14/14 PASS**を確認済み、design_notes §108.52〜108.67）。
+KLayoutでの**DRC/LVSクリーン**（§108.69〜108.70、ENB配線の
+ハードコード座標バグ2件を修正して最終確定）、および実機ngspiceでの
+SPICEトランジスタレベル14項目バッチテスト（RING_OSC除外）で
+**14/14 PASS**を確認済み（§108.52〜108.67・108.71）。テスト後半の
+2/14 FAILが一時再発した際は原因を実測で完全に切り分け、**チップ・
+パッド割当自体は無罪、真因はテストベンチの`.tran` Tmax設定
+（50ns→1nsで解消）**と確定した（§108.71）。
 チップレベルLVS用参照SPICE:
 [`schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`](./schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice)
 （`script/gen_lvs_spice_ringosc_v10.py`で機械生成）。SPICE検証用
@@ -65,7 +71,8 @@ KLayoutでの**DRC/LVSクリーン**、および実機ngspiceでのSPICE
 ＋14項目バッチテストベンチ
 [`ngspice/TB/tb_chip_i2c_batch14_v10.spice`](./ngspice/TB/tb_chip_i2c_batch14_v10.spice)
 （`script/gen_chip_tb_batch14_v10.py`で機械生成、companion checker
-`ngspice/TB/check_batch14_v10.py`）。
+`ngspice/TB/check_batch14_v10.py`。DIS(P7)動的化＋tx電源のTXGATE
+スイッチ＋100kΩ直列抵抗化を反映済み、design_notes §108.72）。
 
 （V9系の
 [`ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds`](./ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds)
@@ -475,5 +482,38 @@ cd irsim
     チェック）のV10版（`gen_chip_tb_batch14_v10.py`＋
     `check_batch14_v10.py`）を新規作成、**実機ngspiceで14/14 PASS
     を確認**——チップレベルの電気的検証完了
+  - §108.68: V10成果を`TR-1um_I2C_2026`提出リポジトリへエクスポート
+    （`export_to_mpw_submission_v10.py`新規、死にセル6個の自動
+    プルーン処理を統合）。宛先の`pre_check.py`全項目OK、
+    README/PROVENANCE更新（git commitは保留）
+  - §108.69: ユーザー要求（「V9のピン順は変えてはいけない」）により
+    パッド再割当をやり直し——V9ピン順の単純再利用は必要レーン数14で
+    配線不可能と判明、ユーザー提示の2案を比較し、物理パッド番号昇順と
+    bit番号が単調対応する**Option2**（必要レーン数12＝真の最小）を
+    採用。`assign_v10_gio_pads.py`を固定テーブル化、
+    `route_gio_core_v10.py`/`finalize_chip_v10.py`/LVS参照SPICE/
+    SPICE検証用ファイル一式を再生成
+  - §108.70: 実機LVSエラー（`P15`／`P11,P12`不一致）を解析、
+    `finalize_chip_v10.py`のENB配線に2件の「108.57時点の座標を
+    ハードコードしたまま」バグ（rst_nのレーン番号シフト未追従、
+    tx_data[4]配線との1.2um重なり）を発見・修正し、**実機KLayoutで
+    チップレベルDRC/LVSクリーンを最終確定**
+  - §108.71: 実機ngspice 14/14回帰が一時`ack_addr_read`/
+    `read_byte`の2件でFAIL（12/14）。トランジスタレベルのHIZロジック
+    完全導出、DATA_WR/RD値4×4グリッド実測、アドレス比較チェーン
+    （shreg→OR4/NOR4→`addr_match`ラッチ）の実配線復元、5ns刻み
+    `.measure`精密プロービングにより、ラッチクロックが比較結果の
+    確定より5〜10ns早く到着する実測レースコンディションを特定。
+    ただし真因はこのレースそのものではなく**`.tran`のTmax（50ns）が
+    粗すぎたことによるシミュレーション時間分解能不足**——1nsへ変更
+    しただけで元の本番構成のまま14/14 PASSへ復帰し、**V10チップ・
+    Option2パッド割当そのものに欠陥は無いことを確定**
+  - §108.72: 108.71の副産物として得られたDIS(P7)動的化＋tx電源の
+    TXGATEスイッチ＋100kΩ直列抵抗化（診断用コピーでのみ検証済み
+    だった）を本番`gen_chip_tb_v10.py`／`gen_chip_tb_batch14_v10.py`
+    へ正式反映。調査過程で作成した診断用一時ファイル群
+    （生成スクリプト40種超、診断netlistコピー4本、`ngspice/TB/`配下の
+    診断testbench/checker/log一式、689MBに肥大化した波形ダンプ等）を
+    削除し`ngspice/TB/`を705MB→4.0MBへ整理
 - 論理セル対応表: [`logic_cells_mapping.md`](./logic_cells_mapping.md)（v9
   現行ネットリスト基準に更新済み）

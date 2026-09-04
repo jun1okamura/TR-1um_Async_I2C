@@ -93,13 +93,16 @@ def build_sequence_and_checks():
 
     # ================= TXN1: WRITE (S, ADDR+W, ACK, 0xA5, ACK, P) =========
     start1_t = b.t
+    b._dis_set(0.0)  # 108.72: enable chip's own pad driver for WRITE (rx_data out)
     b.start_condition()
     level_check("busy_after_start", "xdut.NC_CORE_busy",
                 start1_t + T_HALF + T_HALF / 2, "high",
                 "busy asserted after START")
 
     addr_w = (SLAVE_ADDR << 1) | 0
+    addrw_edge_start_idx = len(b.all_bit_edges)
     b.master_byte(addr_w, "ADDR+W")
+    addrw_byte_edges = b.all_bit_edges[addrw_edge_start_idx:]
 
     ack1_t = b.t
     b.release_bit("ACK (slave, address/write)")
@@ -181,7 +184,9 @@ def build_sequence_and_checks():
     # ================= TXN2: READ (S, ADDR+R, ACK, 0x3C, NACK, P) =========
     b.start_condition()
     addr_r = (SLAVE_ADDR << 1) | 1
+    addrr_edge_start_idx = len(b.all_bit_edges)
     b.master_byte(addr_r, "ADDR+R")
+    addrr_byte_edges = b.all_bit_edges[addrr_edge_start_idx:]
 
     ack2_t = b.t
     b.release_bit("ACK (slave, address/read)")
@@ -192,6 +197,94 @@ def build_sequence_and_checks():
     level_check("rw_read", "xdut.NC_CORE_rw",
                 addr_match_read_t, "high", "rw indicates READ")
 
+    # ---- READ-phase diagnostics (NEW this round, 108.71) ----
+    # user's real local ngspice run (14-check regression) came back 12/14
+    # PASS with BOTH failures confined to the READ transaction:
+    # ack_addr_read (expect ~0V, got 4.950V -- slave never pulled SDA low
+    # for the read-address ACK) and read_byte (expect 0x3C, got 0xFF --
+    # SDA never driven at all, stayed at the pull-up rail for all 8 bits).
+    # WRITE's two ACK checks (ack_addr_write, ack_data) -- which exercise
+    # the exact same "drive SDA low" mechanism -- both PASS, and rw_read
+    # (a pure probe of xdut.NC_CORE_rw, no SDA driver involved) also PASSES,
+    # confirming the core's own address/direction decode is correct and
+    # narrowing this to something specific to the SDA *driver enable* path
+    # once rw=READ is latched.
+    #
+    # First round of this diagnostic (single-point samples at ack2_t+
+    # T_HALF+T_HALF/2, i.e. the exact ack_addr_read check instant) showed
+    # sda_oe_r ~0V there (consistent with the observed SDA-stuck-high
+    # failure) but ALSO showed addr_match (xdut.NC_CORE_addr_match) ~0V
+    # at that same instant -- NOT itself proof of a bug, since that probe
+    # point (ack_t+T_HALF+T_HALF/2, i.e. mid-ACK-bit) is ~2.3us EARLIER
+    # than the timing convention the already-PASSING addr_match_write
+    # check actually uses (ack1_t+T_HALF+T_HALF-200ns, i.e. near the END
+    # of the ACK bit) -- so a single early sample can't distinguish
+    # "addr_match never asserts during READ" from "addr_match asserts
+    # later than my sample point, same as it does for WRITE". Replaced
+    # with a full time-resolved sweep (250ns steps, full 2*T_HALF ACK-bit
+    # window) of the SAME four signals (sda_oe_r/addr_match/qn/rw) at
+    # BOTH ack1_t (WRITE, known-good per the passing checks -- serves as
+    # the comparison baseline) and ack2_t (READ, the failing case) so the
+    # two waveforms can be directly compared point-by-point once re-run.
+    read_diag = []
+    N_SWEEP = 40
+    STEP = 250e-9
+    for label, ack_t in (("wsweep", ack1_t), ("rsweep", ack2_t)):
+        for k in range(N_SWEEP):
+            t = ack_t + k * STEP
+            for name, net in (
+                ("sda_oe_r", "xdut.x2.sda_oe_r"), ("qn", "xdut.x2.qn"),
+                ("rw", "xdut.NC_CORE_rw"), ("addr_match", "xdut.NC_CORE_addr_match"),
+            ):
+                read_diag.append((f"{label}_{name}_k{k:02d}", net, t,
+                                   f"{name} at {label} ack_t+{k*STEP*1e9:.0f}ns"))
+
+    # Second round (still 108.71): the wsweep/rsweep results (both ACK-bit
+    # windows, ack_t through ack_t+9.75us) came back razor-clean binary --
+    # WRITE: addr_match=5.000V and sda_oe_r=5.000V at EVERY one of the 40
+    # sample points; READ: addr_match=0.000V and sda_oe_r=0.000V at EVERY
+    # one of the 40 sample points, while rw correctly reads 0V/5V
+    # (WRITE/READ) throughout both. Not a timing/sampling artifact -- addr_
+    # match genuinely never asserts, at all, anywhere in the entire ACK-bit
+    # window, specifically when rw=READ. Since addr_match is expected to be
+    # a straight compare of the received address bits against SLAVE_ADDR
+    # (independent of the rw/8th bit), and the address BYTE VALUE is
+    # otherwise identical between the two transactions (0x50), this pushes
+    # the question back one step further: does addr_match ever assert
+    # DURING the address byte's own reception for READ (and then get
+    # cleared before ack2_t), or does it never assert at all? Probing each
+    # of the address byte's own 8 bit-edges (addrw_byte_edges / addrr_
+    # byte_edges, captured above -- same b.all_bit_edges mechanism already
+    # used for the WRITE data byte's rx_load_diag block) for both
+    # transactions, same signal set, to see exactly which bit (if any)
+    # is where WRITE and READ's addr_match trajectories diverge.
+    # Third addition (still 108.71): i2c_slave_async.v's own RTL shows
+    # addr_ok <= (shreg_next[7:1] == SLAVE_ADDR) -- a pure function of the
+    # first 7 received address bits, PROVABLY INDEPENDENT of shreg_next[0]
+    # (the rw bit, captured into a completely separate register rw_bit on
+    # the same edge). Since the WRITE and READ address bytes send the
+    # identical 7-bit address (0x50) and differ only in that last rw bit,
+    # addr_ok has NO combinational reason to differ between the two per
+    # this source -- so if the actual shift-register contents (shreg_0..6)
+    # are confirmed identical between aw/ar at the moment addr_ok latches,
+    # that proves the fault is NOT "wrong address bits shifted in" but
+    # something in the compare/latch gate(s) themselves or a physical
+    # short elsewhere disturbing them (consistent with this session's
+    # established pattern of stale/short routing bugs from the Option2
+    # repack, e.g. 108.69/108.70's ENB short) -- narrowing the search from
+    # "protocol-level" to "look at the addr_ok gates/wiring specifically".
+    for label, byte_edges in (("aw", addrw_byte_edges), ("ar", addrr_byte_edges)):
+        for edge_t, edge_label, bit_index in byte_edges:
+            for dt_ns, tag in ((-0.05e-6, "pre50n"), (0.05e-6, "post50n")):
+                t = edge_t + dt_ns
+                for name, net in (
+                    ("sda_oe_r", "xdut.x2.sda_oe_r"), ("qn", "xdut.x2.qn"),
+                    ("rw", "xdut.NC_CORE_rw"), ("addr_match", "xdut.NC_CORE_addr_match"),
+                ) + (tuple((f"shreg_{n}", f"xdut.x2.shreg_{n}") for n in range(7))
+                     if bit_index == 0 else ()):
+                    read_diag.append((f"{label}_i{bit_index}_{tag}_{name}", net, t,
+                                       f"{name} at {label} ADDR-byte bit_index={bit_index} ({edge_label}) edge{tag}"))
+
     b.note(f"DATA (read, expect 0x{DATA_RD_VAL:02X})")
     read_bit_start_idx = len(b.read_bit_samples)
     for i in range(7, -1, -1):
@@ -201,6 +294,15 @@ def build_sequence_and_checks():
                [t for t, _ in read_bit_samples], DATA_RD_VAL,
                "read byte == 0x%02X" % DATA_RD_VAL,
                bit_indices=list(range(7, -1, -1)))
+
+    for bi, (t, _label) in zip(range(7, -1, -1), read_bit_samples):
+        for dt_ns, dtag in ((-0.05e-6, "pre50n"), (0.05e-6, "post50n")):
+            tt = t + dt_ns
+            for name, net in (
+                ("sda_oe_r", "xdut.x2.sda_oe_r"), ("qn", "xdut.x2.qn"),
+            ) + tuple((f"txreg_{n}", f"xdut.x2.txreg_{n}") for n in range(8)):
+                read_diag.append((f"rdbit{bi}_{dtag}_{name}", net, tt,
+                                   f"{name} at read-bit{bi} edge{dtag}"))
 
     b.master_ack_bit(1, "NACK (master, ends read)")
     b.stop_condition()
@@ -235,7 +337,7 @@ def build_sequence_and_checks():
     b.finish()
 
     assert len(checks) == 14, f"expected exactly 14 checks, got {len(checks)}"
-    return b, checks, rx_load_diag + rx_diag + stop1_diag
+    return b, checks, rx_load_diag + rx_diag + stop1_diag + read_diag
 
 
 TB_HEADER = """\
@@ -265,7 +367,12 @@ vvdd VDD 0 DC {VDD}
 vvss VSS 0 DC 0
 
 vrstn {RSTN_PAD} 0 PWL(0 0 {T_RST_LOW:.9g} 0 {T_RST_LOW_EDGE:.9g} {VDD})
-vdis {DIS_PAD} 0 DC {VDD}
+* DIS: dynamic (108.72) -- LOW during WRITE, HIGH during READ. TXGATE
+* mirrors it and gates the tx_data sources (see TX_SOURCES) so only
+* one side ever drives a given PADn at a time.
+vdis {DIS_PAD} 0 PWL({DIS_PWL})
+vtxgate TXGATE 0 PWL({DIS_PWL})
+.model TXSW SW(RON=10 ROFF=1T VT={SW_VT} VH={SW_VH})
 
 rp9 P9 VSS 1G
 rp10 P10 VSS 1G
@@ -282,7 +389,30 @@ rpu {SDA_PAD} VDD {RPU_KOHM:.0f}k
 
 xdut {XDUT_NETS} tr_1um_i2c_slave_async
 
-.tran {TSTEP} {TSTOP}
+* 108.71: added an explicit Tmax (4th .tran arg), originally 50ns, to
+* force the solver to sample regions it was otherwise skipping over
+* with large adaptive steps.
+*
+* 108.71 (cont'd)/108.72-108.79: root-caused the 2/14 READ-transaction
+* SPICE failure to a genuine, measured ~5-10ns race between the
+* address-compare combinational chain (shreg->OR4->NOR4->_118_) and the
+* `_156_` clock edge that latches addr_match/rw -- fine-grained (5ns
+* resolution) probing showed `_156_` fully risen ~5-10ns BEFORE `_118_`
+* settles, so addr_match's flip-flop was latching the stale
+* (pre-update) compare result. Tmax=50ns turned out to be far too
+* coarse to resolve this margin correctly -- tightening Tmax to 1ns
+* alone (nothing else changed: same netlist, same pad mapping, same
+* DATA_RD/WR values) took the previously-failing WFFRDF config (WR=
+* 0xFF, RD=0xDF) from 10/14 to a clean 14/14 PASS. This is strong
+* evidence the underlying analog race is NOT actually a chip-level bug
+* -- ngspice's adaptive LTE step control was simply too coarse (at
+* 50ns) to resolve a sub-10ns setup margin correctly, rounding it to
+* the wrong (FAIL) outcome. Tmax tightened to 1ns here accordingly.
+* NOTE: this applies for the WHOLE ~544us run (ngspice has no way to
+* scope Tmax to a sub-interval), so this run will take substantially
+* longer (up to ~50x more internal steps than the old 50ns cap) and
+* rx_capture_trace_v10.txt (if re-enabled) would be much larger.
+.tran {TSTEP} {TSTOP} 0 1n
 
 * ---- the 14 checks ----
 {CHECK_MEASURES}
@@ -318,7 +448,9 @@ def build_tb():
     tx_sources = []
     for i, pad in enumerate(TX_PADS):
         bit = (DATA_RD_VAL >> i) & 1
-        tx_sources.append(f"vtx{i} {pad} 0 DC {VDD if bit else 0.0}")
+        tx_sources.append(f"vtx{i} vtx{i}n 0 DC {VDD if bit else 0.0}  $ 108.72: TXGATE-switched, 100k series")
+        tx_sources.append(f"stx{i} vtx{i}n vtx{i}n2 TXGATE 0 TXSW")
+        tx_sources.append(f"rtx{i} vtx{i}n2 {pad} 100k")
 
     check_measures = []
     check_prints = []
@@ -361,6 +493,7 @@ def build_tb():
         T_RST_LOW_EDGE=T_RST_LOW + T_EDGE,
         RSTN_PAD=RSTN_PAD,
         DIS_PAD=DIS_PAD,
+        DIS_PWL=b.pwl(b.dis_ctrl),
         TX_PADS=TX_PADS,
         TX_SOURCES="\n".join(tx_sources),
         SCL_PAD=SCL_PAD,

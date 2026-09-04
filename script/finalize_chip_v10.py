@@ -57,6 +57,7 @@ needed from the user per this project's established convention; this
 script's own verification is a klayout.db self-check only, same
 methodology as 108.55/V9's own RING_OSC integration rounds).
 """
+import json
 import re
 import sys
 
@@ -72,6 +73,7 @@ RING_OSC_GDS = BASE + "/ring_osc/RING_OSC.gds"
 RING_OSC_LEF = BASE + "/ring_osc/RING_OSC.lef"
 LOGO_SRC_GDS = BASE + "/ring_osc/tr_1um_i2c_slave_async_reassigned_logodots.gds"
 OUT_GDS = BASE + "/layout/step10/v10_chip_final.gds"
+NET_SHAPES_JSON = BASE + "/layout/step10/v10_top_routed_net_shapes.json"
 
 TOP_CELL = "tr_1um_i2c_slave_async"
 RING_OSC_TOP = "RING_OSC"
@@ -201,10 +203,38 @@ def main():
     print(f"OUTD pin: layer={outd_layer} abs=({outd_x:.1f},{outd_y:.1f})")
     print(f"ENB  pin: layer={enb_layer} abs=({enb_x:.1f},{enb_y:.1f})")
 
+    # ---- rst_n's ACTUAL current wire position (108.69 fix) ----
+    # PREVIOUSLY hardcoded here as rst_n's own "lane-0 M2 climb"
+    # (845.3,345.3,848.7,400.0) -- valid ONLY for the 108.57 pad-
+    # reassignment's specific lane-packing outcome, where rst_n happened
+    # to land on lane 0 (R=847.0). That is NOT a property of rst_n's pad
+    # assignment (P15, unchanged by 108.68's Option2 bit-pad reorder) --
+    # it's a property of the GREEDY lane-packing order across ALL 20
+    # nets, which DID shift under Option2 (different net intervals ->
+    # different packing order). Confirmed via a real KLayout LVS run
+    # (layout/step10/LVS_error.lvsdb) that reusing the stale hardcoded
+    # box merges ENB into whatever net NOW occupies the old lane-0 slot
+    # (rx_data[4]/P11 under Option2) instead of rst_n -- producing BOTH
+    # reported errors at once ("P11,P12 not matching" from the accidental
+    # merge, AND "P15 not matching" from rst_n missing its expected ENB
+    # tie). Fix: read rst_n's REAL current M2 riser box directly from
+    # route_gio_core_v10.py's own net_shapes log instead of assuming.
+    net_shapes = json.load(open(NET_SHAPES_JSON))
+    rstn_m2 = [s for s in net_shapes["rst_n"] if s[0] == "M2"]
+    # pick the riser with the largest Y-span (its lane climb, not a short
+    # pad-approach stub) -- must comfortably include the merge Y (400.0).
+    rstn_riser = max(rstn_m2, key=lambda s: abs(s[4] - s[2]))
+    _, rx0, ry0, rx1, ry1 = rstn_riser
+    assert ry0 - 5.0 <= 400.0 <= ry1 + 5.0, \
+        f"rst_n's own riser {rstn_riser} does not span the intended merge Y=400.0 -- re-check"
+    RSTN_MERGE_X = (rx0 + rx1) / 2.0
+    print(f"rst_n actual riser (from {NET_SHAPES_JSON}): x=[{rx0:.1f},{rx1:.1f}] "
+          f"y=[{ry0:.1f},{ry1:.1f}] -- ENB will merge at x={RSTN_MERGE_X:.1f}")
+
     LANDING_BOXES = [
         (176.3, -925.0, 183.7, -918.4),   # OUT9
         (616.3, -925.0, 623.7, -918.4),   # OUT10
-        (845.3, 345.3, 848.7, 400.0),     # rst_n's own lane-0 M2 climb (merge target, 108.57)
+        (rx0, 345.3, rx1, 400.0),         # rst_n's own ACTUAL current M2 climb (108.69, re-derived)
         out_box, outd_box, enb_box,
     ]
 
@@ -272,14 +302,42 @@ def main():
     # way) to Y=400 (within rst_n's own [345.3,847] span) -> jog LEFT to
     # X=847 (M1 at Y=400, verified 0 M1 conflicts across X=[845,884]) ->
     # via directly onto rst_n's M2 wire (X=[845.3,848.7]).
+    # 108.69, SECOND fix: the first fix (RSTN_MERGE_X, above) only
+    # corrected the FINAL merge target and was verified to still create a
+    # short -- traced (via a real klayout.db connectivity extraction,
+    # bisecting finalize_chip_v10.py's own steps one at a time) to the
+    # INTERMEDIATE climb column X=884.0 itself: that constant, like the
+    # old merge-point one, was hand-picked for 108.57's specific lane
+    # layout ("X=884の空き列を発見") and was NEVER re-validated against
+    # Option2's different lane assignment. Under Option2, tx_data[4]'s
+    # own M2 riser sits at X=[884.5,887.9] -- 0.5um from the OLD ENB
+    # column center, so a 3.4-wide M2 wire at X=884.0 (box [882.3,885.7])
+    # directly overlaps it (1.2um of real overlap, confirmed by
+    # klayout.db). Re-swept the actual occupied-column map from route_
+    # gio_core_v10.py's own net_shapes log this time (not eyeballed):
+    # every lane's own riser now occupies X=[838.3,887.9] continuously
+    # (DIS_R ring at 838.3-841.7, then each of the 12 signal lanes'
+    # risers back-to-back at LANE_PITCH=5.6 spacing) with NO usable gap
+    # in that whole range for Option2's layout -- but X=[887.9,915.0] (27
+    # um) is completely empty of M2 for the full climb's Y range needed
+    # (confirmed: the only nearby shape, rx_data[7]'s own riser at
+    # X=[895.7,899.1], sits at Y=[620,897] -- entirely above this ENB
+    # path's Y<=400 climb, no overlap). New column: X=900.0 (12.1um clear
+    # of tx_data[4]'s 887.9 edge, 15.0um clear of the real pad-stub
+    # boundary at 915.0). The M1 "final hop" stubs several other nets
+    # have crossing this column (their own horizontal run toward X=915-
+    # 921.7) are a different layer -- crossing them is safe with no via,
+    # exactly as 108.57's own X=884 column safely crossed the equivalent
+    # stubs under its own (different) lane layout.
     route_path("ENB", (enb_x, enb_y), enb_layer,
-               [(enb_x, -785.0), (884.0, -785.0), (884.0, 400.0),
-                (847.0, 400.0)])
+               [(enb_x, -785.0), (900.0, -785.0), (900.0, 400.0),
+                (RSTN_MERGE_X, 400.0)])
     # explicit via at the merge point: the last ENB segment is M1
-    # (horizontal jog to X=847), but rst_n's own wire there is M2, so a
-    # via is needed to actually tie the two nets together (route_path
-    # only auto-vias intermediate corners, not the final waypoint).
-    via(847.0, 400.0, net="ENB")
+    # (horizontal jog to X=RSTN_MERGE_X), but rst_n's own wire there is
+    # M2, so a via is needed to actually tie the two nets together
+    # (route_path only auto-vias intermediate corners, not the final
+    # waypoint).
+    via(RSTN_MERGE_X, 400.0, net="ENB")
 
     # ---- 5. logo ----
     # NOT a plain layout.read(LOGO_SRC_GDS) here: that file's OWN top cell
@@ -377,7 +435,6 @@ def main():
     layout.write(OUT_GDS)
     print(f"\nwrote {OUT_GDS}")
 
-    import json
     json.dump(new_shapes, open(OUT_GDS.replace(".gds", "_new_shapes.json"), "w"))
 
 

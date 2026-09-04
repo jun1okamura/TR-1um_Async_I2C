@@ -78,12 +78,12 @@
       },
       "gio": {
         "x": -921.7,
-        "y": 270.0,
+        "y": 530.0,
         "edge": "LEFT",
         "layer": "M2"
       },
-      "terminal": "P4",
-      "note": "gio position/edge/layer = terminal P4 (type=P, pad=4), position unchanged from v9's own frame-fixed pad_pin_coords"
+      "terminal": "P3",
+      "note": "gio position/edge/layer = terminal P3 (type=P, pad=3), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
     "tx_data[1]": {
       "core": {
@@ -93,33 +93,17 @@
         "layer": "M2"
       },
       "gio": {
-        "x": 921.7,
-        "y": -270.0,
-        "edge": "RIGHT",
+        "x": -921.7,
+        "y": 270.0,
+        "edge": "LEFT",
         "layer": "M2"
       },
-      "terminal": "P12",
-      "note": "gio position/edge/layer = terminal P12 (type=P, pad=12), position unchanged from v9's own frame-fixed pad_pin_coords"
+      "terminal": "P4",
+      "note": "gio position/edge/layer = terminal P4 (type=P, pad=4), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
     "tx_data[2]": {
       "core": {
         "x": 596.7,
-        "y": 797.4,
-        "edge": "TOP",
-        "layer": "M2"
-      },
-      "gio": {
-        "x": 921.7,
-        "y": 530.0,
-        "edge": "RIGHT",
-        "layer": "M2"
-      },
-      "terminal": "P14",
-      "note": "gio position/edge/layer = terminal P14 (type=P, pad=14), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "tx_data[3]": {
-      "core": {
-        "x": 499.5,
         "y": 797.4,
         "edge": "TOP",
         "layer": "M2"
@@ -133,9 +117,9 @@
       "terminal": "P5",
       "note": "gio position/edge/layer = terminal P5 (type=P, pad=5), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
-    "tx_data[4]": {
+    "tx_data[3]": {
       "core": {
-        "x": 402.3,
+        "x": 499.5,
         "y": 797.4,
         "edge": "TOP",
         "layer": "M2"
@@ -149,28 +133,12 @@
       "terminal": "P6",
       "note": "gio position/edge/layer = terminal P6 (type=P, pad=6), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
-    "tx_data[5]": {
+    "tx_data[4]": {
       "core": {
-        "x": 305.1,
+        "x": 402.3,
         "y": 797.4,
         "edge": "TOP",
         "layer": "M2"
-      },
-      "gio": {
-        "x": -921.7,
-        "y": 530.0,
-        "edge": "LEFT",
-        "layer": "M2"
-      },
-      "terminal": "P3",
-      "note": "gio position/edge/layer = terminal P3 (type=P, pad=3), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "tx_data[6]": {
-      "core": {
-        "x": 808.5,
-        "y": 312.9,
-        "edge": "RIGHT",
-        "layer": "M1"
       },
       "gio": {
         "x": 921.7,
@@ -181,10 +149,26 @@
       "terminal": "P11",
       "note": "gio position/edge/layer = terminal P11 (type=P, pad=11), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
-    "tx_data[7]": {
+    "tx_data[5]": {
+      "core": {
+        "x": 305.1,
+        "y": 797.4,
+        "edge": "TOP",
+        "layer": "M2"
+      },
+      "gio": {
+        "x": 921.7,
+        "y": -270.0,
+        "edge": "RIGHT",
+        "layer": "M2"
+      },
+      "terminal": "P12",
+      "note": "gio position/edge/layer = terminal P12 (type=P, pad=12), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "tx_data[6]": {
       "core": {
         "x": 808.5,
-        "y": 426.3,
+        "y": 312.9,
         "edge": "RIGHT",
         "layer": "M1"
       },
@@ -197,90 +181,26 @@
       "terminal": "P13",
       "note": "gio position/edge/layer = terminal P13 (type=P, pad=13), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
+    "tx_data[7]": {
+      "core": {
+        "x": 808.5,
+        "y": 426.3,
+        "edge": "RIGHT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": 921.7,
+        "y": 530.0,
+        "edge": "RIGHT",
+        "layer": "M2"
+      },
+      "terminal": "P14",
+      "note": "gio position/edge/layer = terminal P14 (type=P, pad=14), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
     "rx_data[0]": {
       "core": {
         "x": -808.5,
         "y": 469.5,
-        "edge": "LEFT",
-        "layer": "M1"
-      },
-      "gio": {
-        "x": -921.7,
-        "y": 180.0,
-        "edge": "LEFT",
-        "layer": "M2"
-      },
-      "terminal": "OUT4",
-      "note": "gio position/edge/layer = terminal OUT4 (type=OUT, pad=4), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "rx_data[1]": {
-      "core": {
-        "x": -808.5,
-        "y": 474.9,
-        "edge": "LEFT",
-        "layer": "M1"
-      },
-      "gio": {
-        "x": 921.7,
-        "y": -180.0,
-        "edge": "RIGHT",
-        "layer": "M2"
-      },
-      "terminal": "OUT12",
-      "note": "gio position/edge/layer = terminal OUT12 (type=OUT, pad=12), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "rx_data[2]": {
-      "core": {
-        "x": -808.5,
-        "y": 480.3,
-        "edge": "LEFT",
-        "layer": "M1"
-      },
-      "gio": {
-        "x": 921.7,
-        "y": 620.0,
-        "edge": "RIGHT",
-        "layer": "M2"
-      },
-      "terminal": "OUT14",
-      "note": "gio position/edge/layer = terminal OUT14 (type=OUT, pad=14), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "rx_data[3]": {
-      "core": {
-        "x": -808.5,
-        "y": 485.7,
-        "edge": "LEFT",
-        "layer": "M1"
-      },
-      "gio": {
-        "x": -921.7,
-        "y": -180.0,
-        "edge": "LEFT",
-        "layer": "M2"
-      },
-      "terminal": "OUT5",
-      "note": "gio position/edge/layer = terminal OUT5 (type=OUT, pad=5), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "rx_data[4]": {
-      "core": {
-        "x": -808.5,
-        "y": 491.1,
-        "edge": "LEFT",
-        "layer": "M1"
-      },
-      "gio": {
-        "x": -921.7,
-        "y": -620.0,
-        "edge": "LEFT",
-        "layer": "M2"
-      },
-      "terminal": "OUT6",
-      "note": "gio position/edge/layer = terminal OUT6 (type=OUT, pad=6), position unchanged from v9's own frame-fixed pad_pin_coords"
-    },
-    "rx_data[5]": {
-      "core": {
-        "x": -808.5,
-        "y": 496.5,
         "edge": "LEFT",
         "layer": "M1"
       },
@@ -293,10 +213,58 @@
       "terminal": "OUT3",
       "note": "gio position/edge/layer = terminal OUT3 (type=OUT, pad=3), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
-    "rx_data[6]": {
+    "rx_data[1]": {
       "core": {
         "x": -808.5,
-        "y": 501.9,
+        "y": 474.9,
+        "edge": "LEFT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": -921.7,
+        "y": 180.0,
+        "edge": "LEFT",
+        "layer": "M2"
+      },
+      "terminal": "OUT4",
+      "note": "gio position/edge/layer = terminal OUT4 (type=OUT, pad=4), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "rx_data[2]": {
+      "core": {
+        "x": -808.5,
+        "y": 480.3,
+        "edge": "LEFT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": -921.7,
+        "y": -180.0,
+        "edge": "LEFT",
+        "layer": "M2"
+      },
+      "terminal": "OUT5",
+      "note": "gio position/edge/layer = terminal OUT5 (type=OUT, pad=5), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "rx_data[3]": {
+      "core": {
+        "x": -808.5,
+        "y": 485.7,
+        "edge": "LEFT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": -921.7,
+        "y": -620.0,
+        "edge": "LEFT",
+        "layer": "M2"
+      },
+      "terminal": "OUT6",
+      "note": "gio position/edge/layer = terminal OUT6 (type=OUT, pad=6), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "rx_data[4]": {
+      "core": {
+        "x": -808.5,
+        "y": 491.1,
         "edge": "LEFT",
         "layer": "M1"
       },
@@ -309,10 +277,26 @@
       "terminal": "OUT11",
       "note": "gio position/edge/layer = terminal OUT11 (type=OUT, pad=11), position unchanged from v9's own frame-fixed pad_pin_coords"
     },
-    "rx_data[7]": {
+    "rx_data[5]": {
       "core": {
         "x": -808.5,
-        "y": 464.1,
+        "y": 496.5,
+        "edge": "LEFT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": 921.7,
+        "y": -180.0,
+        "edge": "RIGHT",
+        "layer": "M2"
+      },
+      "terminal": "OUT12",
+      "note": "gio position/edge/layer = terminal OUT12 (type=OUT, pad=12), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "rx_data[6]": {
+      "core": {
+        "x": -808.5,
+        "y": 501.9,
         "edge": "LEFT",
         "layer": "M1"
       },
@@ -324,6 +308,22 @@
       },
       "terminal": "OUT13",
       "note": "gio position/edge/layer = terminal OUT13 (type=OUT, pad=13), position unchanged from v9's own frame-fixed pad_pin_coords"
+    },
+    "rx_data[7]": {
+      "core": {
+        "x": -808.5,
+        "y": 464.1,
+        "edge": "LEFT",
+        "layer": "M1"
+      },
+      "gio": {
+        "x": 921.7,
+        "y": 620.0,
+        "edge": "RIGHT",
+        "layer": "M2"
+      },
+      "terminal": "OUT14",
+      "note": "gio position/edge/layer = terminal OUT14 (type=OUT, pad=14), position unchanged from v9's own frame-fixed pad_pin_coords"
     }
   }
 }

@@ -43,14 +43,14 @@
     "name": "rx_data",
     "kind": "byte",
     "nets": [
+      "xdut.NC_OUT3",
       "xdut.NC_OUT4",
-      "xdut.NC_OUT12",
-      "xdut.NC_OUT14",
       "xdut.NC_OUT5",
       "xdut.NC_OUT6",
-      "xdut.NC_OUT3",
       "xdut.NC_OUT11",
-      "xdut.NC_OUT13"
+      "xdut.NC_OUT12",
+      "xdut.NC_OUT13",
+      "xdut.NC_OUT14"
     ],
     "t": 0.00019400000000000016,
     "expect": 165,

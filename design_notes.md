@@ -21550,3 +21550,535 @@ last_bit_pending用DFFRB群は行バッファ無しの素の`_156_`に直接
 ネットリスト・V9 SPICEと同一の14項目全てで一致する動作を実機
 ngspiceで確認——チップレベルの電気的検証が完了した。まだgit commit
 はしていない。
+
+### 108.68 V10成果をTR-1um_I2C_2026提出リポジトリへエクスポート
+（`export_to_mpw_submission_v10.py`新規）
+
+ユーザー：「README/SCRIPTSもアップデートしてからコミットしてください。」
+→README.md/SCRIPTS.md更新後コミット（hash `5c03663`、108.52-108.67の
+内容）。続けてユーザー：「それでは、V10の成果を TR-1um_I2C_2026 に
+コピーして、READMEやPROVENANCEをアップデートしてください。」
+
+`script/export_to_mpw_submission.py`（V9用、`SRC_GDS`/`SRC_LVS_
+NETLIST`定数を書き換えれば別ソースに再利用できる設計）をベースに
+`export_to_mpw_submission_v10.py`を新規作成。相違点は1つ：V9の
+`SRC_GDS`は事前に`strip_orphan_cells.py`（5セル固定リスト：
+`AND3_X1`/`NAND4`/`DFF`/`TAP3`/`DFFS`）で死にセルを除去済みだったが、
+V10の`layout/step10/v10_chip_final.gds`はまだ未処理——klayout.dbで
+直接確認したところ9個のトップレベルセル（実設計・`OSS_FRAME`／
+`OSS_FRAME_TEG`に加え、上記5個＋V9には無かった新規の`DEL1`の計6個の
+死にセル）が存在。各セルを個別に「親セル0件かつ子インスタンス0件」で
+安全性確認した上で、`transform_gds()`内にこの6セルのプルーン処理を
+統合（別スクリプト実行を不要化）。
+
+エクスポート実行→宛先リポジトリ自身の`scripts/pre_check.py`を実ファイル
+に対して実行し**全項目OK**（top cell名一致、dbu=0.001、bbox
+(-1250,-1250)-(1250,1250)、OSS_FRAMEセル存在）を確認。`info.yaml`
+（title/description）、`PROVENANCE.md`（V10ソースへの差し替え、
+ピン配置がV9から変更されている旨の警告を追記）、`README.md`
+（§1ピン表をV10の実パッド割当に修正、§2にV10改訂サマリとSPICE
+14/14 PASSの注記を追加）を更新。TR-1um_I2C_2026は別git管理のため、
+コミットするかユーザーに確認——「まだしない」との回答で、この時点では
+ファイル更新のみで保留。
+
+### 108.69 V10パッド再割当をユーザーの要求により再修正——V9ピン順の
+単純再利用は配線不可能と判明、ユーザー提案の2案を比較し読みやすい
+単調順（Option2）を採用して再配線・再検証一式
+
+ユーザー：「駄目だ。やり直しです。V9のピン順は変えては行けません。
+V10のトップ配線に戻ってやり直しです。」——108.57のパッド再割当
+結果（P4=bit0, P12=bit1, P14=bit2, P5=bit3, P6=bit4, P3=bit5,
+P11=bit6, P13=bit7という、レーン数最小だが見た目が入り組んだ対応）
+の拒否、V9の元の対応（bit0=P11..bit3=P14, bit4=P6..bit7=P3）への
+回帰を要求。
+
+**(1) 実現可能性の再検証**：108.54で既に判明していた事実
+（V10コアは`rx_data`全8bitがLEFT辺に集中しており、V9のパッド割当を
+そのまま流用すると必要レーン数14＞予算——配線不可能）を、
+`route_gio_core_v10.py`の`perimeter_s`/`unroll`と同一のレーン詰め込み
+コスト関数を使い独立に再計算し確認（14レーン、最大半径919.8um＞
+予算NEAR_R=915.0um）。この制約をユーザーに提示し、進め方を確認した
+ところ、ユーザーから2つの代替ピン対応案が提示された：
+
+- Option1：P3=bit7, P4=bit6, P5=bit5, P6=bit4, P11=bit3, P12=bit2,
+  P13=bit1, P14=bit0（V9の対応関係を単純に並べ替えたもの）
+- Option2：P3=bit0, P4=bit1, P5=bit2, P6=bit3, P11=bit4, P12=bit5,
+  P13=bit6, P14=bit7（物理パッド番号の昇順にbit番号も単調増加）
+
+両案を同じレーン詰め込みコスト関数で評価した結果：Option1は
+**14レーン**（最大半径919.8um、予算超過4.8um——V9の元対応と本質的に
+同一の理由で配線不可能）、Option2は**12レーン**（最大半径908.6um、
+予算に対し6.4umの余裕）——108.57が8!×2!の全探索で証明した
+真の最小レーン数12と完全に一致するコストで、かつ物理パッド番号の
+昇順とbit番号が完全に連動する読みやすい対応。ユーザーはOption2を
+選択。
+
+**(2) `assign_v10_gio_pads.py`修正**：グループC（8ビットペア対
+8共有パッド番号）の`scipy.optimize.linear_sum_assignment`による
+最適化を、固定テーブル`FORCED_BIT_PAD = {0:3, 1:4, 2:5, 3:6, 4:11,
+5:12, 6:13, 7:14}`に置き換え（事前にOption2が最適解と同コストである
+ことを検証済みのため、最適化の余地はもう無い）。グループA
+（sda_in/sda_oe固定）・グループB（rst_n/scl の2×2最適化）は無変更
+——実行結果、`rst_n`→P15・`scl`→P1のまま変わらず（108.57から
+不変）、必要レーン数12・最大半径908.6umを確認、
+`schematic/v10_signal_routing_plan.json`を上書き。
+
+**(3) `route_gio_core_v10.py`再実行**：エラー無く12レーンで20ネット
+全て描画。検証：
+- `drc_check_nrow_fm.py`：M1 0/0、M2 1/5——既知の6件（座標
+  X≈-964/-1028、108.55以来の既知アーティファクト）と完全一致、
+  新規違反ゼロ。
+- 同一レイヤー限定の重なりチェック：31件全てがDIS chain隣接リンク
+  同士（HIZ共有ピン、意図的）とHIZ1_VDD_tie/HIZ7_VDD_tie・
+  HIZ9_VSS_tie/OUT2_VSS_tie（108.63のリング配線同士の意図的な端点
+  共有）のみ。信号20ネット同士・信号対VDD/VSSの重なりはゼロ。
+- 接続性：信号20ネット全てについて、`core`側・`gio`側両方の座標に
+  接する単一連結ポリゴンであることをklayout.dbで確認。
+
+**(4) `finalize_chip_v10.py`再実行**：`rst_n`の物理GIOターゲットは
+グループBが不変のためP15のまま変わらず、108.57で確立したENB配線
+（マージ先X=847.0、Y=400.0）がそのまま有効であることを確認——
+再設計不要で1回の実行で完了。DRC再チェックも既知の6件のみ、新規
+違反ゼロ。トップレベルセル構成（9セル、死にセル6個含む）・チップ
+bbox(-1250,-1250)-(1250,1250)・dbu=0.001も無変更を確認。
+
+**(5) LVS参照SPICE再生成**：`gen_lvs_spice_v10.py`→
+`gen_lvs_spice_top_v10.py`（自己チェック「V10 plan cross-check:
+all 20 reassigned nets land on their expected pin. OK」を確認）→
+`gen_lvs_spice_ringosc_v10.py`（ENB→P15を再確認）の順に再実行。
+
+**(6) SPICEシミュレーション用ファイル一式再生成**：
+`gen_chip_sim_ready_v10.py`再実行——変換件数（378 M-line、37/145
+ブラケット、コメント2件、ダイオード4件）が前回と完全一致——
+この機械的変換がパッド割当に依存しないことの追加確認。
+klayout.db.NetlistSpiceReaderでの構文パース検証も前回と同じ
+45回路・16ピン・サブサーキット呼び出し2件（RING_OSC無し）で一致。
+
+`gen_chip_tb_v10.py`の`TX_PADS`/`RX_NETS`定数を新しい対応
+（`["P3","P4","P5","P6","P11","P12","P13","P14"]`／
+`["NC_OUT3","NC_OUT4","NC_OUT5","NC_OUT6","NC_OUT11","NC_OUT12",
+"NC_OUT13","NC_OUT14"]`）に更新——`assign_v10_gio_pads.py`の
+出力ログを鵜呑みにせず、実際に生成された`tr_1um_i2c_slave_async_
+v10_sim_ready.spice`自身の`x2 ... i2c_slave_async_nrow_fm`
+インスタンス化行を直接読み、コアサブサーキットの正式ピン順と
+位置照合して再確認（P15 P1 P2 **P3 P4 P5 P6 P11 P12 P13 P14**
+NC_HIZ2 **NC_OUT3 NC_OUT4 NC_OUT5 NC_OUT6 NC_OUT11 NC_OUT12
+NC_OUT13 NC_OUT14** ...）。`gen_chip_tb_batch14_v10.py`も再実行し
+`spice_batch14_v10_expected.json`が引き続き14項目であることを確認、
+生成された`tb_chip_i2c_batch14_v10.spice`の`rx_data_bit0`〜`bit7`
+measure文が新しいNC_OUT3/4/5/6/11/12/13/14の順で参照されている
+ことをテキストで確認。
+
+**未実施（正直に記載）**：実機KLayout DRC/LVSデッキ、および実機
+ngspiceでの14/14 PASS再確認は、このサンドボックス環境では実行
+できないため、108.55/108.63/108.65/108.67までと同様ユーザーの
+ローカル環境での実行結果待ち。TR-1um_I2C_2026側のエクスポート・
+README/PROVENANCE（108.68）も、旧パッド割当の内容を記載したままの
+ため、今回の再検証が通り次第やり直しが必要。
+
+出力：`layout/step10/v10_top_routed.gds`・`v10_chip_final.gds`
+（更新）、`schematic/v10_signal_routing_plan.json`・
+`tr_1um_i2c_slave_async_v10_lvs.spice`・
+`tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`（更新）、
+`ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice`・
+`ngspice/TB/tb_chip_i2c_v10.spice`・`tb_chip_i2c_batch14_v10.spice`・
+`spice_batch14_v10_expected.json`（更新）。`script/assign_v10_gio_
+pads.py`・`script/gen_chip_tb_v10.py`を修正。108.55-108.67分は
+既にコミット済み（hash `5c03663`）だが、本節の変更はその上に
+積まれた未コミットの修正——まだgit commitはしていない。
+
+### 108.70 実機LVSエラー（`P15`／`P11,P12`不一致）を解析、
+`finalize_chip_v10.py`のENB配線に2件の「古い座標のハードコード」
+バグを発見・修正
+
+ユーザーが実機KLayoutでDRC/LVSを実行し報告：「DRCクリーン、LVSエラー」
+（Netlist Database Browserのスクリーンショット添付、`Net P15 is not
+matching any net from reference netlist`／`Net P11,P12 is not matching
+any net from reference netlist`の2件）、`layout/step10/LVS_error.
+lvsdb`の解析を依頼された。
+
+**(1) `.lvsdb`の直接解析**：`klayout.db.LayoutVsSchematic.xref()`
+（`NetlistCrossReference`）をPythonから直接読み、`each_circuit_pair()`
+で全27サブサーキットの照合状況を確認——トップセル
+`tr_1um_i2c_slave_async`のみ`NoMatch`、他は全て`Match`。トップの
+`each_net_pair()`を絞り込むと、レイアウト側で`P11,P12`という1個に
+併合されたネットと、スキーマティック側の`P11`／`P12`／`NC_OUT11`
+（3個の別々のネット）が対応不能、加えて`P15`同士も`Mismatch`——
+という構造を直接確認。
+
+**(2) 独自の`klayout.db.LayoutToNetlist`によるM1/M2/VIA限定の簡易
+結線抽出**（デバイス認識なしの配線導通のみ）で同じ短絡を独立に再現：
+`v10_chip_final.gds`上でP11とP12を同時にprobe_netすると同一
+`cluster_id`——実機LVSと一致する形で確認。
+
+**(3) 根本原因の切り分け**：`layout/step10/v10_top_routed.gds`
+（`route_gio_core_v10.py`の出力、`finalize_chip_v10.py`実行前）の
+段階ではP3〜P14の14パッド全てが独立したネットであることを確認
+——**短絡はfinalize_chip_v10.pyが追加する配線の中にある**と特定。
+`finalize_chip_v10.py`の各ステップ（PTECT削除→RING_OSC配置→TAPストラップ
+延伸→OUT配線→OUTD配線→ENB配線）を1つずつ再現する独立テストスクリプトで
+段階的に同じ結線チェックを実行し、**ENB配線を追加した瞬間にのみ
+P11とP12が併合される**ことを突き止めた。
+
+**(4) 真因1（既に108.69の第一稿で気付いていたが不完全だった）**：
+`finalize_chip_v10.py`のENBマージ先が`(845.3, 345.3, 848.7, 400.0)`
+とハードコードされており（コメント曰く「rst_nの lane-0 M2 climb」）、
+これは108.57時点でたまたま`rst_n`がレーン0（R=847.0）に割り当てられて
+いたことに依存した値だった。108.69でのOption2再割当により20ネット
+全体のレーン詰め込み順序が変わり、`rst_n`自体のパッド（P15）は不変
+でも**レーン番号がレーン0→レーン1（R=852.6、X=[850.9,854.3]）に
+シフト**——一方レーン0（X=[845.3,848.7]）には別のネット
+（`rx_data[4]`、OUT11向け）が入れ替わりで入っていた。つまりENBは
+実際にはrst_nではなく`rx_data[4]`の配線にマージされていた——**この
+1点だけがENBの唯一の物理的な合流先**だったため、副作用として
+`rst_n`本来のENB接続が失われ（→P15単独でも不一致）、かつ`rx_data[4]`
+がP11経由でtx_data[4]・tx_data[5]（P12）を巻き込んで巨大な1ネットに
+併合されていた（`rx_data[4]`自身の配線が108.54由来の理由でレーン
+全体の約半周分という異例に長い経路を取ること自体は108.57のV10でも
+同程度の例があり無害——真の原因はENBの合流先の取り違えのみ）。
+**修正**：`route_gio_core_v10.py`が書き出す`v10_top_routed_net_shapes.
+json`から`rst_n`自身の実際のM2立ち上がり配線（X範囲・Y範囲）を
+毎回動的に読み取り、その中心Xをマージ先とするよう変更
+（`RSTN_MERGE_X`、今回は852.6と算出）。
+
+**(5) 真因2（(4)の修正だけでは解消せず、再度同じ結線チェックで
+発覚）**：ENB経路の**中間の立ち上がり列**自体も`X=884.0`と
+ハードコードされており、108.57時点で「X=884は空いている」と
+実測して選んだ値だった。Option2再割当後は`tx_data[4]`自身のM2
+配線がX=[884.5,887.9]に来ており、幅3.4umのENB配線（X=[882.3,885.7]
+центр884.0）と1.2um分直接重なっていた（`v10_top_routed_net_shapes.
+json`を全ネット横断で`X=873〜895`の占有状況を再スキャンして直接
+確認）。**修正**：占有マップを再スキャンした結果、Option2配下では
+X=[838.3,887.9]がDIS_Rリング＋12レーン全ての立ち上がりで隙間なく
+埋まっており、代わりに**X=[887.9,915.0]が完全に空いている**ことを
+確認（唯一近い`rx_data[7]`のX=[895.7,899.1]配線はY=[620,897]のみで、
+ENBが必要とするY≦400の区間とは無関係）。ENBの立ち上がり列を
+`X=900.0`に変更（tx_data[4]の887.9から12.1um、実パッド境界915.0から
+15.0umのクリアランス）。
+
+**検証**（両修正を反映した`v10_chip_final.gds`に対し実施）：
+- `drc_check_nrow_fm.py`：M1 0/0、M2 1/5——既知の6件のみ、新規違反
+  ゼロ（変わらず）。
+- `klayout.db.LayoutToNetlist`によるM1/M2/VIA結線抽出で、P1/P2/P3/
+  P4/P5/P6/P7/P9/P10/P11/P12/P13/P14/P15の**14パッド全てが相異なる
+  cluster_id**であることを確認（併合ゼロ）。
+- ENBが`P15`（`rst_n`）と正しく**同一cluster_id**であることを別途
+  確認（意図した接続が生きていることの確認）。
+- VDD/VSSのバスとも14パッドいずれも併合されていないことを確認
+  （念のための追加チェック）。
+- LVS参照SPICE（`gen_lvs_spice_v10.py`→`_top_v10.py`→`_ringosc_
+  v10.py`）を再生成、`V10 plan cross-check: all 20 reassigned nets
+  land on their expected pin. OK`／ENB→P15の再確認、いずれも問題
+  なし。
+- `gen_chip_sim_ready_v10.py`再実行——変換件数（378 M-line/37+145
+  ブラケット/コメント2件/ダイオード4件）が前回と完全一致（この
+  変換自体はENB配線の変更に依存しない機械的処理のため、想定通り）。
+  klayout.db.NetlistSpiceReaderでの構文パースも45回路・16ピン・
+  サブサーキット呼び出し2件（RING_OSC無し）で既知の基準と一致。
+- `gen_chip_tb_v10.py`／`gen_chip_tb_batch14_v10.py`を再生成
+  （TX_PADS/RX_NETSは108.69の値のまま変更なし、ENB修正はGIO内部
+  配線のみでコアI/Oピン割当に影響しないため）。
+
+**実機確認**：ユーザーが実機KLayoutでDRC/LVSを再実行し「DRC/LVS
+clean です。」と報告——(4)(5)の2件の修正でP11/P12/P15の不一致は
+解消、実機LVSクリーンを達成。
+
+**未実施（正直に記載）**：実機ngspiceでの14/14 PASS再確認は、この
+サンドボックス環境では実行できないため、ユーザーのローカル環境での
+実行結果待ち。TR-1um_I2C_2026側のエクスポート・README/PROVENANCEも、
+108.68時点の（旧パッド割当の）内容のままのため、今回の再検証が
+通り次第やり直しが必要。
+
+出力：`layout/step10/v10_chip_final.gds`（更新）、
+`schematic/tr_1um_i2c_slave_async_v10_lvs.spice`・
+`tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`（更新）、
+`ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice`・
+`ngspice/TB/tb_chip_i2c_v10.spice`・`tb_chip_i2c_batch14_v10.spice`・
+`spice_batch14_v10_expected.json`（更新）。`script/finalize_chip_
+v10.py`を修正（rst_nマージ先・ENB立ち上がり列を両方とも動的導出に
+変更、ハードコード値を撤去）。まだgit commitはしていない。
+
+### 108.71 実機ngspice 14/14回帰で2/14 FAIL（READ側）——アドレス比較
+ラッチの実測レースコンディションを特定、原因はDATA_RD/WR値依存の
+セットアップタイム違反と判明（進行中、未修正）
+
+**発端**：108.70でDRC/LVSクリーンを達成したV10チップの実機ngspice
+14/14回帰が、`ack_addr_read`／`read_byte`の2件だけFAILして返ってきた
+（12/14）。ユーザーから「TOPの配線を直す前は14/14だった」との指摘で、
+Option2のパッド再割当自体が原因である可能性を再調査した。
+
+**最初に否定した仮説（ユーザーの指摘で誤りと判明）**：
+- 「Option2再配線によるポストレイアウト寄生結合」→ユーザー「ポスト・
+  レイアウトでの寄生素子はシミュレーションには関与していない」で却下。
+- 「配線容量差によるDFFRBのマージナルなタイミングハザード」→
+  ユーザー「配線容量はバックアノテーションしていないので、割り当てで
+  タイミングに影響がでることはない」で却下。
+- 「SPICEソルバーの数値的非決定性」→同一ファイルを再実行して結果が
+  ビット単位で完全一致することを確認、否定。
+
+**A/Bバイセクションによる原因の確定**：診断用ネットリスト／テスト
+ベンチのバリアントを多数作成し切り分けた。
+- `_oldmap_`（パッド割当を108.57以前=108.69revert前の順序へ全戻し）
+  →**14/14 PASS**。
+- `_bit5only_`（tx_data/rx_dataのbit0↔bit5のパッドだけ入替）→**14/14
+  PASS**。
+- `_txonly_`（tx_data側のbit0↔bit5だけ入替、rx_dataはOption2のまま）
+  →**14/14 PASS**（＝これだけで直る）。
+- `_rxonly_`（rx_data側のbit0↔bit5だけ入替、tx_dataはOption2のまま）
+  →**13/14 FAIL**、ただし壊れる場所がREADからWRITEの`rx_data==0xA5`
+  チェックに**移動**（0x25を検出）。
+- コア（`i2c_slave_async_nrow_fm`）自体はgit diffで確認した通り
+  x2インスタンスの結線順序以外一切変更していない——**コア内部は
+  バイト単位で同一**なのに、どの物理パッドがどのビットを担うかだけで
+  結果が変わることを実証。
+
+**OSS_ESD_5V_DIOのトランジスタレベル完全トレース**：`.subckt
+OSS_ESD_5V_DIO VDD PAD VSS HIZ OUT`のXXM1〜XXM20を手計算で追い、
+`PGG=NOR(HIZ,net1)`・`NGG=NAND(NOT(HIZ),net1)`・`net1=NOT(OUT)`という
+内部論理式を導出。結果：
+- **HIZ=HIGH**（読み込み時）→PGG/NGGとも強制固定され、出力段
+  XXM1/XXM2は**OUTの値に関係なく常に完全OFF**——外部tx_data電源と
+  チップ自身の出力ドライバが衝突する経路は物理的に存在しないことを
+  数式で確定（「カップリング」ではなく構造的に不可能と証明）。
+- **HIZ=LOW**（書き込み時）→式を展開すると**PAD=OUT**という恒等式に
+  帰着する。すなわちtx_data_iとrx_data_iが同一物理ノード(PADn)である
+  以上、WRITE中は**tx_data_i=rx_data_iという自己ループバックが構造的
+  に生じる**——ユーザーに確認したところ「設計の意図どおり、ループ
+  バックしています」と確定（既知の仕様、バグではない）。
+
+**DIS(P7)動的化＋TX電源の抵抗・スイッチ化（ユーザー指示で実装）**：
+- 従来テストベンチは`vdis P7 0 DC {VDD}`固定・`vtxN`は理想電圧源で
+  PADnへ直結——DIS恒常HIGHだと本来WRITE中に有効化されるべき出力
+  ドライバが一度も駆動されておらず、ループバック自体が未検証だった。
+- `DIS`/`TXGATE`を共通PWLで動的化：**WRITE中はLOW**（チップ自身の
+  ドライバを有効化）、**READ中はHIGH**（Hi-Z、外部tx_dataを読める
+  状態）。
+- `vtx0..7`をPADnへ理想直結せず、`vtxNn --[100kΩ]-- PADn`のシャント
+  抵抗経由に変更し、さらに`TXGATE`制御のSPICEスイッチ（`.model TXSW
+  SW(RON=10 ROFF=1T ...)`）をvtx電源とPADnの間に直列追加——WRITE中は
+  外部tx_data電源を実質切り離す（READ中のみ有効）構成にした。
+- 再実行の結果、DATA_RD_VALスイープ（0x00/0xFF/0x20/0xDF）が明確に
+  分離：RD00・RDFF→**14/14 PASS**。RD20（P12だけHIGH、他LOW）→
+  **READのみFAIL**（当初からの症状そのもの）。RDDF（P12だけLOW、他
+  HIGH）→**WRITEのみFAIL**（DIS/TXGATE修正で初めて出た新しい症状。
+  READのtxreg/read_byteは正常）。
+- `.measure`で実PADn電圧（v(P3)〜v(P14)）を直接プローブし、この破綻
+  が測定アーティファクトでなく**実際にPADn上の電圧そのものが間違って
+  いる**ことを確認（RDDFのWRITE時、rx_data_sample直後に本来0xA5の
+  パターンになるはずの8ピンが全て0V付近に張り付く）。
+
+**DATA_WR_VALスイープと4×4グリッド**：DATA_RD_VALを既知良好な0xFFに
+固定し、DATA_WR_VALを0x00/0xFF/0x20/0xDF/0x5A（0xA5のビット反転）＋
+walking single-bit（bit0〜7個別HI/LO、計14種）で振った。WR00・WR20は
+**READ側**でFAIL、WRFF・WRDF・WR5Aは全PASS——「LOWビットの数」に単純
+比例するわけではない複雑な依存を確認。さらにDATA_WR_VAL×DATA_RD_VAL
+の**4×4フルグリッド（16通り）**を実測し、以下の頑健なパターンを確認：
+- **RD=0xDF列は、WRが何であっても100%FAIL**（最も頑健な単独トリガー）。
+- **RD=0x20列は、WRが何であっても100%PASS**（＝当初のRD20単独FAILは
+  実はWR=0xA5との特定の組み合わせが必要で、00/FF/20/DFのどのWRでも
+  再現しない）。
+
+**RDDF（WFFRDF: WR=0xFF固定・RD=0xDF）の根本原因追跡**：RDDFはWR非
+依存の最も頑健な破綻のため、これを深掘りした。
+- 破綻の実体は**WRITEトランザクション自身のADDR+Wバイト受信中の
+  `addr_match_write`未アサート**（READ自体は正常）。
+- `aw_i*`診断（ADDR+Wバイトの全8ビットエッジでshreg_0..6をサンプル）
+  を追加し、ビット単位で追跡した結果——**shreg_0..6の中身は最初から
+  最後まで一貫して正しい**。特にbit_index=1（R/Wビットの直前、7bit
+  全てが揃った瞬間）でshreg_6..0が正確に0x50(SLAVE_ADDR)と一致して
+  いることを確認——「間違ったビットが取り込まれた」仮説を完全に排除。
+- コンパレータチェーンを実配線から直接復元：
+  `_117_=OR4(NOT(shreg_6),NOT(shreg_4),shreg_5,shreg_2)`、
+  `_118_=NOR4(shreg_3,shreg_0,shreg_1,_117_)`——アドレス一致時に
+  `_118_=1`となるよう設計されている。`_118_`は
+  `xu_muxdffrb_16`（`A=_118_ Q=addr_match B=addr_match CK=_156_
+  S=_106_`）でaddr_matchへラッチされる。selectの`_106_=NAND(last_
+  bit_pending,_093_)`は`rw`のラッチ（`xu_muxdffrb_17`）とも共有されて
+  おり、`rw_write`チェックは正しくPASSしているため`_106_`／`_156_`
+  自体の発火タイミングは正常と判断。
+- bit_index=1のエッジ前後±200ns〜+1usを5ns刻みで`_106_`/`_118_`/
+  `_117_`/`last_bit_pending`/`_093_`/`addr_match`/`_156_`を実測
+  （`aw_fine1_*`診断、計210点）。結果、**`_156_`（クロック）の
+  立ち上がりはedge_tの-10ns〜-5nsで完了しているのに対し、`_118_`
+  （比較結果）はedge_tちょうどでようやく0V→HIGHへの遷移を開始し、
+  +10ns〜+20nsでしか確定しない**——クロックエッジが比較結果の確定
+  より**5〜10ns早く到着する、実測されたレースコンディション**を
+  特定した。`_106_`（ロード窓）はedge_t直前までHIGH（ロード可）で、
+  ちょうどこの瞬間にLOWへ落ちて以後self-hold（B=addr_match）に入る
+  ため、一度取りこぼした古い（不一致の）`_118_`=0がその後永続的に
+  ラッチされ続ける。
+
+**この結論の位置づけ**：これは配線容量のバックアノテーションに起因
+する遅延分散ではなく（＝以前ユーザーが正しく却下した仮説とは別物）、
+**shreg→OR4→NOR4の純粋なゲート伝搬遅延**が、クロックエッジ到達との
+間に本来必要なセットアップマージンを使い切ってしまっている、という
+**設計そのものに内在する、実測されたセットアップタイム違反**である。
+アドレス比較チェーン自体はtx_data/rx_dataと論理的に無関係のはずなので、
+なぜこのレースの勝敗がDATA_RD_VAL/DATA_WR_VALのパターン（特にP12＝
+bit5の状態）に依存するのかは、このエントリ時点では**未解明**。
+
+**「なぜDATA_RD/WR依存か」についての論理的検討（次回調査の指針）**：
+- 電気的な直接経路は考えにくい：HIZ論理で読み書き時の実出力ドライバ
+  衝突は式で排除済み、VDD/VSSは全区間理想電圧源でR/L要素も皆無
+  （共有レール電圧降下は原理的に発生し得ないことを`grep`で確認済み）、
+  各`OSS_ESD_5V_DIO`インスタンスはsubcktローカルスコープで他インスタ
+  ンスとノード共有なし。tx_data_iはaddr比較チェーン（shreg/OR4/NOR4/
+  `_106_`/`_156_`）と論理的に無接続（tx_data_iが触れるのはtxregの
+  mux選択`_092_`のみで、shregの入力は`sda_in_row3`＝SDAバス由来）。
+- 残る候補は、**このレース自体が5〜10nsという極めて薄いマージンしか
+  ないこと自体**に起因する、SPICEの適応刻み幅制御（LTEベースの
+  ソルバーステップサイズ選択）の履歴依存性——これは「結合」でも
+  「バックアノテーション」でもなく、同一回路を数値積分する際の
+  **ソルバー自身の内部状態**（他ノードの遷移状況に応じて全体最適で
+  決まるタイムステップ列）が、DATA_RD/WR値ごとに異なるTXGATE切替
+  波形（t=2us/207usでのPADn充放電パターン）を経由して、70〜85us
+  付近の内部解ポイント列を数ns単位でずらし、この際どいレースの
+  `.measure ... FIND ... AT=`による補間結果を左右している可能性が
+  最有力。この仮説は反証可能：`.tran`のTmax（現在50ns、108.71で
+  ソルバーの間引き対策として追加済み）をさらに1〜2ns程度まで絞って
+  再実行し、レースの勝敗がDATA_RD/WR値に対して安定するかを見れば
+  判定できる。
+- 本質的な恒久対策は、パッド割当を弄る話ではなく**設計側のセットアップ
+  マージン不足そのものを埋めること**（例：`_106_`のロードパルスを
+  shregの更新エッジから1段遅らせる、addr_matchのラッチを次のクロック
+  エッジに1サイクル送る、など）である可能性が高い。
+
+**この過程で実施した副次的な作業**：
+- `ngspice/TB/`配下の使用済みraw/txtダンプ（`rx_capture_trace.txt`・
+  `rx_capture_trace_v10.txt`・`tb_chip_i2c.raw`、計約57MB）を削除
+  （`.measure`ベースの診断に置き換わり不要と判断、ユーザー承認済み）。
+- 大量の診断用テストベンチ・生成スクリプトを`script/_*_gen_chip_tb_
+  {,batch14_}v10.py`として追加（`_rd{00,FF,20,DF}_`／`_wr{00,FF,20,
+  DF,5A,B0HI,B0LO,...,B7HI,B7LO}_`／`_W{00,FF,20,DF}R{00,FF,20,DF}_`
+  の4×4グリッド、計40種超）。いずれも本番の`gen_chip_tb_v10.py`／
+  `gen_chip_tb_batch14_v10.py`本体は変更しておらず、コピーへの
+  パッチのみ。本番ファイルへの反映は根本原因の修正確定後に行う。
+
+**現在地**：根本原因は「アドレス比較ラッチのセットアップタイム
+違反」まで実測で特定できたが、**なぜその勝敗がPADマッピング／データ
+パターンに依存するかは未解明**。ソルバー刻み幅仮説の検証、および
+設計側のマージン改善（RTL/ゲートレベル）の要否判断が次のステップ。
+実チップのSPICE 14/14再確認・`TR-1um_I2C_2026`への反映・git commitは
+いずれも未着手のまま。
+
+**【解決】Tmax=50ns→1nsへの変更だけで全て解消——チップ設計のバグ
+ではなくソルバー分解能不足が真因と確定**：ユーザー提案の検証②
+（Tmaxをさらに絞ってレースの勝敗が変わるか）を実施。
+
+1. まずDIS/TXGATE等をいじった診断バリアント`WFFRDF`（WR=0xFF固定・
+   RD=0xDF、Tmax=50nsでは10/14 FAIL）でTmaxだけを1nsに変更して再実行
+   →**14/14 PASS**。他は何も変えていない（同一ネットリスト・同一
+   パッドマッピング・同一DATA_RD/WR値）。
+2. 決定打として、**この投稿全体の出発点だった、DIS/TXGATE修正すら
+   一切入っていない本番構成**（`gen_chip_tb_batch14_v10.py`本体、
+   Option2実パッドマッピング、`DIS`固定HIGH、`vtx`理想直結、
+   DATA_WR_VAL=0xA5・DATA_RD_VAL=0x3C——108.71冒頭で12/14だった、まさ
+   にその設定）で、`.tran`のTmaxだけを50ns→1nsに変更して再実行
+   →**14/14 PASS**（`ack_addr_read`(0.044V)・`read_byte`(0x3C)とも
+   正常）。
+
+**結論**：一連の調査で発見した「約5〜10ns幅のアドレス比較レース」は
+実在するが、**チップ側は元々正しく動作しており、bugだったのは
+テストベンチのソルバー分解能設定（Tmax=50ns）の方だった**。パッド
+再割当（Option2）自体に電気的・論理的な欠陥はない——108.57/108.69の
+GIOパッド再配置、108.70のENB配線修正を経た現行`v10_chip_final.gds`は
+DRC/LVSクリーンに加え、**実機ngspice 14/14 PASSも確定**した。
+`script/gen_chip_tb_batch14_v10.py`のTmaxを50ns→1nsに恒久変更した
+（本体ファイルに反映済み、コメントも更新）。
+
+**この過程で得られた副産物（設計改善として残す価値のあるもの）**：
+DIS(P7)を動的化しtx_data電源をTXGATEスイッチ＋100kΩ経由にした
+テストベンチ変更（108.72相当）は、当初疑っていた「バグの原因」では
+なかったが、**WRITE中に本来有効化されるべきPADnの出力ドライバを
+初めて実際にテストする、より実態に即したテストベンチ**になっている
+（ユーザー確認：「WRITE中はtx_data_i=rx_data_iというループバックは
+設計の意図どおり」）。ただし本番`gen_chip_tb_v10.py`／`gen_chip_tb_
+batch14_v10.py`にはまだ反映していない（Tmax修正のみ本体へ反映
+済み）。DIS動的化を本番にも反映するかどうかは別途判断が必要。
+
+**残タスク**：
+- 本番`gen_chip_tb_v10.py`（batch14でない単純版）のTmaxは元々未設定
+  のままだった（batch14版にのみ108.71でTmaxを追加していたため）——
+  そちらも同様の追加が必要か要検討。
+- DIS動的化／TXGATEスイッチ化を本番テストベンチへ反映するかどうかの
+  判断。
+- `TR-1um_I2C_2026`への再エクスポート、README/PROVENANCE更新、
+  git commit（`TR-1um_Async_I2C`・`TR-1um_I2C_2026`とも）はまだ未着手。
+- 診断用に作成した40種超の`script/_*_gen_chip_tb_{,batch14_}v10.py`
+  および`ngspice/TB/tb_chip_i2c_batch14_v10_*.spice`等の一時ファイル
+  群の整理（削除 or 保持）はユーザー判断待ち。
+
+### 108.72 DIS/TXGATE動的化を本番テストベンチへ反映、診断用
+一時ファイル一式の削除
+
+108.71で「バグの真因はチップ側ではなくテストベンチの`.tran` Tmax
+設定（50ns→1nsで解消）」と確定した後、副産物として得られたDIS(P7)/
+TXGATE動的化＋tx電源の100kΩ抵抗・スイッチ化（診断用コピーでのみ検証
+済みだった）を、本番の2生成スクリプトへ正式に反映した。
+
+**`script/gen_chip_tb_v10.py`／`script/gen_chip_tb_batch14_v10.py`
+への変更点**（両ファイル共通）：
+- `BusBuilder`に`dis_ctrl`（DISのPWL波形を蓄積するリスト）を追加し、
+  `_dis_set(level)`ヘルパーを新設。
+- `idle()`内で毎回`_dis_set(VDD)`（デフォルトはHIGH＝Hi-Z、tx_data
+  読み込み可能状態）を発行。
+- WRITEトランザクションの`start_condition()`直前で`_dis_set(0.0)`
+  （チップ自身の出力ドライバを有効化）を発行——これによりDISは
+  「WRITE中LOW／READ中HIGH（アイドル含む）」で動的に切り替わる。
+- TB_HEADERの`vdis {DIS_PAD} 0 DC {VDD}`固定を`vdis {DIS_PAD} 0
+  PWL({DIS_PWL})`へ変更し、同一PWL波形で駆動する`vtxgate TXGATE 0
+  PWL({DIS_PWL})`を新設。あわせて`.model TXSW SW(RON=10 ROFF=1T
+  VT={SW_VT} VH={SW_VH})`（`SDASW`と同じ規約、ROFFのみ1TΩへ強化）を
+  追加。
+- `vtx{i}`各tx電源をPADnへ理想直結せず、`vtx{i} vtx{i}n 0 DC
+  <値>` → `stx{i} vtx{i}n vtx{i}n2 TXGATE 0 TXSW`（TXGATE制御の
+  SPICEスイッチ）→ `rtx{i} vtx{i}n2 {pad} 100k`（100kΩ直列抵抗）
+  という3段構成に変更。WRITE中はTXGATE=LOWでtx電源側が実質切り離され、
+  DIS=LOWで有効化されたチップ自身のドライバのみがPADnを駆動する
+  （両者は同一PWL位相のため電気的排他性が構造的に保証される）。
+- `build_tb()`のフォーマット辞書に`DIS_PWL=b.pwl(b.dis_ctrl)`を追加。
+
+両ファイルとも再生成し、出力`tb_chip_i2c_v10.spice`／
+`tb_chip_i2c_batch14_v10.spice`に`vdis P7 0 PWL(...)`・`vtxgate
+TXGATE 0 PWL(...)`・`.model TXSW SW(RON=10 ROFF=1T VT=2.5 VH=0.3)`・
+16本の`stx`/`rtx`行が正しく含まれることを`grep`で確認した。
+`tb_chip_i2c_batch14_v10.spice`はTmax=1ns（108.71で確定済み）と
+このDIS/TXGATE動的化の両方を含む状態になっており、この組み合わせでの
+実機再確認をユーザーに依頼した（本節執筆時点でユーザーが実機ngspice
+で再実行中）。
+
+**診断用一時ファイルの削除**：108.71の調査過程で作成した以下を
+まとめて削除し、リポジトリを整理した。
+- `script/_*_gen_chip_tb_{,batch14_}v10.py`系（DATA_RD_VAL単軸
+  スイープ4種、DATA_WR_VAL単軸スイープ19種、4×4 WR×RDフルグリッド
+  16種、初期の`_oldmap_`/`_bit5only_`/`_txonly_`/`_rxonly_`
+  バイセクション4種、計40種超）。
+- `ngspice/tr_1um_i2c_slave_async_v10_sim_ready_{OLDMAP,BIT5ONLY,
+  TXONLY,RXONLY}.spice`（バイセクション用診断netlistコピー4本）。
+- `ngspice/TB/`配下の対応する診断用testbench・checker・log・
+  expected-json一式、および`.measure`診断で肥大化した
+  `rx_capture_trace_v10.txt`（689MB）・`DUMP.log`（スクラッチ）・
+  V9期の`rx_capture_trace.txt`（25MB）・`tb_chip_i2c.raw`（9.1MB）。
+  `ngspice/TB/`は705MB→4.0MBまで縮小。
+- あわせて`script/__pycache__`（削除済みスクリプトのバイトコード
+  キャッシュ）、およびコアセル単体LVSクリーン化（§60〜74）の過程で
+  作成された一回限りの調査用LVSマクロ`script/net_rename_test.lvs`・
+  `script/rename_test.lvs`・`script/same_nets_shreg{,_v2,_v3}.lvs`
+  （いずれも最終的なLVSクリーン化には使われず、後継の調査で
+  置き換え済み。README/SCRIPTS.md・design_notes.mdのどこからも
+  参照されていないことを`grep`で確認した上で削除）も整理した。
+
+**実機確認**：ユーザーが実機ngspiceで`tb_chip_i2c_batch14_v10.spice`
+（Tmax=1ns＋DIS/TXGATE動的化の組み合わせ）を再実行し、
+`check_batch14_v10.py`で**`All 14 checks PASSED`**を確認
+（`ack_addr_read`(0.044V)・`addr_match`アサート・`rw`極性・
+`rx_data==0xA5`・`read_byte==0x3C`・誤アドレスNACK含む全項目正常）。
+DIS/TXGATE動的化＋100kΩ抵抗・スイッチ化を反映した最終形の本番
+テストベンチで、Tmax=1ns修正と合わせて改めて14/14 PASSが実測
+確認された——**V10チップ設計・Option2パッド再割当・本番テスト
+ベンチのいずれにも既知の不具合は無い状態を最終確定**。
+
+**残タスク**：
+- `TR-1um_I2C_2026`への再エクスポート、README/PROVENANCE更新。
+- `TR-1um_Async_I2C`・`TR-1um_I2C_2026`両リポジトリのgit commit
+  （いずれもこの一連の調査を通じて未着手のまま）。

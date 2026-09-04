@@ -88,15 +88,25 @@ SLAVE_ADDR = 0x50
 DATA_WR_VAL = 0xA5   # script/test_i2c_slave_async.py's own value
 DATA_RD_VAL = 0x3C   # script/test_i2c_slave_async.py's own value
 
-# V10's own pad-pairing-aware terminal reassignment (108.57) -- read
-# directly off ngspice/tr_1um_i2c_slave_async_v10_sim_ready.spice's own
-# 'x2 ... i2c_slave_async_nrow_fm' instantiation line, position-matched
-# against the core subckt's formal pin list. NOT the same as V9's own
-# TX_PADS/RX_NETS -- see this script's own module docstring for the
-# side-by-side diff and how this was verified (not assumed).
-TX_PADS = ["P4", "P12", "P14", "P5", "P6", "P3", "P11", "P13"]          # tx_data bit0..7
-RX_NETS = ["NC_OUT4", "NC_OUT12", "NC_OUT14", "NC_OUT5",
-           "NC_OUT6", "NC_OUT3", "NC_OUT11", "NC_OUT13"]                 # rx_data bit0..7
+# V10's pad-pairing-aware terminal reassignment (108.57), REVISED 108.68
+# (user request: reject 108.57's free-optimization result -- visually
+# arbitrary bit<->pad correspondence -- in favor of a fixed, verified-
+# equally-optimal-lane-count, monotonically-increasing order: as
+# physical pad number climbs P3->P4->P5->P6->P11->P12->P13->P14, bit
+# number climbs 0->7 in step). Read directly off ngspice/tr_1um_i2c_
+# slave_async_v10_sim_ready.spice's own 'x2 ... i2c_slave_async_nrow_fm'
+# instantiation line (P15 P1 P2 P3 P4 P5 P6 P11 P12 P13 P14 NC_HIZ2
+# NC_OUT3 NC_OUT4 NC_OUT5 NC_OUT6 NC_OUT11 NC_OUT12 NC_OUT13 NC_OUT14 ...),
+# position-matched against the core subckt's formal pin list -- NOT
+# assumed from assign_v10_gio_pads.py's own printed report. Also not the
+# same as V9's own TX_PADS/RX_NETS (V9: P11 P12 P13 P14 P6 P5 P4 P3) --
+# V9's literal order was independently re-verified this same session to
+# need 14 lanes for V10's core (exceeds the 915.0um routing budget, i.e.
+# genuinely not routable, matching 108.54's original finding), so V10
+# keeps its own reassigned pad set, just in a cleaner order this time.
+TX_PADS = ["P3", "P4", "P5", "P6", "P11", "P12", "P13", "P14"]          # tx_data bit0..7
+RX_NETS = ["NC_OUT3", "NC_OUT4", "NC_OUT5", "NC_OUT6",
+           "NC_OUT11", "NC_OUT12", "NC_OUT13", "NC_OUT14"]               # rx_data bit0..7
 DIS_PAD = "P7"     # unchanged from V9 -- verified via x1's own HIZ3/4/5/6/11/12/13/14->P7 ties
 SCL_PAD = "P1"     # unchanged from V9 -- verified via x2's own pin-1 (scl) mapping
 SDA_PAD = "P2"     # unchanged from V9 -- verified via x2's own pin-2 (sda_in) mapping
@@ -142,6 +152,7 @@ class BusBuilder:
         self.t = t0
         self.scl = []
         self.sda_ctrl = []
+        self.dis_ctrl = []  # 108.72: DIS dynamic switch (WRITE=LOW/enable, READ=HIGH/Hi-Z)
         self.read_bit_samples = []
         self.notes = []
         self.master_bit_samples = []
@@ -163,6 +174,9 @@ class BusBuilder:
     def _sda_set(self, level):
         self._set(self.sda_ctrl, level)
 
+    def _dis_set(self, level):
+        self._set(self.dis_ctrl, level)
+
     def note(self, text):
         self.notes.append((self.t, text))
 
@@ -171,6 +185,7 @@ class BusBuilder:
             self.note(label)
         self._scl_set(VDD)
         self._sda_set(0.0)
+        self._dis_set(VDD)  # 108.72: safe default (Hi-Z / tx-input mode) during idle
         self.t += duration
 
     def start_condition(self):
@@ -262,6 +277,7 @@ def build_sequence():
     b.idle(T_POST_RST_SETTLE, label="post-reset settle (bus idle)")
 
     # ---- WRITE transaction: S, ADDR+W, ACK, 0xA5, ACK, P ----
+    b._dis_set(0.0)  # 108.72: enable chip's own pad driver for WRITE (rx_data out)
     b.start_condition()
     addr_w = (SLAVE_ADDR << 1) | 0
     b.master_byte(addr_w, "ADDR+W")
@@ -304,11 +320,18 @@ TB_HEADER = """\
 *   WRITE: S, ADDR+W(0x{ADDR_W:02X}), ACK, DATA=0x{DATA_WR:02X}, ACK, P
 *   READ : S, ADDR+R(0x{ADDR_R:02X}), ACK, DATA=0x{DATA_RD:02X} (slave-driven), NACK, P
 *
-* DIS (P7) held HIGH the whole run (Hi-Z / tx_data-input mode) so the 8
-* shared tx/rx pads never contend with this testbench's own TX drive --
-* rx_data is instead observed at each pad's own internal receiver net
-* (NC_OUT.. ), which reflects the pad regardless of DIS. tx_data is
-* held at 0x{DATA_RD:02X} for the whole run (only consumed during the read).
+* DIS (P7) is dynamic (108.72, revised from the earlier "held HIGH the
+* whole run" version): LOW during WRITE so the chip's own pad driver is
+* genuinely exercised (PAD=rx_data via each pad's OSS_ESD_5V_DIO cell,
+* confirmed by direct transistor-level trace -- this makes tx_data_i=
+* rx_data_i a real, intentional loopback on the shared pad during
+* WRITE, per design intent), HIGH during READ (Hi-Z, so this
+* testbench's own TX_SOURCES can drive PADn without contention). The
+* 8 tx_data sources (TX_SOURCES below) are correspondingly gated by
+* TXGATE (same waveform as DIS) through a 100k series resistor + SPICE
+* switch, active only during READ -- not an ideal, always-on direct
+* connection to PADn. tx_data is held at 0x{DATA_RD:02X} (only
+* electrically driven during READ; Hi-Z/disconnected during WRITE).
 
 .include '{MODEL_INCLUDE}'
 .include '{SIM_READY_REL}'
@@ -323,8 +346,15 @@ vvss VSS 0 DC 0
 * RSTB pin.
 vrstn {RSTN_PAD} 0 PWL(0 0 {T_RST_LOW:.9g} 0 {T_RST_LOW_EDGE:.9g} {VDD})
 
-* DIS: held high the whole run (see docstring).
-vdis {DIS_PAD} 0 DC {VDD}
+* DIS: dynamic (108.72) -- LOW during WRITE (enables the chip's own
+* pad driver so rx_data can be observed on PADn), HIGH during READ
+* (Hi-Z, so this testbench's own tx_data sources can drive PADn
+* without contention). TXGATE mirrors the same waveform and gates
+* the tx_data sources themselves (see TX_SOURCES) so only one side
+* ever drives a given PADn at a time.
+vdis {DIS_PAD} 0 PWL({DIS_PWL})
+vtxgate TXGATE 0 PWL({DIS_PWL})
+.model TXSW SW(RON=10 ROFF=1T VT={SW_VT} VH={SW_VH})
 
 * P9/P10 (RING_OSC.OUTD/OUT in the full chip -- unused and otherwise
 * floating here, since RING_OSC is excluded from this netlist). Tied to
@@ -437,7 +467,9 @@ def build_tb():
     tx_sources = []
     for i, pad in enumerate(TX_PADS):
         bit = (DATA_RD_VAL >> i) & 1
-        tx_sources.append(f"vtx{i} {pad} 0 DC {VDD if bit else 0.0}")
+        tx_sources.append(f"vtx{i} vtx{i}n 0 DC {VDD if bit else 0.0}  $ 108.72: TXGATE-switched, 100k series (not ideal-direct)")
+        tx_sources.append(f"stx{i} vtx{i}n vtx{i}n2 TXGATE 0 TXSW")
+        tx_sources.append(f"rtx{i} vtx{i}n2 {pad} 100k")
 
     read_measures = []
     read_prints = []
@@ -625,6 +657,7 @@ def build_tb():
         T_RST_LOW_EDGE=T_RST_LOW + T_EDGE,
         RSTN_PAD=RSTN_PAD,
         DIS_PAD=DIS_PAD,
+        DIS_PWL=b.pwl(b.dis_ctrl),
         TX_PADS=TX_PADS,
         TX_SOURCES="\n".join(tx_sources),
         SCL_PAD=SCL_PAD,
