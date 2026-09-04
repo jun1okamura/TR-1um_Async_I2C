@@ -22082,3 +22082,77 @@ DIS/TXGATE動的化＋100kΩ抵抗・スイッチ化を反映した最終形の�
 - `TR-1um_I2C_2026`への再エクスポート、README/PROVENANCE更新。
 - `TR-1um_Async_I2C`・`TR-1um_I2C_2026`両リポジトリのgit commit
   （いずれもこの一連の調査を通じて未着手のまま）。
+
+### 108.73 `TR-1um_I2C_2026`のGitHub Actions CI LVSが「Netlists
+don't match」でFAIL——原因はチップ側ではなくPDK`dev`ブランチの
+一時的な状態、CI再実行で解消を確認
+
+108.72完了後、`TR-1um_I2C_2026`側で`info.yaml`の`lvs.netlist_only`を
+`true`→`false`にユーザーが変更・push（このリポジトリのCIで実際の
+`compare()`＋`flag_missing_ports`比較が走ったのは**これが史上初**——
+過去10回のCI実行は全て`netlist_only:true`＝抽出のみで、比較自体を
+一度も実行していなかった）。この初回フル比較が
+`ERROR : Netlists don't match`でFAIL。
+
+**調査の経緯**：
+- CIの`Run LVS (headless)`ステップは元々`.lvsdb`（LVS詳細
+  データベース）をartifactとして保存しておらず、`lvs_output.log`も
+  teeするだけでuploadしていなかったため、失敗時に得られる情報が
+  ターミナルの短い出力のみだった。`check.yml`に`-rd report=`と
+  `.lvsdb`/`lvs_output.log`のupload-artifactステップを追加（`always()`
+  条件で失敗時も保存されるように）。
+- ユーザーがローカルKLayoutで同条件のLVSを実行し`.lvsdb`を提供。
+  `klayout.db.LayoutVsSchematic.xref()`で解析した結果、コア
+  （`i2c_slave_async_nrow_fm`）とRING_OSCの2回路がNoMatch。コア側は
+  スキーマティックの`.subckt`が実レイアウトに存在しない4本の余分な
+  ポート（`rx_valid`/`addr_match`/`rw`/`busy`、チップTOPインスタンス化
+  行では`NC_CORE_*`という宙に浮いたダミーネットで埋められている）を
+  宣言しており、これが原因で68net・64サブサーキットが連鎖的に
+  「不一致」と誤検出されているように見えた。
+- ユーザー指摘（「TR-1um_Async_I2Cでチップレベルlvsが通ったLVS
+  spiceを同じなはず」）を受けてexport元ファイルと診断：エクスポート
+  ヘッダ3行を除き`OSS_FRAME`→`OSS_FRAME_GIO`に戻して`diff`を取ると、
+  ソース側の`schematic/tr_1um_i2c_slave_async_v10_ringosc_lvs.spice`
+  （§108.70でチップレベルLVSクリーンとされた、まさにそのファイル）
+  と**完全一致**（差分ゼロ）——exportスクリプトによる破損・改変は
+  無いことを確定。
+- ユーザーがローカルの`TR-1um_Async_I2C`側で同じネットリストに対して
+  LVSを再実行し**クリーン**を確認。「同じはずのファイルが一方は通り
+  一方は通らない」という矛盾が生じたため、`TR-1um_I2C_2026`の
+  エクスポート先ファイル（`src/tr_1um_i2c_slave_async.gds`/`.cir`）
+  に対して、CIの`check.yml`と完全に同じ引数（`ignore_top_ports_
+  mismatch`未指定＝strict port mode、`netlist_only`未指定＝フル比較）
+  でのローカル実行手順をユーザーに提供。
+- **1回目のローカル実行（修正後の正しいコマンド）で
+  「Congratulations! Netlists match.」——クリーン**。exportされた
+  ファイル自体、strict port modeでも問題なし。ユーザー提案の
+  「flag_missing_ports有効自体が原因では」との仮説も、有効な状態で
+  クリーンに通ったことでこの時点で否定。
+- 残る説明はPDK側（`pdk.ref: "dev"`、固定タグでなく可変ブランチ）の
+  バージョン差。ユーザーがローカルPDKを`git pull`で最新devへ更新後、
+  同一コマンドを再実行——**それでもクリーン**。
+- `OpenSUSI/TR-1um`の`dev`ブランチのコミット履歴を直接確認したところ、
+  **本日（CI実行後）ユーザー自身（PDKの共同開発者でもある）が
+  複数のPDK側コミットをpush済み**——"ADD: GPIO style Digital IO and
+  LVS equivalent_pins for STDCELL."、"Update: OSS_FRAME_GIO"（2件）
+  など、まさにOSS_FRAME_GIOとSTDCELLのLVS等価ピン判定に直結する
+  変更。すなわち**CI run #11（LVS enabled push直後）は、これらの
+  PDK側修正が入る前の`dev`状態に対して実行されており、その後の
+  ローカル再実行はPDK修正後の`dev`状態を見ていた**——これが
+  「同じファイルなのに結果が違う」の真因。
+
+**結論**：`TR-1um_I2C_2026`へのV10エクスポート（GDS/netlistとも）
+自体には問題が無かった。CI失敗はPDK`dev`ブランチが可変であることに
+起因する一時的な状態不一致であり、チップ設計・エクスポート処理
+いずれにも修正は不要。ユーザーがCIを再実行し、修正後のPDK devに
+対して**LVSクリーンを確認**——`TR-1um_I2C_2026`のCI（Precheck→
+DRC→LVS→MDP）が初のフル`netlist_only:false`設定で通過した。
+
+**教訓・残タスク**：
+- `info.yaml`の`pdk.ref: "dev"`は可変ブランチのため、今回のような
+  「PDK側の一時的な状態」に起因する再現性問題が今後も起こり得る。
+  固定タグ（例: `v1.2609.0`）への切り替えを検討する価値がある
+  （info.yaml自身にコメントで推奨されている）が、判断はユーザー次第。
+- `check.yml`へのLVS `.lvsdb`/ログ artifact upload追加は今後の同種
+  調査を大幅に迅速化するため、恒久的な改善として残す。
+- 両リポジトリのgit commit状況を最終確認し、必要なら追加コミット。
