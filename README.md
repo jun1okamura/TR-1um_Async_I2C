@@ -9,6 +9,22 @@ DRC/接続性検証・LVS準備までを一貫して行っているプロジェ�
 
 `script/`配下の各スクリプトの役割・使いどころは [`SCRIPTS.md`](./SCRIPTS.md) を参照。
 
+> ### ★ ここから育てた道具の正本は `TR-1um_APRtools` にあります
+>
+> このリポジトリの `script/` は**第 1 世代の原型**で、当時のまま残してあります
+> （この設計の成果物を再現するためのもの）。そこから 4 世代ぶん手を入れた
+> 配置配線・チップ組み立て・DRC/LVS・セル特性化の一式は
+> [`jun1okamura/TR-1um_APRtools`](https://github.com/jun1okamura/TR-1um_APRtools)
+> の `apr/` に集約してあり（一覧は `apr/README.md`）、**手入れが続いているのは
+> そちらだけ**です。当時の写しは APRtools の `legacy/async_i2c/` にも
+> read-only で同梱してあります。
+>
+> **これから TR-1um で何か作るなら、APRtools から始めてください。**
+> 新しい世代の設計例は
+> [`TR-1um_I2C_2026`](https://github.com/jun1okamura/TR-1um_I2C_2026)（この設計の 2026 年版）/
+> [`TR-1um_TD4`](https://github.com/jun1okamura/TR-1um_TD4) /
+> [`TR-1um_SCLK_SPI`](https://github.com/jun1okamura/TR-1um_SCLK_SPI)。
+
 ## 現在の状態
 
 | フェーズ | 状態 |
